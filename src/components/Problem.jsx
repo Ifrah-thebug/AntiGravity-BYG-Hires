@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import problemImage from '../assets/problem_illustration_1777839869302.png';
+import problemImg from '../assets/problem_illustration_1777839869302.png';
 
 const Problem = () => {
   return (
