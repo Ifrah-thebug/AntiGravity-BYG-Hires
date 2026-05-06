@@ -3,6 +3,7 @@ import Hero from '../components/Hero';
 import Leadership from '../components/Leadership';
 import Mission from '../components/Mission';
 import Scale from '../components/Scale';
+import TalentMatchmaking from '../components/TalentMatchmaking';
 import Problem from '../components/Problem';
 import Solutions from '../components/Solutions';
 import Roles from '../components/Roles';
@@ -14,6 +15,7 @@ const HomePage = () => {
   return (
     <div className="pt-20">
       <Hero />
+      <TalentMatchmaking />
       <Leadership />
       <Mission />
       <Scale />
