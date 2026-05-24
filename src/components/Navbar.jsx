@@ -15,9 +15,9 @@ const Navbar = () => {
         { name: 'Remote Support Team', href: '/remote-support-team' },
       ]
     },
+    { name: 'Browse Talent', href: '/talent-browse' },
     { name: 'How It Works', href: '/how-it-works' },
-    { name: 'Case Studies', href: '/case-studies' },
-    { name: 'Why Us', href: '/why-us' },
+    { name: 'Join Talent Pool', href: '/talent-pool' }
   ];
 
   return (
@@ -69,14 +69,7 @@ const Navbar = () => {
                 </Link>
               )
             ))}
-            <a
-              href="https://forms.gle/1xSJiXkfr7kCVdAr7"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="bg-transparent border-2 border-red text-red px-6 py-2 rounded-full font-semibold hover:bg-red hover:text-white transition-colors duration-200 text-center leading-tight text-sm"
-            >
-              Find A<br />Great Hire
-            </a>
+
           </div>
 
           {/* Mobile menu button */}
@@ -134,15 +127,6 @@ const Navbar = () => {
                 </Link>
               )
             ))}
-            <a
-              href="https://forms.gle/1xSJiXkfr7kCVdAr7"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={() => setIsOpen(false)}
-              className="block mt-4 text-center bg-transparent border-2 border-red text-red px-6 py-3 rounded-full font-semibold hover:bg-red hover:text-white transition-colors"
-            >
-              Find A Great Hire
-            </a>
           </div>
         </div>
       )}

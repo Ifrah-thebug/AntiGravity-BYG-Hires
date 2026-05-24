@@ -47,20 +47,16 @@ const Hero = () => {
             className="flex flex-col sm:flex-row justify-center items-center gap-4"
           >
             <a
-              href="https://forms.gle/1xSJiXkfr7kCVdAr7"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-red text-red rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-red hover:text-white transition-colors shadow-lg"
+              href="/talent-pool"
+              className="w-full sm:w-auto px-8 py-4 bg-red text-white rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg border-2 border-red"
             >
-              Find a Great Hire
+              Join the Talent Pool
             </a>
             <a
-              href="https://calendly.com/recruitment-bnyahyagroup/30min"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-red text-red rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-red hover:text-white transition-colors shadow-lg"
+              href="/talent-browse"
+              className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-black text-black rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg"
             >
-              Discuss Your Requirements
+              Find a Great Hire
             </a>
           </motion.div>
         </div>

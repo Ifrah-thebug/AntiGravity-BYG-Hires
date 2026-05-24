@@ -20,6 +20,7 @@ const allTalent = [
     availability: '9-5',
     match: 97,
     industries: ['E-commerce', 'SaaS', 'Healthcare', 'Logistics', 'Retail'],
+    tags: ['CRM', 'Zendesk', 'Customer Success', 'Live Chat'],
   },
   {
     id: 3,
@@ -31,6 +32,7 @@ const allTalent = [
     availability: 'Flexible',
     match: 96,
     industries: ['SaaS', 'Healthcare', 'Real Estate', 'Finance'],
+    tags: ['QuickBooks', 'Xero', 'Reconciliation', 'Financial Reporting'],
   },
   {
     id: 4,
@@ -42,6 +44,7 @@ const allTalent = [
     availability: 'Night',
     match: 92,
     industries: ['Finance', 'E-commerce', 'Real Estate', 'SaaS', 'Logistics'],
+    tags: ['AI Tools', 'Klaviyo', 'ActiveCampaign', 'Marketing Automation'],
   },
   {
     id: 5,
@@ -53,6 +56,7 @@ const allTalent = [
     availability: '9-5',
     match: 95,
     industries: ['Logistics', 'Healthcare', 'E-commerce', 'SaaS'],
+    tags: ['Process Design', 'KPIs', 'Lean Ops', 'ERP'],
   },
   {
     id: 2,
@@ -64,6 +68,7 @@ const allTalent = [
     availability: 'Flexible',
     match: 94,
     industries: ['Real Estate', 'SaaS', 'E-commerce', 'Logistics'],
+    tags: ['Calendar Mgmt', 'Data Entry', 'Google Workspace', 'Travel Booking'],
   },
 ];
 
@@ -186,18 +191,35 @@ const TalentMatchmaking = () => {
 
                 {/* Info */}
                 <div className="p-4 flex flex-col gap-3 flex-1">
-                  <div>
+                  <div className="min-h-[56px] flex flex-col justify-start">
                     <p className="text-black font-black text-sm leading-tight">{talent.name}</p>
                     <p className="text-gray-500 text-xs font-medium mt-0.5">{talent.expertise}</p>
                   </div>
+ 
+                  {/* Middle section (tags & badges) grouped for perfect vertical alignment */}
+                  <div className="min-h-[68px] flex flex-col gap-2.5 justify-center">
+                    {/* Skills & Expertise tags */}
+                    <div className="flex flex-wrap gap-1.5 items-center">
+                      {talent.tags && talent.tags.slice(0, 2).map(tag => (
+                        <span key={tag} className="px-2 py-0.5 bg-gray-50 border border-gray-100 text-gray-600 font-bold text-[9px] uppercase tracking-wide rounded-lg">
+                          {tag}
+                        </span>
+                      ))}
+                      {talent.tags && talent.tags.length > 2 && (
+                        <span className="px-2 py-0.5 text-gray-400 font-bold text-[9px]">
+                          +{talent.tags.length - 2} more
+                        </span>
+                      )}
+                    </div>
 
-                  <div className="flex flex-wrap gap-1.5">
-                    <span className="text-[10px] font-bold bg-gray-50 border border-gray-100 text-gray-600 px-2 py-1 rounded-lg">
-                      {talent.role}
-                    </span>
-                    <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${availabilityColors[talent.availability]}`}>
-                      {talent.availability === '9-5' ? '⏰ 9-5' : talent.availability === 'Night' ? '🌙 Night' : '🔄 Flexible'}
-                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="text-[10px] font-bold bg-gray-50 border border-gray-100 text-gray-600 px-2 py-1 rounded-lg">
+                        {talent.role}
+                      </span>
+                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${availabilityColors[talent.availability]}`}>
+                        {talent.availability === '9-5' ? '⏰ 9-5' : talent.availability === 'Night' ? '🌙 Night' : '🔄 Flexible'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex items-center justify-between">
@@ -207,14 +229,15 @@ const TalentMatchmaking = () => {
                     </div>
                   </div>
 
-                  <a
-                    href="https://calendly.com/recruitment-bnyahyagroup/30min"
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    onClick={() => {
+                      const idMap = { 1: 't013', 3: 't015', 4: 't016', 5: 't017', 2: 't014' };
+                      navigate(`/request-intro?id=${idMap[talent.id]}`);
+                    }}
                     className="mt-auto w-full py-3 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center"
                   >
                     Request Intro
-                  </a>
+                  </button>
                 </div>
               </motion.div>
             ))}
