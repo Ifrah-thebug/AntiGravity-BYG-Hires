@@ -11,7 +11,7 @@ const Solutions = () => {
       desc: "We do the entire hiring process - sourcing, screening, shortlisting, onboarding. You focus on the final decision, not the process."
     },
     {
-      title: "People First",
+      title: "People First Always",
       desc: "When talent feels supported, performance improves. We take care of our Hires same as we care for your business."
     },
     {
@@ -32,7 +32,7 @@ const Solutions = () => {
     <section className="py-24 bg-gray-50 border-t border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <motion.span 
+          <motion.span
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
@@ -40,7 +40,7 @@ const Solutions = () => {
           >
             Our Solutions
           </motion.span>
-          <motion.h2 
+          <motion.h2
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -71,7 +71,7 @@ const Solutions = () => {
               </motion.div>
             ))}
           </div>
-          
+
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
