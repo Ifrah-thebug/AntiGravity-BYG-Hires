@@ -143,14 +143,53 @@ const TalentSignupPage = () => {
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-          <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">Join the Talent Pool</p>
+          <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">Prove your craft. Skip the queue.</p>
           <h1 className="text-4xl md:text-5xl font-black text-black tracking-tight leading-tight mb-4">
-            Create your<br /><span className="text-red">free profile.</span>
+            Create your<br /><span className="text-red">profile.</span>
           </h1>
-          <p className="text-gray-500 text-sm font-medium max-w-sm mx-auto">
-            Upload your CV — our AI will build your profile in seconds. Already have an account?{' '}
+          <p className="text-gray-500 text-sm font-medium max-w-lg mx-auto">
+            No resume roulette. Complete a real-world task assessment, get scored, and make your profile stronger with your score.<br/><br/>
+            Already have an account?{' '}
             <Link to="/talent/login" className="text-red font-bold hover:underline">Log in</Link>
           </p>
+        </motion.div>
+
+        {/* How It Works Section */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="mb-12">
+          <div className="bg-black text-white rounded-3xl p-8 shadow-xl">
+            <p className="text-red font-black tracking-widest text-[10px] uppercase mb-1">The BYG Quality Gateway</p>
+            <h2 className="text-2xl font-black uppercase tracking-tight mb-3">How It Works</h2>
+            <p className="text-gray-400 text-xs font-medium mb-8 max-w-lg">
+              We replace standard recruitment forms with highly optimized skill-assessments designed to showcase your talent in action.
+            </p>
+            
+            <div className="grid md:grid-cols-3 gap-6">
+              <div className="border-l border-gray-800 pl-4">
+                <p className="text-[10px] text-gray-500 font-bold mb-1">01</p>
+                <p className="text-xs font-black uppercase text-white mb-2">Step 1: Declare</p>
+                <p className="text-[10px] text-gray-400 leading-relaxed mb-3">Select your primary role, upload your resume, and state your years of experience.</p>
+                <p className="text-[9px] font-bold text-gray-600 bg-white/5 inline-block px-2 py-1 rounded">2 minutes</p>
+              </div>
+              <div className="border-l border-red pl-4">
+                <p className="text-[10px] text-red font-bold mb-1">02</p>
+                <p className="text-xs font-black uppercase text-white mb-2">Step 2: Demonstrate</p>
+                <p className="text-[10px] text-gray-400 leading-relaxed mb-3">Complete a tailored, 25-minute real-world client challenge. Your output is your application.</p>
+                <p className="text-[9px] font-bold text-red bg-red/10 inline-block px-2 py-1 rounded">20-30 minutes</p>
+              </div>
+              <div className="border-l border-gray-800 pl-4">
+                <p className="text-[10px] text-gray-500 font-bold mb-1">03</p>
+                <p className="text-xs font-black uppercase text-white mb-2">Step 3: Deploy</p>
+                <p className="text-[10px] text-gray-400 leading-relaxed mb-3">Qualified candidates are admitted to our pool and instantly visible to regional employers.</p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* Form Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="text-center mb-8">
+          <h2 className="text-2xl font-black text-black tracking-tight">
+            Join the Talent Pool
+          </h2>
         </motion.div>
 
         {/* Form Card */}
@@ -220,7 +259,7 @@ const TalentSignupPage = () => {
                 ) : (
                   <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-5 flex flex-col items-center justify-center gap-3">
                     <div className="relative">
-                      <img src={photoPreview} alt="Preview" className="w-24 h-24 rounded-2xl object-cover border-2 border-red shadow-md" />
+                      <img src={photoPreview} alt="Preview" className="w-24 h-24 rounded-2xl object-cover border-2 border-green-500 shadow-md" />
                       <button type="button" onClick={() => { setPhotoPreview(''); setPhotoFile(null); }}
                         className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-gray-200 rounded-full flex items-center justify-center text-gray-400 hover:text-red transition-colors">
                         <X size={11} />
@@ -279,7 +318,7 @@ const TalentSignupPage = () => {
             <div className="flex items-center gap-3 bg-black/5 border border-black/10 rounded-2xl p-4">
               <Sparkles size={18} className="text-red shrink-0" />
               <p className="text-[11px] text-gray-600 font-bold leading-snug">
-                Your CV will be read by <span className="text-black">Gemini AI</span> to automatically extract your title, skills, and bio. You'll review everything before publishing.
+                Your CV will be read and it will extract your best title, skills, and bio. You'll review everything before publishing.
               </p>
             </div>
 
@@ -293,9 +332,50 @@ const TalentSignupPage = () => {
                   : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
               }`}
             >
-              Submit & Parse CV with AI <ChevronRight size={14} />
+              Submit and parse CV <ChevronRight size={14} />
             </button>
           </form>
+        </motion.div>
+        {/* Demo Assessment Section */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="mt-12">
+          <div className="bg-gray-50 border border-gray-200 rounded-3xl p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 bg-black text-white flex items-center justify-center rounded-xl">
+                <FileText size={20} />
+              </div>
+              <div>
+                <p className="text-red font-black tracking-widest text-[9px] uppercase">Example</p>
+                <h3 className="text-lg font-black text-black">Sample Demo Assessment</h3>
+              </div>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Skill-First Assessment</p>
+                  <p className="text-sm font-black text-black">Fulfillment & Operations Challenge</p>
+                </div>
+                <div className="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-[10px] font-bold">25 min</div>
+              </div>
+              <p className="text-gray-600 text-sm font-medium italic mb-6">
+                "A tour operator managing 40+ daily bookings has noticed a 30% no-show rate over the past 2 weeks... Identify the operational bottlenecks and draft an SOP recovery plan."
+              </p>
+              <div className="space-y-3">
+                <div className="flex gap-3 items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <div className="w-6 h-6 bg-white border border-gray-200 rounded text-gray-500 flex flex-col items-center justify-center text-[10px] font-black shrink-0">1</div>
+                  <p className="text-xs font-bold text-gray-700">Diagnose the root bottleneck in 3 sentences</p>
+                </div>
+                <div className="flex gap-3 items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <div className="w-6 h-6 bg-white border border-gray-200 rounded text-gray-500 flex flex-col items-center justify-center text-[10px] font-black shrink-0">2</div>
+                  <p className="text-xs font-bold text-gray-700">Draft fleet coordination instructions</p>
+                </div>
+                <div className="flex gap-3 items-center bg-gray-50 p-3 rounded-xl border border-gray-100">
+                  <div className="w-6 h-6 bg-white border border-gray-200 rounded text-gray-500 flex flex-col items-center justify-center text-[10px] font-black shrink-0">3</div>
+                  <p className="text-xs font-bold text-gray-700">Outline permanent geo-fencing SOPs</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </motion.div>
       </div>
     </div>
