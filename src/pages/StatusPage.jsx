@@ -175,7 +175,7 @@ const StatusPage = () => {
                 "{sub.reviewerNotes || 'Clear thinking, but responses lacked specific examples.'}"
               </p>
               <p className="text-xs font-bold text-gray-400 border-t border-gray-100 pt-3">
-                You can reapply in 7 days after the cooldown completes. Take a look at your AI scoring report in the console for detailed improvement areas.
+                You can reapply in 7 days after the cooldown completes. Review the feedback above and focus on stronger, more specific responses.
               </p>
             </div>
           )}
@@ -248,7 +248,7 @@ const StatusPage = () => {
                 {sub.status === 'admitted' ? '✓' : '2'}
               </div>
               <div>
-                <p className="text-gray-800 font-black text-sm uppercase tracking-wide">AI Scoring & Explanations</p>
+                <p className="text-gray-800 font-black text-sm uppercase tracking-wide">Scoring & Explanations</p>
                 <p className="text-gray-500 text-xs mt-0.5">Your assessment will be scored and you'll receive detailed explanations.</p>
               </div>
             </div>

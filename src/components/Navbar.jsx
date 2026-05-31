@@ -1,11 +1,28 @@
-import React, { useState } from 'react';
-import { Menu, X, ChevronDown } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Menu, X, ChevronDown, LogOut, User } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
+import { talentService } from '../services/talentService';
 
 const Navbar = () => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [isScaleOpen, setIsScaleOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
+
+  useEffect(() => {
+    const checkUser = () => {
+      setCurrentUser(talentService.getCurrentUser());
+    };
+    checkUser();
+    window.addEventListener('storage', checkUser);
+    return () => window.removeEventListener('storage', checkUser);
+  }, []);
+
+  const handleLogout = () => {
+    talentService.logout();
+    navigate('/');
+  };
 
   const navLinks = [
     { 
@@ -63,12 +80,31 @@ const Navbar = () => {
                 <Link
                   key={link.name}
                   to={link.href}
-                  className="text-black font-medium hover:text-red transition-colors duration-200"
+                  className={`font-medium transition-colors duration-200 ${
+                    link.name === 'Join Talent Pool'
+                      ? 'text-red hover:text-red-700'
+                      : 'text-black hover:text-red'
+                  }`}
                 >
                   {link.name}
                 </Link>
               )
             ))}
+
+            {currentUser ? (
+              <div className="flex items-center gap-4 border-l border-gray-200 pl-6 ml-2">
+                <Link to={`/talent/dashboard?id=${currentUser.id}`} className="text-sm font-bold text-black hover:text-red flex items-center gap-2">
+                  <User size={16} /> Dashboard
+                </Link>
+                <button onClick={handleLogout} className="text-sm font-bold text-gray-500 hover:text-red flex items-center gap-1">
+                  <LogOut size={16} /> Logout
+                </button>
+              </div>
+            ) : (
+              <div className="border-l border-gray-200 pl-6 ml-2">
+                <Link to="/talent-pool" className="text-sm font-bold text-red hover:text-black">Log In</Link>
+              </div>
+            )}
 
           </div>
 
@@ -121,12 +157,44 @@ const Navbar = () => {
                   key={link.name}
                   to={link.href}
                   onClick={() => setIsOpen(false)}
-                  className="block px-3 py-3 text-base font-medium text-black hover:text-red hover:bg-gray-50 rounded-md"
+                  className={`block px-3 py-3 text-base font-medium hover:bg-gray-50 rounded-md ${
+                    link.name === 'Join Talent Pool'
+                      ? 'text-red hover:text-red-700'
+                      : 'text-black hover:text-red'
+                  }`}
                 >
                   {link.name}
                 </Link>
               )
             ))}
+            
+            <div className="pt-4 mt-4 border-t border-gray-100">
+              {currentUser ? (
+                <>
+                  <Link
+                    to={`/talent/dashboard?id=${currentUser.id}`}
+                    onClick={() => setIsOpen(false)}
+                    className="block px-3 py-3 text-base font-medium text-black hover:text-red hover:bg-gray-50 rounded-md"
+                  >
+                    Dashboard
+                  </Link>
+                  <button
+                    onClick={() => { handleLogout(); setIsOpen(false); }}
+                    className="flex w-full text-left px-3 py-3 text-base font-medium text-gray-500 hover:text-red hover:bg-gray-50 rounded-md"
+                  >
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <Link
+                  to="/talent-pool"
+                  onClick={() => setIsOpen(false)}
+                  className="block px-3 py-3 text-base font-medium text-red hover:text-black hover:bg-gray-50 rounded-md"
+                >
+                  Log In
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       )}

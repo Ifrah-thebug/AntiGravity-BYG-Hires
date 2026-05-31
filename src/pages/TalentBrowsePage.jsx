@@ -1,5 +1,5 @@
 // src/pages/TalentBrowsePage.jsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -7,8 +7,9 @@ import {
   ChevronUp, ArrowRight, X, Briefcase, Award, Moon, Zap, CheckCircle2
 } from 'lucide-react';
 import {
-  DEPARTMENTS, SORT_OPTIONS, AVAILABILITY_OPTIONS, ROLE_TYPE_OPTIONS, TALENTS
+  DEPARTMENTS, SORT_OPTIONS, AVAILABILITY_OPTIONS, ROLE_TYPE_OPTIONS
 } from '../data/talentData';
+import { talentService } from '../services/talentService';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -78,53 +79,121 @@ const ScoreRing = ({ score }) => {
 };
 
 // ─── Talent Card ──────────────────────────────────────────────────────────────
-const TalentCard = ({ talent, onSelect }) => (
-  <motion.div
-    layout
-    initial={{ opacity: 0, y: 16 }}
-    animate={{ opacity: 1, y: 0 }}
-    exit={{ opacity: 0, scale: 0.96 }}
-    transition={{ duration: 0.22 }}
-    onClick={() => onSelect(talent)}
-    className="group bg-white border border-gray-200 hover:border-gray-300 hover:shadow-xl rounded-[1.75rem] p-6 cursor-pointer transition-all duration-300 relative overflow-hidden"
-  >
-    <div className="flex items-start gap-5 mb-4">
-      <Avatar name={talent.name} score={talent.score} photo={talent.photo} size="w-32 h-32 text-4xl" />
-      <div className="min-w-0 flex-1">
-        <h3 className="font-black text-gray-900 text-lg leading-tight truncate">{talent.name}</h3>
-        <p className="text-red font-bold text-xs uppercase tracking-wide mt-0.5">{talent.role}</p>
-        <div className="flex items-center gap-2 mt-1.5">
-          <Briefcase size={10} className="text-gray-400 shrink-0" />
-          <span className="text-gray-400 text-[10px] font-semibold">{talent.experience} experience</span>
+const TalentCard = ({ talent, onSelect }) => {
+  const navigate = useNavigate();
+
+  // Mapping roleType values to match availability badge styles from TalentMatchmaking
+  const roleTypeColors = {
+    fulltime: 'bg-black text-white',
+    flexible: 'bg-gray-100 text-gray-700',
+    night:    'bg-gray-900 text-white',
+    parttime: 'bg-gray-50 border border-gray-100 text-gray-600',
+  };
+
+  const roleTypeLabels = {
+    fulltime: '⏰ 9-5',
+    night:    '🌙 Night',
+    flexible: '🔄 Flexible',
+    parttime: '⚡ Part-Time',
+  };
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96 }}
+      transition={{ duration: 0.22 }}
+      onClick={() => onSelect(talent)}
+      className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-all duration-300 flex flex-col cursor-pointer"
+    >
+      {/* Photo container */}
+      <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-50">
+        {talent.photo ? (
+          <img
+            src={talent.photo}
+            alt={talent.name}
+            className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+          />
+        ) : (
+          <div
+            className="w-full h-full flex items-center justify-center text-white font-black text-5xl select-none"
+            style={{
+              background: `linear-gradient(135deg, hsl(${(talent.name.charCodeAt(0) * 37 + (talent.name.charCodeAt(1) || 0) * 17) % 360},55%,42%), hsl(${(talent.name.charCodeAt(0) * 37 + (talent.name.charCodeAt(1) || 0) * 17) % 360 + 40},60%,32%))`
+            }}
+          >
+            {talent.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+          </div>
+        )}
+
+        {/* Availability Badge */}
+        <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+          <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'july' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
+          <span>{talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : talent.availability === 'july' ? 'From July' : 'In 1 Month'}</span>
         </div>
-      </div>
-      <ScoreRing score={talent.score} />
-    </div>
 
-    <div className="flex flex-wrap gap-1.5 mb-4">
-      {talent.tags.slice(0, 3).map(tag => (
-        <span key={tag} className="px-2 py-0.5 bg-gray-50 border border-gray-100 text-gray-600 font-bold text-[9px] uppercase tracking-wide rounded-lg">
-          {tag}
-        </span>
-      ))}
-      {talent.tags.length > 3 && (
-        <span className="px-2 py-0.5 text-gray-400 font-bold text-[9px]">+{talent.tags.length - 3} more</span>
-      )}
-    </div>
-
-    <div className="flex items-center justify-between border-t border-gray-100 pt-4">
-      <div className="flex items-center gap-3">
-        <AvailBadge avail={talent.availability} />
-        <RoleTypeBadge type={talent.roleType} />
+        {/* Match Score Badge (Only show if > 0) */}
+        {(talent.score > 0 || talent.match > 0) && (
+          <div className="absolute top-3 right-3 bg-black text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
+            <span className="text-red">{talent.score || talent.match}%</span>
+            <span>match</span>
+          </div>
+        )}
       </div>
-      <div className="text-right shrink-0">
-        <p className="font-black text-gray-900 text-base leading-none">${talent.fee.toLocaleString()}<span className="text-gray-400 text-[10px] font-semibold">{talent.period}</span></p>
-      </div>
-    </div>
 
-    <div className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-red to-red/0 scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left rounded-full" />
-  </motion.div>
-);
+      {/* Info */}
+      <div className="p-5 flex flex-col gap-3.5 flex-1">
+        {/* Name & Title */}
+        <div className="h-[48px] flex flex-col justify-start overflow-hidden">
+          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{talent.name}</p>
+          <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
+        </div>
+
+        {/* Skills */}
+        <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
+          {talent.tags && talent.tags.slice(0, 2).map(tag => (
+            <span key={tag} className="px-2 py-1 bg-gray-50 border border-gray-100 text-gray-600 font-bold text-[9px] uppercase tracking-widest rounded-lg whitespace-nowrap">
+              {tag}
+            </span>
+          ))}
+          {talent.tags && talent.tags.length > 2 && (
+            <span className="px-2 py-1 text-gray-400 font-bold text-[9px] whitespace-nowrap">
+              +{talent.tags.length - 2} more
+            </span>
+          )}
+        </div>
+
+        {/* Experience & Role Type */}
+        <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
+          <span className="text-[10px] font-bold bg-gray-50 border border-gray-100 text-gray-600 px-2 py-1 rounded-lg whitespace-nowrap">
+            {talent.experience || '4+ yrs'}
+          </span>
+          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg whitespace-nowrap ${roleTypeColors[talent.roleType] || 'bg-gray-100 text-gray-700'}`}>
+            {roleTypeLabels[talent.roleType] || '🔄 Flexible'}
+          </span>
+        </div>
+
+        {/* Monthly Fee */}
+        <div className="h-[42px] flex flex-col justify-end mt-auto">
+          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">Monthly</p>
+          <p className="text-black font-black text-base leading-none">
+            ${talent.fee ? talent.fee.toLocaleString() : '0'}<span className="text-xs">{talent.period || '/mo'}</span>
+          </p>
+        </div>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/request-intro?id=${talent.id}`);
+          }}
+          className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
+        >
+          Request Intro
+        </button>
+      </div>
+    </motion.div>
+  );
+};
 
 // ─── Talent Detail Modal ──────────────────────────────────────────────────────
 const TalentModal = ({ talent, onClose }) => {
@@ -203,7 +272,7 @@ const TalentModal = ({ talent, onClose }) => {
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'Monthly Fee', value: `$${talent.fee.toLocaleString()}${talent.period}` },
-                { label: 'Availability', value: talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : 'In 1 Month' },
+                { label: 'Availability', value: talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : talent.availability === 'july' ? 'Available from July' : 'In 1 Month' },
                 { label: 'Role Type', value: { night: 'Night Role', flexible: 'Flexible Hours', fulltime: 'Full-Time Remote', parttime: 'Part-Time' }[talent.roleType] },
                 { label: 'Experience', value: talent.experience },
               ].map(({ label, value }) => (
@@ -324,6 +393,13 @@ const FilterPanel = ({ filters, onChange, onClear }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const TalentBrowsePage = () => {
+  const [talents, setTalents] = useState([]);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    setTalents(talentService.getAllBrowseTalents());
+  }, []);
+
   const [activedept, setActivedept] = useState('all');
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('score-desc');
@@ -339,7 +415,7 @@ const TalentBrowsePage = () => {
     filters.availability.length + filters.roleType.length + (filters.maxFee < 2000 ? 1 : 0);
 
   const visible = useMemo(() => {
-    let list = TALENTS;
+    let list = talents;
 
     // Department filter
     if (activedept !== 'all') list = list.filter(t => t.department === activedept);
@@ -370,7 +446,7 @@ const TalentBrowsePage = () => {
     }
 
     return list;
-  }, [activedept, search, sortBy, filters]);
+  }, [talents, activedept, search, sortBy, filters]);
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort';
 
@@ -465,24 +541,24 @@ const TalentBrowsePage = () => {
         </div>
       </div>
 
-      {/* ─── Department Tabs ────────────────────────────────────────────────── */}
-      <div className="border-b border-gray-100 mb-10 sticky top-20 bg-white z-10 shadow-sm">
+      {/* ─── Department Tabs (Pill Style) ────────────────────────────────────────────────── */}
+      <div className="mb-10 sticky top-20 bg-white z-10 pt-4 pb-4">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex gap-1 overflow-x-auto pb-0 scrollbar-hide">
+          <div className="flex flex-nowrap gap-2 items-center overflow-x-auto scrollbar-hide pb-2 md:pb-0 select-none">
+            <span className="text-gray-500 font-bold text-xs tracking-widest uppercase mr-1 hidden md:block whitespace-nowrap">
+              Select Department:
+            </span>
             {DEPARTMENTS.map(dept => (
               <button
                 key={dept.id}
                 onClick={() => setActivedept(dept.id)}
-                className={`whitespace-nowrap px-5 py-4 text-[11px] font-black uppercase tracking-wider transition-all relative shrink-0 ${
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all border whitespace-nowrap shrink-0 ${
                   activedept === dept.id
-                    ? 'text-black'
-                    : 'text-gray-400 hover:text-gray-700'
+                    ? 'bg-black text-white border-black'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400 hover:text-gray-700'
                 }`}
               >
                 {dept.label}
-                {activedept === dept.id && (
-                  <motion.div layoutId="dept-tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-red rounded-t-full" />
-                )}
               </button>
             ))}
           </div>
@@ -508,7 +584,7 @@ const TalentBrowsePage = () => {
             <motion.div
               key="grid"
               layout
-              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
+              className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
             >
               {visible.map(talent => (
                 <TalentCard key={talent.id} talent={talent} onSelect={setSelectedTalent} />

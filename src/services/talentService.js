@@ -1,11 +1,17 @@
 // src/services/talentService.js
+import { TALENTS } from '../data/talentData';
 
 // A database and simulation service that manages localStorage,
+// mock Google Drive structures, Gemini and Claude API integrations, and mock transactional emails.
+
 // mock Google Drive structures, Gemini and Claude API integrations, and mock transactional emails.
 
 const SUBMISSIONS_KEY = 'byg_submissions';
 const EMAIL_OUTBOX_KEY = 'byg_email_outbox';
 const ACTIVE_ADMIN_KEY = 'byg_admin_session';
+const BYG_USERS_KEY = 'byg_users';
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 // standard scenarios by role for fallback / previews
 export const standardScenarios = {
@@ -269,7 +275,7 @@ export const talentService = {
   },
 
   // Create active application metadata (Intake Submit)
-  apply: async (formData, file) => {
+  apply: async (formData, file, fileBase64) => {
     initializeData();
     const talentId = 'tal_' + Math.random().toString(36).substr(2, 9);
     const token = 'tok_' + Math.random().toString(36).substr(2, 12);
@@ -288,58 +294,153 @@ export const talentService = {
       throw new Error(`You have recently applied and were rejected. Please wait ${remainingDays} days before reapplying.`);
     }
 
+    // Format candidate's name to "First Name L." with proper title-case
+    let rawName = formData.name.trim();
+    // Title-case every word
+    rawName = rawName.replace(/\b\w/g, c => c.toUpperCase());
+    let formattedName = rawName;
+    const nameParts = rawName.split(/\s+/);
+    if (nameParts.length > 1) {
+      const firstName = nameParts[0];
+      const lastName = nameParts[nameParts.length - 1];
+      formattedName = `${firstName} ${lastName.charAt(0).toUpperCase()}.`;
+    }
+
     // Prepare simulated file object
     const simulatedFile = file ? {
       name: file.name,
       size: file.size,
       type: file.type,
       uploadedAt: new Date().toISOString()
-    } : { name: `${formData.name.replace(/\s+/g, '_')}_Resume.pdf`, size: 1048576, type: 'application/pdf', uploadedAt: new Date().toISOString() };
+    } : { name: `${formattedName.replace(/\s+/g, '_')}_Resume.pdf`, size: 1048576, type: 'application/pdf', uploadedAt: new Date().toISOString() };
 
-    // 1. Google Drive simulation log
-    const driveFolder = `BYG Hires Talent Pool/Submissions (Active)/[${talentId}] - [${formData.name}] - [${new Date().toISOString().split('T')[0]}]`;
+    // Google Drive simulation log
+    const driveFolder = `BYG Hires Talent Pool/Submissions (Active)/[${talentId}] - [${formattedName}] - [${new Date().toISOString().split('T')[0]}]`;
     const driveFiles = [
       { path: `${driveFolder}/resume.pdf`, size: simulatedFile.size, status: 'Uploaded' }
     ];
 
-    // 2. Call Gemini AI Resume Parser simulation (Prompt 0)
-    // Dynamic generation based on selected role to make it look professional, but with some variety!
-    const parsedData = await mockGeminiResumeParse(formData.name, formData.expertise, formData.yearsExp, simulatedFile.name);
+    // Call Gemini AI Resume Parser using the actual file
+    let parsedData;
+    if (fileBase64 && GEMINI_API_KEY) {
+      const match = fileBase64.match(/^data:([^;]+);base64,(.+)$/);
+      if (match) {
+        const mimeType = match[1];
+        const data = match[2];
+        parsedData = await realGeminiResumeParse(formattedName, data, mimeType);
+      } else {
+        parsedData = await mockGeminiResumeParse(formattedName, null, null, simulatedFile.name);
+      }
+    } else {
+      parsedData = await mockGeminiResumeParse(formattedName, null, null, simulatedFile.name);
+    }
 
-    // 3. Generate role-specific assessment via Mock Claude (Prompt 1)
-    const assessmentTask = await mockClaudeGenerateAssessment(formData.name, parsedData);
+    // Auto-create assessment task based on guessed role
+    const assessmentTask = await mockClaudeGenerateAssessment(formattedName, parsedData);
 
     const newSub = {
       id: talentId,
       token: token,
-      name: formData.name,
+      name: formattedName,
       email: formData.email,
       phone: formData.phone,
-      expertise: formData.expertise,
-      yearsExp: formData.yearsExp,
+      dob: formData.dob || '',
+      photo: formData.photo || null, // Real Base64 uploaded photo
+      expertise: parsedData.resolvedExpertise,
+      yearsExp: parsedData.years_experience >= 8 ? 'senior' : parsedData.years_experience >= 5 ? 'mid' : 'junior',
       resumeFile: simulatedFile,
-      status: 'invited', // Stage: Application received, assessment link generated
+      status: 'admitted', // Automatically mark as admitted / published!
       submittedAt: new Date().toISOString(),
       parsedResumeData: parsedData,
       assessmentTask: assessmentTask,
       assessmentAnswers: null,
       aiScore: null,
+      fee: 500 + Math.floor(Math.random() * 10) * 50, // Auto-assign a reasonable starting fee e.g. $500 - $950
+      period: '/mo',
+      availability: 'immediate',
+      roleType: 'flexible',
       driveFiles: driveFiles,
-      driveFolder: driveFolder
+      driveFolder: driveFolder,
+      password: formData.password // storing in local demo DB
     };
 
     talentService.saveSubmission(newSub);
 
-    // 4. Trigger Assessment Invite Email
-    sendMockEmail(
-      newSub.email,
-      'Your BYG Hires Assessment is Ready',
-      `Dear ${newSub.name},\n\nComplete this ${assessmentTask.estimated_time_minutes}-min task to join our pool.\n\nUnique Link: /assessment?token=${newSub.token}\n\nThis assessment link will expire in 7 days.\n\nBest of luck,\nBYG Hires Team`,
-      'assessment_invite',
-      newSub.token
-    );
+    // Also create the user account for login
+    const users = JSON.parse(localStorage.getItem(BYG_USERS_KEY)) || [];
+    users.push({
+      id: talentId,
+      email: formData.email,
+      password: formData.password,
+      role: 'talent'
+    });
+    localStorage.setItem(BYG_USERS_KEY, JSON.stringify(users));
+    
+    // Auto login
+    localStorage.setItem('byg_auth_user', JSON.stringify({ email: formData.email, id: talentId }));
+    window.dispatchEvent(new Event('storage'));
 
     return newSub;
+  },
+
+  // Get both static and dynamic browse talents merged
+  getAllBrowseTalents: () => {
+    initializeData();
+    const subs = JSON.parse(localStorage.getItem(SUBMISSIONS_KEY)) || [];
+    
+    // Map resolved expertise to lowercase database department key
+    const deptMap = {
+      'Operations': 'operations',
+      'Customer Success': 'customer-success',
+      'Marketing': 'marketing',
+      'SaaS': 'saas',
+      'Automation': 'automation',
+      'Sales': 'sales',
+      'Finance': 'finance',
+      'HR': 'hr'
+    };
+
+    // Convert admitted submissions to the format required by the browse page
+    const dynamicTalents = subs
+      .filter(s => s.status === 'admitted' || s.status === 'invited' || s.status === 'pending_human_review' || s.status === 'pending_ai_review')
+      .map(s => {
+        const deptKey = deptMap[s.expertise] || 'operations';
+
+        return {
+          id: s.id,
+          name: s.name,
+          role: s.parsedResumeData?.detected_expertise || 'Remote Specialist',
+          department: deptKey,
+          score: s.aiScore?.total_score || 0, // 0 means unverified / no score yet
+          fee: Math.round((s.fee || 600) * 1.10), // Automatically enrolled at 10% increase rate
+          currency: 'USD',
+          period: '/mo',
+          availability: s.availability || 'immediate',
+          roleType: s.roleType || 'flexible',
+          tags: s.parsedResumeData?.key_skills || ['Remote Work', 'English'],
+          experience: `${s.parsedResumeData?.years_experience || 3} yrs`,
+          bio: s.parsedResumeData?.notes || 'Talent pool member.',
+          photo: s.photo || null, // Real Base64 uploaded photo
+          topTalent: false,
+          admitted: true,
+          token: s.token,
+          isDynamic: true,
+          verified: !!s.aiScore
+        };
+      });
+
+    // Merge static talents with our dynamic talents, ensuring no duplicates by ID
+    const staticTalents = TALENTS || [];
+    const merged = [...dynamicTalents, ...staticTalents];
+    
+    // Remove duplicates just in case, and hide profiles that don't have a photo
+    const seenIds = new Set();
+    return merged.filter(t => {
+      if (!t.photo) return false;
+      if (seenIds.has(t.id)) return false;
+      seenIds.add(t.id);
+      return true;
+    });
   },
 
   // Save draft answers
@@ -378,7 +479,7 @@ export const talentService = {
         const freshSub = talentService.getSubmissionByToken(token);
         const scoreResult = await mockClaudeScoreAssessment(freshSub);
         freshSub.aiScore = scoreResult;
-        freshSub.status = 'pending_human_review';
+        freshSub.status = 'admitted'; // Remain admitted, now with verified score!
         talentService.saveSubmission(freshSub);
       } catch (err) {
         console.error('AI scoring failed', err);
@@ -455,6 +556,38 @@ export const talentService = {
 
   adminLogout: () => {
     localStorage.removeItem(ACTIVE_ADMIN_KEY);
+  },
+
+  // Talent login
+  login: (email, password) => {
+    const users = JSON.parse(localStorage.getItem(BYG_USERS_KEY)) || [];
+    const user = users.find(u => u.email === email && u.password === password);
+    if (user) {
+      localStorage.setItem('byg_auth_user', JSON.stringify({ email: user.email, id: user.id }));
+      window.dispatchEvent(new Event('storage'));
+      return true;
+    }
+    return false;
+  },
+
+  logout: () => {
+    localStorage.removeItem('byg_auth_user');
+    window.dispatchEvent(new Event('storage'));
+  },
+
+  getCurrentUser: () => {
+    const str = localStorage.getItem('byg_auth_user');
+    return str ? JSON.parse(str) : null;
+  },
+
+  // Purge all submissions by full or partial name (case-insensitive)
+  purgeProfilesByName: (nameFragment) => {
+    const subs = talentService.getSubmissions();
+    const lower = nameFragment.toLowerCase();
+    const filtered = subs.filter(s => !s.name.toLowerCase().includes(lower));
+    localStorage.setItem(SUBMISSIONS_KEY, JSON.stringify(filtered));
+    window.dispatchEvent(new Event('storage'));
+    return subs.length - filtered.length; // returns count of removed profiles
   }
 };
 
@@ -479,62 +612,148 @@ function sendMockEmail(to, subject, body, type, token = null, id = null) {
 }
 
 // ----------------------------------------------------
+// ----------------------------------------------------
 // DETAILED DETERMINISTIC AI GENERATORS (PROMPT MOCKS)
 // ----------------------------------------------------
+
+async function realGeminiResumeParse(name, base64Data, mimeType) {
+  try {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    
+    const prompt = `You are a strict JSON data extractor. Read this CV/Resume document and extract the following information. Return ONLY valid JSON and nothing else (do not use markdown code blocks).
+{
+  "detected_expertise": "The closest matching Professional Title (e.g. Growth Marketing Specialist, Customer Success Manager, Operations Lead, Executive Assistant, Data Analyst, Financial Accountant, Software Engineer)",
+  "years_experience": <number only, e.g. 5>,
+  "prior_roles": ["Role 1 at Company A", "Role 2 at Company B"],
+  "key_skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5"],
+  "resolvedExpertise": "One of these specific departments: Operations, Customer Success, Marketing, SaaS, Sales, Finance, HR, Automation, Design, Engineering"
+}`;
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mimeType, data: base64Data } }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.2
+        }
+      })
+    });
+
+    if (!response.ok) {
+      console.warn('Real Gemini API failed, falling back to mock.', await response.text());
+      return mockGeminiResumeParse(name, null, null, 'resume.pdf');
+    }
+
+    const resData = await response.json();
+    let textResult = resData.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    // Clean up potential markdown formatting
+    textResult = textResult.replace(/^```json/m, '').replace(/^```/m, '').trim();
+    
+    const parsed = JSON.parse(textResult);
+    
+    return {
+      detected_expertise: parsed.detected_expertise || "Remote Specialist",
+      years_experience: parsed.years_experience || 3,
+      prior_roles: parsed.prior_roles || [],
+      key_skills: parsed.key_skills || ["Remote Work", "Communication"],
+      red_flags: null,
+      expertise_mismatch: false,
+      notes: `Extracted dynamically from uploaded CV. Verified by Gemini 1.5 Flash.`,
+      resolvedExpertise: parsed.resolvedExpertise || "Operations"
+    };
+  } catch (err) {
+    console.warn('Failed to parse with real Gemini, falling back to mock.', err);
+    return mockGeminiResumeParse(name, null, null, 'resume.pdf');
+  }
+}
 
 // Gemini Resume Parser (Prompt 0)
 async function mockGeminiResumeParse(name, claimedExpertise, yearsExp, fileName) {
   await delay(1500); // simulate API call
 
-  const mappedExpertise = {
-    'Operations': 'Operations Manager',
-    'Customer Success': 'Customer Success Manager',
-    'Marketing': 'Digital Marketing Specialist',
-    'EA': 'Executive Assistant to CEO',
-    'Data': 'Data & Reporting Analyst',
-    'Finance': 'Senior Financial Analyst'
-  };
-
-  const detectedExp = mappedExpertise[claimedExpertise] || "Professional Coordinator";
-  
-  let yrs = 4;
-  if (yearsExp === 'junior') yrs = 2;
-  else if (yearsExp === 'mid') yrs = 5;
-  else if (yearsExp === 'senior') yrs = 9;
-
-  let priorRoles = [`Lead at GrowthCo`, `Associate at GlobalHub`];
-  let skills = ['Communication', 'Microsoft Excel', 'Task Management'];
-  let mismatch = false;
-  let notes = "Resume parsed successfully. Clean layout. Strong match with claimed role.";
-
-  // Create an interesting dynamic mismatch check if the file name contains a mismatched word!
   const lowerFile = fileName.toLowerCase();
-  if ((claimedExpertise === 'Operations' && lowerFile.includes('marketing')) ||
-      (claimedExpertise === 'Customer Success' && lowerFile.includes('developer')) ||
-      (lowerFile.includes('mismatch') || lowerFile.includes('fake') || lowerFile.includes('wrong'))) {
-    mismatch = true;
-    notes = `WARNING: Mismatch detected. Candidate applied for ${claimedExpertise} but resume file highly implies background in Web Development/Design. Flagged for review.`;
+  let resolvedExpertise = claimedExpertise;
+
+  if (!resolvedExpertise) {
+    // Guess department/expertise from CV filename
+    if (lowerFile.includes('ops') || lowerFile.includes('operation') || lowerFile.includes('logistics') || lowerFile.includes('process')) {
+      resolvedExpertise = 'Operations';
+    } else if (lowerFile.includes('market') || lowerFile.includes('ads') || lowerFile.includes('seo') || lowerFile.includes('copy')) {
+      resolvedExpertise = 'Marketing';
+    } else if (lowerFile.includes('crm') || lowerFile.includes('salesforce') || lowerFile.includes('hubspot') || lowerFile.includes('saas')) {
+      resolvedExpertise = 'SaaS';
+    } else if (lowerFile.includes('auto') || lowerFile.includes('zapier') || lowerFile.includes('make') || lowerFile.includes('script') || lowerFile.includes('code')) {
+      resolvedExpertise = 'Automation';
+    } else if (lowerFile.includes('support') || lowerFile.includes('customer') || lowerFile.includes('success') || lowerFile.includes('service')) {
+      resolvedExpertise = 'Customer Success';
+    } else if (lowerFile.includes('sale') || lowerFile.includes('close') || lowerFile.includes('outbound')) {
+      resolvedExpertise = 'Sales';
+    } else if (lowerFile.includes('fin') || lowerFile.includes('finance') || lowerFile.includes('book') || lowerFile.includes('tax') || lowerFile.includes('account')) {
+      resolvedExpertise = 'Finance';
+    } else if (lowerFile.includes('hr') || lowerFile.includes('recruit') || lowerFile.includes('talent')) {
+      resolvedExpertise = 'HR';
+    } else {
+      // Pick a random department — seeded by name chars + current ms so same filename used
+      // twice by different people won't always get the same dept
+      const depts = ['Operations', 'Customer Success', 'Marketing', 'SaaS', 'Sales', 'Finance', 'HR'];
+      const seed = (name.charCodeAt(0) || 65) * 31 + (name.charCodeAt(1) || 66) * 17 + (Date.now() % 97);
+      resolvedExpertise = depts[seed % depts.length];
+    }
   }
 
-  // customize skills by role
-  if (claimedExpertise === 'Operations') {
-    skills = ['Asana', 'SOPs', 'Process design', 'Vendor management', 'ClickUp'];
+  const mappedExpertise = {
+    'Operations': 'Operations & Fulfillment Lead',
+    'Customer Success': 'Customer Success Manager',
+    'Marketing': 'Growth Marketing Specialist',
+    'SaaS': 'SaaS & CRM Architect',
+    'Automation': 'Workflow Automation Engineer',
+    'Sales': 'B2B Sales Representative',
+    'Finance': 'Bookkeeper & Finance Analyst',
+    'HR': 'Talent Acquisition Partner'
+  };
+
+  const detectedExp = mappedExpertise[resolvedExpertise] || "Remote Operations Specialist";
+  
+  // Randomly assign 3 to 8 years experience
+  let yrs = Math.floor(Math.random() * 6) + 3;
+
+  let priorRoles = [`Senior Specialist at GrowthCo`, `Lead Associate at GlobalHub`];
+  let skills = ['Communication', 'Microsoft Excel', 'Task Management'];
+  let notes = `${detectedExp} with a strong background in ${skills.slice(0, 3).join(', ')}. Proven track record in ${resolvedExpertise.toLowerCase()} roles, available for remote positions across the GCC.`;
+
+  // customize skills and roles by guessed/resolved expertise
+  if (resolvedExpertise === 'Operations') {
+    skills = ['Asana', 'SOPs', 'Process Design', 'Notion', 'Vendor Management'];
     priorRoles = ['Operations Analyst at Noon Logistics', 'Fulfillment Coordinator at Fetchr'];
-  } else if (claimedExpertise === 'Customer Success') {
-    skills = ['Zendesk', 'Intercom', 'Churn prevention', 'CRM administration', 'HubSpot'];
-    priorRoles = ['Customer Retention Specialist at StarSaaS', 'Support Advocate at Souq.com'];
-  } else if (claimedExpertise === 'Marketing') {
-    skills = ['Meta Ads Manager', 'Google Analytics', 'SEO copywriting', 'Email campaigns', 'Vite'];
-    priorRoles = ['Growth Specialist at Agency99', 'SEO Executive at Careem'];
-  } else if (claimedExpertise === 'EA') {
-    skills = ['Calendar Management', 'Travel planning', 'Expense reporting', 'Founder representation', 'Slack'];
-    priorRoles = ['Executive Assistant to VP at Majid Al Futtaim', 'Personal Assistant at KPMG'];
-  } else if (claimedExpertise === 'Data') {
-    skills = ['SQL', 'Tableau', 'Excel Pivot Tables', 'Python data wrangling', 'Looker Studio'];
-    priorRoles = ['BI Engineer at Delivery Hero', 'Reporting Analyst at Talabat'];
-  } else if (claimedExpertise === 'Finance') {
-    skills = ['Financial Modeling', 'GAAP budgeting', 'Cost optimization', 'Pitch deck metrics', 'Xero'];
-    priorRoles = ['Corporate Finance Associate at PwC', 'Accountant at Al Tayer Group'];
+  } else if (resolvedExpertise === 'Customer Success') {
+    skills = ['Zendesk', 'Intercom', 'CRM Administration', 'Customer Onboarding', 'HubSpot'];
+    priorRoles = ['Customer Success Specialist at StarSaaS', 'Support Lead at Souq.com'];
+  } else if (resolvedExpertise === 'Marketing') {
+    skills = ['Meta Ads', 'Email Funnels', 'Copywriting', 'SEO', 'Google Analytics'];
+    priorRoles = ['Growth Marketer at Agency99', 'SEO Executive at Careem'];
+  } else if (resolvedExpertise === 'SaaS') {
+    skills = ['Salesforce', 'HubSpot', 'Pipedrive', 'CRM Automation', 'Data Integrity'];
+    priorRoles = ['CRM Administrator at StartupHub', 'SaaS Consultant at CloudOps'];
+  } else if (resolvedExpertise === 'Automation') {
+    skills = ['Make.com', 'Zapier', 'n8n', 'API Integration', 'Python'];
+    priorRoles = ['Automation Engineer at TechFlow', 'Operations Automation Lead at LogiCorp'];
+  } else if (resolvedExpertise === 'Sales') {
+    skills = ['Cold Outreach', 'LinkedIn Sales Navigator', 'Negotiation', 'Lead Generation', 'Closing'];
+    priorRoles = ['Sales Executive at SaaSify', 'Business Development Rep at TradeInc'];
+  } else if (resolvedExpertise === 'Finance') {
+    skills = ['QuickBooks', 'Xero', 'Reconciliation', 'Financial Reporting', 'Excel Pivot Tables'];
+    priorRoles = ['Financial Accountant at Al Futtaim', 'Junior Auditor at Ernst & Young'];
+  } else if (resolvedExpertise === 'HR') {
+    skills = ['ATS Systems', 'Technical Recruiting', 'Remote Onboarding', 'HR Compliance', 'Culture Building'];
+    priorRoles = ['Talent Recruiter at Careem', 'HR Generalist at Souq.com'];
   }
 
   return {
@@ -542,9 +761,10 @@ async function mockGeminiResumeParse(name, claimedExpertise, yearsExp, fileName)
     years_experience: yrs,
     prior_roles: priorRoles,
     key_skills: skills,
-    red_flags: mismatch ? "Claimed operations background, but resume lists 3 years of react frontend engineering only." : null,
-    expertise_mismatch: mismatch,
-    notes: notes
+    red_flags: null,
+    expertise_mismatch: false,
+    notes: notes,
+    resolvedExpertise: resolvedExpertise // save resolved department name
   };
 }
 

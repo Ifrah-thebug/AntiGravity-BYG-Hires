@@ -19,7 +19,7 @@ const TalentPool = () => {
       id: '02',
       label: 'DEMONSTRATE',
       title: 'Solve a real scenario',
-      desc: 'AI generates a tailored, 25-minute client challenge. Your output is your application.',
+      desc: 'Complete a tailored, 25-minute real-world client challenge. Your output is your application.',
       duration: '20-30 minutes'
     },
     {
@@ -70,7 +70,7 @@ const TalentPool = () => {
               transition={{ delay: 0.4 }}
               className="text-gray-400 max-w-xl text-lg md:text-xl leading-relaxed font-normal mb-12"
             >
-              No resume roulette. Complete a real-world task assessment, get scored by AI, and get referred to our active clients in the GCC.
+              No resume roulette. Complete a real-world task assessment, get scored, and make your profile stronger with your score.
             </motion.p>
 
             <motion.div

@@ -1,11 +1,12 @@
 // src/pages/RequestIntroPage.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft, Star, CheckCircle2, Briefcase, Clock, Zap, Moon, Award
 } from 'lucide-react';
 import { TALENTS } from '../data/talentData';
+import { talentService } from '../services/talentService';
 
 const CALENDLY_URL = 'https://calendly.com/recruitment-bnyahyagroup/30min';
 
@@ -45,7 +46,7 @@ const RoleTypeBadge = ({ type }) => {
 
 // ─── Availability label ───────────────────────────────────────────────────────
 const availLabel = (a) => {
-  const map = { immediate: 'Available Now', '2weeks': 'In 2 Weeks', '1month': 'In 1 Month' };
+  const map = { immediate: 'Available Now', '2weeks': 'In 2 Weeks', '1month': 'In 1 Month', july: 'Available from July' };
   return map[a] || a;
 };
 
@@ -53,7 +54,12 @@ const RequestIntroPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const talentId = searchParams.get('id');
-  const talent = TALENTS.find(t => t.id === talentId);
+  const talent = talentService.getAllBrowseTalents().find(t => t.id === talentId);
+  const [widgetLoading, setWidgetLoading] = React.useState(true);
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   if (!talent) {
     return (
@@ -185,7 +191,41 @@ const RequestIntroPage = () => {
               </div>
 
               {/* Calendly iframe */}
-              <div className="w-full" style={{ minHeight: '700px' }}>
+              <div className="w-full relative" style={{ minHeight: '700px' }}>
+                {widgetLoading && (
+                  <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-8 z-10 transition-opacity duration-300">
+                    <div className="w-full max-w-md space-y-6 animate-pulse">
+                      {/* Top Mock Header */}
+                      <div className="flex items-center space-x-4">
+                        <div className="w-12 h-12 bg-gray-200 rounded-full animate-pulse" />
+                        <div className="space-y-2 flex-1">
+                          <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse" />
+                          <div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse" />
+                        </div>
+                      </div>
+                      
+                      {/* Calendar Grid Skeleton */}
+                      <div className="space-y-3 pt-4">
+                        <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse" />
+                        <div className="grid grid-cols-7 gap-2">
+                          {[...Array(28)].map((_, index) => (
+                            <div key={index} className="h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+                              <div className="w-4 h-4 bg-gray-200/60 rounded-full animate-pulse" />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      {/* Support Message */}
+                      <div className="pt-8 flex flex-col items-center justify-center text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red mb-3"></div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                          Loading secure scheduler...
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <iframe
                   src={`${CALENDLY_URL}?hide_gdpr_banner=1&background_color=ffffff&text_color=1a1a1a&primary_color=e11d48`}
                   width="100%"
@@ -194,6 +234,7 @@ const RequestIntroPage = () => {
                   title="Schedule Introduction"
                   className="w-full"
                   style={{ border: 'none', minHeight: '700px' }}
+                  onLoad={() => setWidgetLoading(false)}
                 />
               </div>
             </div>
