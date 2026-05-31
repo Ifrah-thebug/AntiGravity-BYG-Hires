@@ -53,26 +53,30 @@ const TalentSetupPage = () => {
 
     setSaving(true);
     try {
-      const userId = stateData.userId || user?.id;
-      if (!userId) throw new Error('No user ID found. Please sign up again.');
+      // Check session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session found. Please sign up or log in first to confirm authentication.');
+      }
 
-      const profileData = {
-        user_id: userId,
+      // Explicitly get user details from session
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Authenticated user could not be found. Please try again.');
+      }
+
+      const { error: dbErr } = await supabase.from('profiles').upsert({
+        user_id: user.id,
         name: form.name.trim(),
-        email: stateData.email || user?.email || '',
         job_title: form.job_title.trim(),
         about: form.about.trim(),
-        experience_years: Number(form.experience_years) || 0,
         skills: form.skills,
+        experience_years: Number(form.experience_years) || 0,
         photo_url: stateData.photoUrl || '',
         cv_url: stateData.cvUrl || '',
-      };
+      }, { onConflict: 'user_id' });
 
-      const { error: dbErr } = await supabase
-        .from('profiles')
-        .upsert(profileData, { onConflict: 'user_id' });
-
-      if (dbErr) throw new Error(dbErr.message);
+      if (dbErr) throw dbErr;
 
       navigate('/portal', { state: { justCreated: true } });
     } catch (err) {
