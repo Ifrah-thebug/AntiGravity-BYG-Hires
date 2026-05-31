@@ -136,86 +136,36 @@ const TalentSignupPage = () => {
       </AnimatePresence>
 
       {/* Hero Section */}
-      <section className="relative pt-24 pb-20 px-6 bg-black text-white overflow-hidden">
+      <section className="relative pt-16 pb-16 px-6 bg-black text-white overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-red rounded-full blur-[160px] opacity-20 -mr-20 -mt-20"></div>
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-red rounded-full blur-[140px] opacity-10 -ml-20 -mb-20"></div>
 
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 relative z-10">
-          <div className="flex-1 text-left">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 text-red font-black tracking-[0.2em] text-[10px] mb-6 uppercase"
-            >
-              <Sparkles size={12} />
-              <span>JOIN THE BYG HIRES TALENT POOL</span>
-            </motion.div>
-            
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
-              className="relative inline-block mb-6"
-            >
-              <h1 className="text-4xl md:text-6xl font-black mb-4 leading-[1.05] tracking-tight text-white uppercase">
-                Prove your craft.<br />
-                <span className="text-red">Skip the queue.</span>
-              </h1>
-              <div className="w-20 h-1.5 bg-red mt-4" />
-            </motion.div>
-
-            <motion.p 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.4 }}
-              className="text-gray-400 max-w-xl text-base md:text-lg leading-relaxed font-normal mb-8"
-            >
-              No resume roulette. Complete a real-world task assessment, get scored, and make your profile stronger with your score.
-            </motion.p>
-          </div>
-
-          {/* Right Hero Graphic: Simulated Assessment Preview */}
+        <div className="max-w-4xl mx-auto flex flex-col items-center text-center relative z-10">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, x: 20 }}
-            animate={{ opacity: 1, scale: 1, x: 0 }}
-            transition={{ delay: 0.6 }}
-            className="flex-1 w-full max-w-lg lg:max-w-none"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="relative inline-block mb-6"
           >
-            <div className="bg-[#0e0e10] border border-gray-800 rounded-[2.5rem] p-8 md:p-10 shadow-2xl relative">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="px-3 py-1 bg-red/10 border border-red/35 text-red text-[9px] font-black rounded uppercase tracking-wider">
-                  25 min
-                </div>
-                <div className="px-3 py-1 bg-white/10 border border-white/10 text-gray-300 text-[9px] font-black rounded uppercase tracking-wider">
-                  Skill-First Assessment
-                </div>
-              </div>
-              
-              <h3 className="text-xl md:text-2xl font-black text-white mb-4 uppercase tracking-wide">Fulfillment & Operations Challenge</h3>
-              <p className="text-gray-400 text-xs md:text-sm leading-relaxed mb-6">
-                "A tour operator managing 40+ daily bookings has noticed a 30% no-show rate over the past 2 weeks... Identify the operational bottlenecks and draft an SOP recovery plan."
-              </p>
-
-              <div className="space-y-3.5 border-t border-white/10 pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-red/15 text-red flex items-center justify-center font-bold text-[10px]">1</div>
-                  <span className="text-[11px] font-bold text-gray-300">Diagnose the root bottleneck in 3 sentences</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-red/15 text-red flex items-center justify-center font-bold text-[10px]">2</div>
-                  <span className="text-[11px] font-bold text-gray-300">Draft fleet coordination instructions</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="w-5 h-5 rounded-full bg-red/15 text-red flex items-center justify-center font-bold text-[10px]">3</div>
-                  <span className="text-[11px] font-bold text-gray-300">Outline permanent geo-fencing SOPs</span>
-                </div>
-              </div>
-            </div>
+            <h1 className="text-4xl md:text-6xl font-black mb-4 leading-[1.05] tracking-tight text-white uppercase">
+              Prove your craft.<br />
+              <span className="text-red">Skip the queue.</span>
+            </h1>
+            <div className="w-20 h-1.5 bg-red mt-4 mx-auto" />
           </motion.div>
+
+          <motion.p 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.3 }}
+            className="text-gray-400 max-w-xl text-sm md:text-base leading-relaxed font-medium mb-4"
+          >
+            No resume roulette. Complete a real-world task assessment, get scored, and make your profile stronger with your score.
+          </motion.p>
         </div>
       </section>
 
-      <div className="max-w-5xl mx-auto px-4 mt-12 lg:-mt-12 relative z-20">
+      <div className="max-w-5xl mx-auto px-4 mt-16 relative z-20">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-black tracking-tight leading-tight mb-3">
