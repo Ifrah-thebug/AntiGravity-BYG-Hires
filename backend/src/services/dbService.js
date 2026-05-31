@@ -1,62 +1,66 @@
-const { createClient } = require('@supabase/supabase-js');
+/**
+ * dbService.js — Local JSON fallback (no Supabase required)
+ * When SUPABASE_URL is configured, swap this out for the real client.
+ */
+const fs = require('fs');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const DB_PATH = path.join(__dirname, '../../data.json');
 
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Ensure the data file exists
+function readDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ talents: [], assessments: [], decisions: [] }, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
+}
+
+function writeDB(db) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
 
 module.exports = {
   // Talent CRUD
   async createTalent(talent) {
-    const { data, error } = await supabase
-      .from('talents')
-      .insert([talent])
-      .single();
-    if (error) throw error;
-    return data;
+    const db = readDB();
+    const record = { id: uuidv4(), createdAt: new Date().toISOString(), ...talent };
+    db.talents.push(record);
+    writeDB(db);
+    return record;
   },
   async getTalentById(id) {
-    const { data, error } = await supabase
-      .from('talents')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    return data;
+    const db = readDB();
+    const record = db.talents.find(t => t.id === id);
+    if (!record) throw new Error(`Talent ${id} not found`);
+    return record;
   },
+
   // Assessment CRUD
   async createAssessment(assessment) {
-    const { data, error } = await supabase
-      .from('assessments')
-      .insert([assessment])
-      .single();
-    if (error) throw error;
-    return data;
+    const db = readDB();
+    const record = { id: uuidv4(), createdAt: new Date().toISOString(), status: 'pending', ...assessment };
+    db.assessments.push(record);
+    writeDB(db);
+    return record;
   },
   async getAssessmentById(id) {
-    const { data, error } = await supabase
-      .from('assessments')
-      .select('*')
-      .eq('id', id)
-      .single();
-    if (error) throw error;
-    return data;
+    const db = readDB();
+    const record = db.assessments.find(a => a.id === id);
+    if (!record) throw new Error(`Assessment ${id} not found`);
+    return record;
   },
+
   // Decision CRUD
   async createDecision(decision) {
-    const { data, error } = await supabase
-      .from('decisions')
-      .insert([decision])
-      .single();
-    if (error) throw error;
-    return data;
+    const db = readDB();
+    const record = { id: uuidv4(), createdAt: new Date().toISOString(), ...decision };
+    db.decisions.push(record);
+    writeDB(db);
+    return record;
   },
   async getPendingAssessments() {
-    const { data, error } = await supabase
-      .from('assessments')
-      .select('*')
-      .eq('status', 'pending');
-    if (error) throw error;
-    return data;
-  }
+    const db = readDB();
+    return db.assessments.filter(a => a.status === 'pending');
+  },
 };
