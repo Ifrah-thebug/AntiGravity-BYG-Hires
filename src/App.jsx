@@ -20,6 +20,15 @@ import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
+// Import Supabase-backed Talent Pool Pages
+import TalentSignupPage from './pages/TalentSignupPage';
+import TalentLoginPage from './pages/TalentLoginPage';
+import TalentSetupPage from './pages/TalentSetupPage';
+import TalentDirectoryPage from './pages/TalentDirectoryPage';
+import TalentProfilePage from './pages/TalentProfilePage';
+import PortalPage from './pages/PortalPage';
+import { AuthProvider } from './context/AuthContext';
+
 // Import Global Sandbox Tools
 import DeveloperConsole from './components/DeveloperConsole';
 import MockEmailSimulator from './components/MockEmailSimulator';
@@ -53,6 +62,7 @@ const AppContent = () => {
   const debug = new URLSearchParams(location.search).get('debug') === 'true';
   const isAssessment = location.pathname === '/assessment';
   const isAdmin = location.pathname.startsWith('/admin');
+  const isPortalPage = location.pathname === '/portal' || location.pathname.startsWith('/talent/login') || location.pathname.startsWith('/talent/signup') || location.pathname.startsWith('/talent/setup');
 
   // One-time cleanup: remove any test/Ifrah profiles from localStorage
   useEffect(() => {
@@ -81,9 +91,16 @@ const AppContent = () => {
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
           <Route path="/request-intro" element={<RequestIntroPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          {/* Supabase-backed Talent Pool System */}
+          <Route path="/talent" element={<TalentDirectoryPage />} />
+          <Route path="/talent/signup" element={<TalentSignupPage />} />
+          <Route path="/talent/login" element={<TalentLoginPage />} />
+          <Route path="/talent/setup" element={<TalentSetupPage />} />
+          <Route path="/talent/:id" element={<TalentProfilePage />} />
+          <Route path="/portal" element={<PortalPage />} />
         </Routes>
       </main>
-      {!isTalentPool && !isAssessment && !isAdmin && <Footer />}
+      {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && <Footer />}
       {/* Sandbox Debug Overlay Widgets - visible only with ?debug=true */}
       {debug && (
         <>
@@ -98,7 +115,9 @@ const AppContent = () => {
 function App() {
   return (
     <Router>
-      <AppContent />
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </Router>
   );
 }
