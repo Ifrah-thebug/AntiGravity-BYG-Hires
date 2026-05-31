@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -9,7 +9,7 @@ import WhyUsPage from './pages/WhyUsPage';
 import RemoteSalesTeamPage from './pages/RemoteSalesTeamPage';
 import RemoteSupportTeamPage from './pages/RemoteSupportTeamPage';
 import TalentPoolPage from './pages/TalentPoolPage';
-import TalentBrowsePage from './pages/TalentBrowsePage';
+
 import RequestIntroPage from './pages/RequestIntroPage';
 import TalentDashboardPage from './pages/TalentDashboardPage';
 
@@ -87,7 +87,7 @@ const AppContent = () => {
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/admin/reviews" element={<AdminReviewsPage />} />
-          <Route path="/talent-browse" element={<TalentBrowsePage />} />
+          <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
           <Route path="/request-intro" element={<RequestIntroPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />

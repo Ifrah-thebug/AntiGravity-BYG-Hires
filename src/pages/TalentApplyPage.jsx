@@ -425,7 +425,7 @@ const TalentApplyPage = () => {
                       Start Skill Assessment <ArrowRight size={14} />
                     </button>
                     <button
-                      onClick={() => navigate('/talent-browse')}
+                      onClick={() => navigate('/talent')}
                       className="px-6 py-4 bg-white border border-gray-200 hover:border-black text-gray-700 hover:text-black font-black text-sm uppercase tracking-wide rounded-xl transition-colors"
                     >
                       Go to Browse Talent

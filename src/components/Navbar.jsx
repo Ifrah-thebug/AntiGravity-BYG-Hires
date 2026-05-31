@@ -29,7 +29,6 @@ const Navbar = () => {
         { name: 'Remote Support Team', href: '/remote-support-team' },
       ],
     },
-    { name: 'Browse Talent', href: '/talent-browse' },
     { name: 'Talent Directory', href: '/talent' },
     { name: 'How It Works', href: '/how-it-works' },
     { name: 'Join Talent Pool', href: '/talent/signup' },

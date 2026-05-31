@@ -346,7 +346,7 @@ const TalentMatchmaking = () => {
         {/* Explore CTA */}
         <div className="flex justify-center">
           <button
-            onClick={() => navigate('/talent-browse')}
+            onClick={() => navigate('/talent')}
             className="group flex items-center gap-3 px-10 py-5 border-2 border-red text-red font-black text-xl tracking-wide rounded-2xl hover:bg-red hover:text-white transition-all duration-300"
           >
             Explore the Matchmaking

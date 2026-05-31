@@ -154,7 +154,7 @@ const TalentSignupPage = () => {
             <div className="w-20 h-1.5 bg-red mt-4 mx-auto" />
           </motion.div>
 
-          <motion.p 
+          <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.3 }}
@@ -315,11 +315,10 @@ const TalentSignupPage = () => {
               <button
                 type="submit"
                 disabled={isLoading || !form.name || !form.email || !form.password || !cvFile || !photoFile}
-                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${
-                  !isLoading && form.name && form.email && form.password && cvFile && photoFile
-                    ? 'border-red text-red hover:bg-red hover:text-white shadow-xl shadow-red/10 cursor-pointer'
-                    : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
-                }`}
+                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${!isLoading && form.name && form.email && form.password && cvFile && photoFile
+                  ? 'border-red text-red hover:bg-red hover:text-white shadow-xl shadow-red/10 cursor-pointer'
+                  : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
+                  }`}
               >
                 Submit and parse CV <ChevronRight size={14} />
               </button>
@@ -333,7 +332,7 @@ const TalentSignupPage = () => {
               {[
                 { id: '01', title: 'DECLARE', desc: 'Upload your CV and let our AI build your profile. Edit and enhance it before publishing.' },
                 { id: '02', title: 'DEMONSTRATE', desc: 'Complete a tailored, 25-min real-world client challenge.' },
-                { id: '03', title: 'DEPLOY', desc: 'Qualified candidates are admitted to our pool and ranked as recommended to our regional employers.' }
+                { id: '03', title: 'DEPLOY', desc: 'Qualified candidates are admitted to our pool and rank higher to the regional employers.' }
               ].map((step, idx) => (
                 <div key={idx} className="relative pl-8">
                   <div className="absolute left-0 top-0 font-mono text-[9px] font-black text-red">

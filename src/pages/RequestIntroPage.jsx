@@ -68,7 +68,7 @@ const RequestIntroPage = () => {
           <Award size={48} className="text-red mx-auto mb-6" />
           <h2 className="text-2xl font-black uppercase mb-3">Talent Not Found</h2>
           <p className="text-gray-500 font-medium text-sm mb-6">The profile you're looking for is not available.</p>
-          <button onClick={() => navigate('/talent-browse')} className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors">
+          <button onClick={() => navigate('/talent')} className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors">
             Browse All Talent
           </button>
         </div>

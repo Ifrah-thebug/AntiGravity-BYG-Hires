@@ -53,7 +53,7 @@ const Hero = () => {
               Join the Talent Pool
             </a>
             <a
-              href="/talent-browse"
+              href="/talent"
               className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-black text-black rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg"
             >
               Find a Great Hire
