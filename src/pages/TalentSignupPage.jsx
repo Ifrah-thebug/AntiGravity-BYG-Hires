@@ -136,16 +136,16 @@ const TalentSignupPage = () => {
       </AnimatePresence>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-32 px-6 bg-black text-white overflow-hidden">
+      <section className="relative pt-24 pb-20 px-6 bg-black text-white overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-red rounded-full blur-[160px] opacity-20 -mr-20 -mt-20"></div>
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-red rounded-full blur-[140px] opacity-10 -ml-20 -mb-20"></div>
 
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-16 relative z-10">
+        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12 relative z-10">
           <div className="flex-1 text-left">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2 text-red font-black tracking-[0.2em] text-[10px] mb-8 uppercase"
+              className="flex items-center gap-2 text-red font-black tracking-[0.2em] text-[10px] mb-6 uppercase"
             >
               <Sparkles size={12} />
               <span>JOIN THE BYG HIRES TALENT POOL</span>
@@ -155,20 +155,20 @@ const TalentSignupPage = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="relative inline-block mb-8"
+              className="relative inline-block mb-6"
             >
-              <h1 className="text-5xl md:text-8xl font-black mb-4 leading-[1.05] tracking-tight text-white uppercase">
+              <h1 className="text-4xl md:text-6xl font-black mb-4 leading-[1.05] tracking-tight text-white uppercase">
                 Prove your craft.<br />
                 <span className="text-red">Skip the queue.</span>
               </h1>
-              <div className="w-24 h-1.5 bg-red mt-6" />
+              <div className="w-20 h-1.5 bg-red mt-4" />
             </motion.div>
 
             <motion.p 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.4 }}
-              className="text-gray-400 max-w-xl text-lg md:text-xl leading-relaxed font-normal mb-12"
+              className="text-gray-400 max-w-xl text-base md:text-lg leading-relaxed font-normal mb-8"
             >
               No resume roulette. Complete a real-world task assessment, get scored, and make your profile stronger with your score.
             </motion.p>
@@ -215,12 +215,12 @@ const TalentSignupPage = () => {
         </div>
       </section>
 
-      <div className="max-w-5xl mx-auto px-4 mt-16 lg:-mt-16 relative z-20">
+      <div className="max-w-5xl mx-auto px-4 mt-12 lg:-mt-12 relative z-20">
         {/* Header */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
-          <h1 className="text-4xl md:text-5xl font-black text-black tracking-tight leading-tight mb-4">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
+          <h2 className="text-2xl md:text-3xl font-bold text-black tracking-tight leading-tight mb-3">
             Create your profile.
-          </h1>
+          </h2>
           <p className="text-gray-500 text-sm font-medium max-w-sm mx-auto">
             Upload your CV — our AI will build your profile in seconds. Already have an account?{' '}
             <Link to="/talent/login" className="text-red font-bold hover:underline">Log in</Link>
@@ -389,8 +389,8 @@ const TalentSignupPage = () => {
                   <div className="absolute left-0 top-0 font-mono text-[9px] font-black text-red">
                     {step.id}
                   </div>
-                  <h4 className="text-xs font-black uppercase text-black mb-1">{step.title}</h4>
-                  <p className="text-[11px] font-medium text-gray-500 leading-relaxed">{step.desc}</p>
+                  <h4 className="text-sm font-black uppercase text-black mb-1">{step.title}</h4>
+                  <p className="text-xs font-medium text-gray-500 leading-relaxed">{step.desc}</p>
                 </div>
               ))}
             </div>
