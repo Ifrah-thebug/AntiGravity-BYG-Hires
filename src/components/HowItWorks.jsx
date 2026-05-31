@@ -38,7 +38,7 @@ const HowItWorks = () => {
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="text-4xl md:text-5xl font-extrabold text-black mb-6"
+            className="text-2xl md:text-3xl font-extrabold text-black mb-6"
           >
             How <span className="text-red">it works</span>
           </motion.h2>
@@ -61,7 +61,7 @@ const HowItWorks = () => {
 
               {/* Content box */}
               <div className="w-[calc(100%-4rem)] md:w-[calc(50%-3rem)] bg-white p-6 rounded-2xl shadow-sm border border-gray-100 hover:shadow-md hover:border-red/30 transition-all">
-                <h3 className="font-bold text-black text-xl mb-3">{step.title}</h3>
+                <h3 className="font-bold text-black text-base mb-3">{step.title}</h3>
                 <p className="text-gray-600 leading-relaxed">{step.desc}</p>
               </div>
             </motion.div>

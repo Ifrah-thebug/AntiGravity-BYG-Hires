@@ -698,8 +698,7 @@ const TalentApplyPage = () => {
                     className="text-red hover:underline focus:outline-none inline-block font-black"
                   >
                     Candidate Talent Pool Agreement
-                  </button>{' '}
-                  and understand how my data will be handled.
+                  </button>
                 </label>
               </div>
 
@@ -765,35 +764,83 @@ const TalentApplyPage = () => {
               </div>
 
               {/* Modal Body */}
-              <div className="p-6 overflow-y-auto space-y-6 text-sm text-gray-600 leading-relaxed font-medium">
-                <div>
-                  <p className="font-bold text-gray-800 text-base mb-1 uppercase tracking-wide">CANDIDATE TALENT POOL AGREEMENT</p>
-                  <p className="text-[11px] text-gray-400 font-bold uppercase tracking-widest">BYG Hires Staffing Services</p>
-                </div>
-
+              <div className="p-6 overflow-y-auto space-y-5 text-sm text-gray-600 leading-relaxed font-medium">
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <p className="font-black text-xs text-black uppercase tracking-wider">1. PURPOSE</p>
-                    <p>The purpose of this Agreement is to govern the Candidate’s participation in the BYG Hires Talent Pool and the use, processing, and sharing of the Candidate’s information for recruitment and staffing opportunities.</p>
+                    <p className="font-black text-xs text-black uppercase tracking-wider">1. Purpose</p>
+                    <p>The purpose of this Agreement is to govern the Candidate's participation in the BYG Hires Talent Pool and the use, processing, and sharing of the Candidate's information for recruitment and staffing opportunities.</p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <p className="font-black text-xs text-black uppercase tracking-wider">2. TALENT POOL REGISTRATION</p>
+                    <p className="font-black text-xs text-black uppercase tracking-wider">2. Talent Pool Registration</p>
                     <p><strong>2.1</strong> The Candidate agrees to join the BYG Hires Talent Pool for consideration in remote employment, freelance, contractual, or recruitment opportunities presented by BYG Hires or its clients.</p>
                     <p><strong>2.2</strong> Registration in the Talent Pool does not create an employment relationship between BYG Hires and the Candidate.</p>
                     <p><strong>2.3</strong> BYG Hires does not guarantee placement, interviews, employment offers, or minimum opportunities.</p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <p className="font-black text-xs text-black uppercase tracking-wider">3. COLLECTION OF INFORMATION</p>
-                    <p><strong>3.1</strong> The Candidate authorizes BYG Hires to collect, process, store, and maintain personal and professional information, including but not limited to: personal details, headshot, CV, and assessments.</p>
+                    <p className="font-black text-xs text-black uppercase tracking-wider">3. Collection of Information</p>
+                    <p><strong>3.1</strong> The Candidate authorizes BYG Hires to collect, process, store, and maintain personal and professional information, including but not limited to: full name and contact information, Resume/CV, employment history, educational qualifications, portfolio or work samples, interview feedback and assessments, and identification or verification documents where required.</p>
                     <p><strong>3.2</strong> The Candidate confirms that all submitted information is accurate, complete, and lawful.</p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <p className="font-black text-xs text-black uppercase tracking-wider">4. USE OF INFORMATION</p>
-                    <p><strong>4.1</strong> BYG Hires may use the Candidate’s information for recruitment and staffing, evaluation, matching, scheduling communications, and future opportunities.</p>
+                    <p className="font-black text-xs text-black uppercase tracking-wider">4. Use of Information</p>
+                    <p><strong>4.1</strong> BYG Hires may use the Candidate's information for: recruitment and staffing purposes; candidate evaluation and verification; matching Candidates with potential employers or clients; scheduling interviews and communications; future employment opportunities and database management.</p>
                     <p><strong>4.2</strong> The Candidate authorizes BYG Hires to share relevant information with prospective employers, clients, or affiliated recruitment partners strictly for hiring-related purposes.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">5. Data Privacy & Protection</p>
+                    <p><strong>5.1</strong> BYG Hires shall implement commercially reasonable measures to protect Candidate information against unauthorized access, disclosure, misuse, or loss.</p>
+                    <p><strong>5.2</strong> BYG Hires shall process Candidate data in accordance with applicable GCC data protection principles, including the UAE Personal Data Protection Law (PDPL), where applicable.</p>
+                    <p><strong>5.3</strong> BYG Hires shall not sell Candidate's personal information to unrelated third parties.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">6. Candidate Obligations</p>
+                    <p>The Candidate agrees that: all information provided is truthful and up to date; submitted materials do not violate confidentiality obligations owed to third parties; the Candidate shall conduct themselves professionally during recruitment processes; and the Candidate shall not misuse confidential information received during interviews or assessments.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">7. Confidentiality</p>
+                    <p><strong>7.1</strong> Any documents, assessments, interview materials, employer information, platform systems, or recruitment processes shared by BYG Hires shall remain confidential.</p>
+                    <p><strong>7.2</strong> The Candidate shall not reproduce, distribute, disclose, or misuse confidential information without prior written consent.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">8. Intellectual Property</p>
+                    <p>All website content, branding, systems, databases, templates, recruitment materials, and platform intellectual property remain the exclusive property of BYG Hires unless otherwise stated.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">9. No Employment Relationship</p>
+                    <p><strong>9.1</strong> BYG Hires acts solely as a staffing and recruitment intermediary.</p>
+                    <p><strong>9.2</strong> Nothing in this Agreement shall be interpreted as creating an employer-employee relationship, partnership, or agency relationship between BYG Hires and the Candidate.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">10. Limitation of Liability</p>
+                    <p><strong>10.1</strong> BYG Hires shall not be liable for: hiring decisions made by clients; rejection of applications; employment termination by clients; candidate compensation disputes with employers; or indirect, consequential, or business losses arising from platform use.</p>
+                    <p><strong>10.2</strong> Candidates engage with prospective employers at their own discretion and responsibility.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">11. Termination & Withdrawal</p>
+                    <p><strong>11.1</strong> The Candidate may request removal from the Talent Pool at any time by written request.</p>
+                    <p><strong>11.2</strong> BYG Hires reserves the right to suspend, restrict, or terminate Candidate access for: fraudulent activity, misrepresentation, unprofessional conduct, violation of this Agreement, or unlawful activities.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">12. Governing Law & Jurisdiction</p>
+                    <p><strong>12.1</strong> This Agreement shall be governed by and construed in accordance with the laws of the United Arab Emirates.</p>
+                    <p><strong>12.2</strong> The Parties shall first attempt to resolve disputes through good faith negotiations.</p>
+                    <p><strong>12.3</strong> Any unresolved dispute shall be subject to arbitration under the rules of the Dubai International Arbitration Centre (DIAC), with the seat of arbitration in Dubai, UAE.</p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <p className="font-black text-xs text-black uppercase tracking-wider">13. Acceptance</p>
+                    <p>By selecting the acceptance checkbox on the BYG Hires platform, the Candidate confirms that they have read, understood, and agreed to the terms of this Agreement.</p>
                   </div>
                 </div>
               </div>

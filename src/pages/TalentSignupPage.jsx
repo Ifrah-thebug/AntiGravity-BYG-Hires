@@ -7,7 +7,6 @@ import {
   CheckCircle2, ChevronRight, Mail, Lock, User, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { supabase } from '../lib/supabase';
 import { parseCV } from '../lib/geminiCV';
 
 const TalentSignupPage = () => {
@@ -15,6 +14,8 @@ const TalentSignupPage = () => {
   const { signUp } = useAuth();
 
   const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [cvFile, setCvFile] = useState(null);
   const [photoFile, setPhotoFile] = useState(null);
   const [photoPreview, setPhotoPreview] = useState('');
@@ -53,45 +54,38 @@ const TalentSignupPage = () => {
 
     try {
       setStep('uploading');
-      const { user } = await signUp(form.email, form.password);
-      const userId = user?.id;
-      if (!userId) throw new Error('Signup succeeded but no user ID returned. Check your email to confirm your account, then log in.');
 
+      // Generate a local userId since we don't have Supabase auth yet
+      const userId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+      // Read CV as base64 and store in localStorage
+      const cvBase64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onloadend = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(cvFile);
+      });
       const cvExt = cvFile.name.split('.').pop();
-      const cvPath = `${userId}/cv.${cvExt}`;
-      const { error: cvUpErr } = await supabase.storage
-        .from('talent-files')
-        .upload(cvPath, cvFile, { upsert: true });
-      if (cvUpErr) throw new Error(`CV upload failed: ${cvUpErr.message}`);
+      localStorage.setItem(`talent_cv_${userId}`, cvBase64);
+      const cvUrl = `local://talent-files/${userId}/cv.${cvExt}`;
 
-      const { data: cvUrlData } = supabase.storage.from('talent-files').getPublicUrl(cvPath);
-      const cvUrl = cvUrlData.publicUrl;
-
+      // Read photo as base64 and store in localStorage
+      const photoBase64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onloadend = () => res(r.result);
+        r.onerror = rej;
+        r.readAsDataURL(photoFile);
+      });
       const photoExt = photoFile.name.split('.').pop();
-      const photoPath = `${userId}/photo.${photoExt}`;
-      const { error: photoUpErr } = await supabase.storage
-        .from('talent-files')
-        .upload(photoPath, photoFile, { upsert: true });
-      if (photoUpErr) throw new Error(`Photo upload failed: ${photoUpErr.message}`);
-
-      const { data: photoUrlData } = supabase.storage.from('talent-files').getPublicUrl(photoPath);
-      const photoUrl = photoUrlData.publicUrl;
+      localStorage.setItem(`talent_photo_${userId}`, photoBase64);
+      const photoUrl = photoBase64; // use actual base64 so preview works
 
       setStep('parsing');
-      const reader = new FileReader();
-      const cvParsed = await new Promise((resolve, reject) => {
-        reader.onloadend = async () => {
-          try {
-            const dataUrl = reader.result;
-            const base64 = dataUrl.split(',')[1];
-            const mime = cvFile.type || 'application/pdf';
-            const result = await parseCV(base64, mime);
-            resolve(result);
-          } catch (err) { reject(err); }
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(cvFile);
-      });
+      const cvParsed = await (async () => {
+        const base64 = cvBase64.split(',')[1];
+        const mime = cvFile.type || 'application/pdf';
+        return await parseCV(base64, mime);
+      })();
 
       setStep('done');
 
@@ -311,11 +305,33 @@ const TalentSignupPage = () => {
                 </p>
               </div>
 
+              {/* User Agreement Checkbox */}
+              <div className="flex items-start gap-3 bg-gray-50 border border-gray-200 p-4 rounded-xl">
+                <input
+                  type="checkbox"
+                  id="agreementChecked"
+                  checked={agreementChecked}
+                  onChange={(e) => setAgreementChecked(e.target.checked)}
+                  className="w-4 h-4 mt-0.5 rounded border-gray-300 text-red focus:ring-red accent-red shrink-0 cursor-pointer"
+                  required
+                />
+                <label htmlFor="agreementChecked" className="text-xs text-gray-600 font-bold leading-normal select-none cursor-pointer">
+                  I agree to the{' '}
+                  <button
+                    type="button"
+                    onClick={() => setShowAgreementModal(true)}
+                    className="text-red hover:underline focus:outline-none inline-block font-black"
+                  >
+                    Candidate Talent Pool Agreement.
+                  </button>
+                </label>
+              </div>
+
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading || !form.name || !form.email || !form.password || !cvFile || !photoFile}
-                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${!isLoading && form.name && form.email && form.password && cvFile && photoFile
+                disabled={isLoading || !form.name || !form.email || !form.password || !cvFile || !photoFile || !agreementChecked}
+                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${!isLoading && form.name && form.email && form.password && cvFile && photoFile && agreementChecked
                   ? 'border-red text-red hover:bg-red hover:text-white shadow-xl shadow-red/10 cursor-pointer'
                   : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
                   }`}
@@ -346,6 +362,58 @@ const TalentSignupPage = () => {
           </div>
         </div>
       </div>
+      {/* Agreement Modal */}
+      <AnimatePresence>
+        {showAgreementModal && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4"
+            onClick={() => setShowAgreementModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 20 }}
+              className="bg-white rounded-[2rem] max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl border border-gray-100"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="bg-black text-white p-6 relative">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-red rounded-full blur-[80px] opacity-25 -mr-10 -mt-10 pointer-events-none" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div>
+                    <span className="text-red font-black text-[9px] uppercase tracking-[0.15em] block mb-1">Legal Agreement</span>
+                    <h3 className="text-lg font-black uppercase tracking-tight">Candidate Talent Pool Agreement</h3>
+                  </div>
+                  <button onClick={() => setShowAgreementModal(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors">
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="p-6 overflow-y-auto space-y-5 text-sm text-gray-600 leading-relaxed font-medium">
+                <div className="space-y-4">
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">1. Purpose</p><p>The purpose of this Agreement is to govern the Candidate's participation in the BYG Hires Talent Pool and the use, processing, and sharing of the Candidate's information for recruitment and staffing opportunities.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">2. Talent Pool Registration</p><p><strong>2.1</strong> The Candidate agrees to join the BYG Hires Talent Pool for consideration in remote employment, freelance, contractual, or recruitment opportunities.</p><p><strong>2.2</strong> Registration does not create an employment relationship between BYG Hires and the Candidate.</p><p><strong>2.3</strong> BYG Hires does not guarantee placement, interviews, employment offers, or minimum opportunities.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">3. Collection of Information</p><p><strong>3.1</strong> The Candidate authorizes BYG Hires to collect, process, store, and maintain personal and professional information, including but not limited to: full name and contact information, Resume/CV, employment history, educational qualifications, portfolio or work samples, interview feedback and assessments, and identification or verification documents where required.</p><p><strong>3.2</strong> The Candidate confirms that all submitted information is accurate, complete, and lawful.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">4. Use of Information</p><p><strong>4.1</strong> BYG Hires may use the Candidate's information for: recruitment and staffing purposes; candidate evaluation and verification; matching Candidates with potential employers or clients; scheduling interviews and communications; future employment opportunities and database management.</p><p><strong>4.2</strong> The Candidate authorizes BYG Hires to share relevant information with prospective employers or clients strictly for hiring-related purposes.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">5. Data Privacy & Protection</p><p><strong>5.1</strong> BYG Hires shall implement commercially reasonable measures to protect Candidate information against unauthorized access, disclosure, misuse, or loss.</p><p><strong>5.2</strong> BYG Hires shall process Candidate data in accordance with applicable GCC data protection principles, including the UAE Personal Data Protection Law (PDPL), where applicable.</p><p><strong>5.3</strong> BYG Hires shall not sell Candidate's personal information to unrelated third parties.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">6. Candidate Obligations</p><p>The Candidate agrees that: all information provided is truthful and up to date; submitted materials do not violate confidentiality obligations owed to third parties; the Candidate shall conduct themselves professionally during recruitment processes; and the Candidate shall not misuse confidential information received during interviews or assessments.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">7. Confidentiality</p><p><strong>7.1</strong> Any documents, assessments, interview materials, employer information, platform systems, or recruitment processes shared by BYG Hires shall remain confidential.</p><p><strong>7.2</strong> The Candidate shall not reproduce, distribute, disclose, or misuse confidential information without prior written consent.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">8. Intellectual Property</p><p>All website content, branding, systems, databases, templates, recruitment materials, and platform intellectual property remain the exclusive property of BYG Hires unless otherwise stated.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">9. No Employment Relationship</p><p><strong>9.1</strong> BYG Hires acts solely as a staffing and recruitment intermediary.</p><p><strong>9.2</strong> Nothing in this Agreement shall be interpreted as creating an employer-employee relationship, partnership, or agency relationship between BYG Hires and the Candidate.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">10. Limitation of Liability</p><p><strong>10.1</strong> BYG Hires shall not be liable for: hiring decisions made by clients; rejection of applications; employment termination by clients; candidate compensation disputes; or indirect, consequential, or business losses arising from platform use.</p><p><strong>10.2</strong> Candidates engage with prospective employers at their own discretion and responsibility.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">11. Termination & Withdrawal</p><p><strong>11.1</strong> The Candidate may request removal from the Talent Pool at any time by written request.</p><p><strong>11.2</strong> BYG Hires reserves the right to suspend, restrict, or terminate Candidate access for: fraudulent activity, misrepresentation, unprofessional conduct, violation of this Agreement, or unlawful activities.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">12. Governing Law & Jurisdiction</p><p><strong>12.1</strong> This Agreement shall be governed by and construed in accordance with the laws of the United Arab Emirates.</p><p><strong>12.2</strong> The Parties shall first attempt to resolve disputes through good faith negotiations.</p><p><strong>12.3</strong> Any unresolved dispute shall be subject to arbitration under the rules of the Dubai International Arbitration Centre (DIAC), with the seat of arbitration in Dubai, UAE.</p></div>
+                  <div className="space-y-1.5"><p className="font-black text-xs text-black uppercase tracking-wider">13. Acceptance</p><p>By selecting the acceptance checkbox on the BYG Hires platform, the Candidate confirms that they have read, understood, and agreed to the terms of this Agreement.</p></div>
+                </div>
+              </div>
+              <div className="p-6 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                <button type="button" onClick={() => { setAgreementChecked(true); setShowAgreementModal(false); }} className="px-6 py-3 bg-black hover:bg-red text-white text-[10px] font-black uppercase tracking-wider rounded-xl transition-all shadow-sm">Accept Terms</button>
+                <button type="button" onClick={() => setShowAgreementModal(false)} className="px-6 py-3 bg-white border border-gray-200 text-gray-500 hover:text-black text-[10px] font-black uppercase tracking-wider rounded-xl transition-all">Close</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

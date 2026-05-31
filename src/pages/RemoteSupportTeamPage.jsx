@@ -29,14 +29,14 @@ const RemoteSupportTeamPage = () => {
           <motion.h1 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-5xl md:text-6xl font-extrabold text-black mb-6"
+            className="text-3xl md:text-4xl font-extrabold text-black mb-6"
           >
             Delight Your Customers with <span className="text-red">Remote Support Teams</span>
           </motion.h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto mb-10">
+          <p className="text-base text-gray-600 max-w-3xl mx-auto mb-10">
             Professional customer success and technical support staff who integrate seamlessly into your workflow to provide world-class service.
           </p>
-          <a href="#contact" className="bg-red text-white px-8 py-4 rounded-full font-bold text-lg hover:bg-red-600 transition-colors shadow-lg shadow-red/20">
+          <a href="#contact" className="bg-red text-white px-8 py-4 rounded-full font-bold text-base hover:bg-red-600 transition-colors shadow-lg shadow-red/20">
             Hire Your Support Team
           </a>
         </div>
@@ -56,7 +56,7 @@ const RemoteSupportTeamPage = () => {
                 className="text-center p-8 rounded-2xl bg-white border border-gray-100 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div className="mb-6 flex justify-center">{benefit.icon}</div>
-                <h3 className="text-xl font-bold mb-4">{benefit.title}</h3>
+                <h3 className="text-base font-bold mb-4">{benefit.title}</h3>
                 <p className="text-gray-600">{benefit.desc}</p>
               </motion.div>
             ))}

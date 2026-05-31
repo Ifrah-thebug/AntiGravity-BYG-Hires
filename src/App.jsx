@@ -1,5 +1,13 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [pathname]);
+  return null;
+};
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import HomePage from './pages/HomePage';
@@ -72,6 +80,7 @@ const AppContent = () => {
 
   return (
     <div className="min-h-screen bg-white">
+      <ScrollToTop />
       <Navbar />
       <CalendlyPreloader />
       <main>
