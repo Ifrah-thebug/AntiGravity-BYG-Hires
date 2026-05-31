@@ -331,9 +331,9 @@ const TalentSignupPage = () => {
             <h3 className="font-black text-sm uppercase tracking-widest text-gray-800 px-2">How It Works</h3>
             <div className="bg-gray-50 border border-gray-200 rounded-[2rem] p-6 space-y-6">
               {[
-                { id: '01', title: 'Define your expertise', desc: 'Upload your CV and let our AI build your profile.' },
-                { id: '02', title: 'Solve a real scenario', desc: 'Complete a tailored, 25-min real-world client challenge.' },
-                { id: '03', title: 'Get referred directly', desc: 'Qualified candidates are admitted and instantly visible to regional employers.' }
+                { id: '01', title: 'DECLARE', desc: 'Upload your CV and let our AI build your profile. Edit and enhance it before publishing.' },
+                { id: '02', title: 'DEMONSTRATE', desc: 'Complete a tailored, 25-min real-world client challenge.' },
+                { id: '03', title: 'DEPLOY', desc: 'Qualified candidates are admitted to our pool and ranked as recommended to our regional employers.' }
               ].map((step, idx) => (
                 <div key={idx} className="relative pl-8">
                   <div className="absolute left-0 top-0 font-mono text-[9px] font-black text-red">
