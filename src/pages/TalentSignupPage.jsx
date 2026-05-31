@@ -114,7 +114,7 @@ const TalentSignupPage = () => {
   const isLoading = step !== 'idle' && step !== 'done';
 
   return (
-    <div className="bg-white min-h-screen font-sans pb-24">
+    <div className="bg-white min-h-screen font-sans pb-24 pt-20">
       {/* Loading overlay */}
       <AnimatePresence>
         {isLoading && (
@@ -165,7 +165,7 @@ const TalentSignupPage = () => {
         </div>
       </section>
 
-      <div className="max-w-5xl mx-auto px-4 mt-16 relative z-20">
+      <div className="max-w-5xl mx-auto px-4 mt-10 relative z-20">
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
           <h2 className="text-2xl md:text-3xl font-bold text-black tracking-tight leading-tight mb-3">
