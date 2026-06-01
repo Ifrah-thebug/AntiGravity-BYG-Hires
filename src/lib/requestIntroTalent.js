@@ -32,12 +32,23 @@ export async function resolveRequestIntroTalent(id) {
 
   if (!UUID_RE.test(id)) return null;
 
-  const { data, error } = await supabase
+  const profileFields =
+    'id, user_id, name, job_title, about, skills, experience_years, photo_url';
+
+  const { data: byProfileId } = await supabase
     .from('profiles')
-    .select('user_id, name, job_title, about, skills, experience_years, photo_url')
+    .select(profileFields)
+    .eq('id', id)
+    .maybeSingle();
+
+  if (byProfileId) return mapProfileToRequestIntroTalent(byProfileId);
+
+  const { data: byUserId } = await supabase
+    .from('profiles')
+    .select(profileFields)
     .eq('user_id', id)
     .maybeSingle();
 
-  if (error || !data) return null;
-  return mapProfileToRequestIntroTalent(data);
+  if (byUserId) return mapProfileToRequestIntroTalent(byUserId);
+  return null;
 }

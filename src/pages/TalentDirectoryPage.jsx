@@ -186,15 +186,11 @@ const TalentCard = ({ talent, onSelect }) => {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            if(talent.isReal) {
-               navigate(`/talent/${talent.id}`);
-            } else {
-               navigate(`/request-intro?id=${talent.id}`);
-            }
+            navigate(`/request-intro?id=${talent.id}`);
           }}
           className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
         >
-          {talent.isReal ? 'View Profile' : 'Request Intro'}
+          Request Intro
         </button>
       </div>
     </motion.div>
@@ -292,16 +288,10 @@ const TalentModal = ({ talent, onClose }) => {
             {/* CTA */}
             <div className="flex gap-3 pt-2">
               <button
-                onClick={() => {
-                   if(talent.isReal) {
-                       navigate(`/talent/${talent.id}`);
-                   } else {
-                       navigate(`/request-intro?id=${talent.id}`);
-                   }
-                }}
+                onClick={() => navigate(`/request-intro?id=${talent.id}`)}
                 className="flex-1 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
               >
-                {talent.isReal ? 'View Profile' : 'Request Intro'} <ArrowRight size={14} />
+                Request Intro <ArrowRight size={14} />
               </button>
               <button
                 onClick={onClose}
@@ -426,7 +416,6 @@ const TalentDirectoryPage = () => {
     if (!err && data) {
       supabaseTalents = data.map(p => ({
         id: p.id,
-        isReal: true,
         name: formatDisplayName(p.name) || 'Anonymous',
         photo: p.photo_url || null,
         score: 95, // mock high score for real profiles
