@@ -1,8 +1,15 @@
-/node_modules
-.vercel
+# Dependencies (all packages in this repo)
+node_modules/
+
+# Environment / secrets
 .env
 .env.local
 .env.*.local
+backend/.env
+
+# Build output
 /dist
 dist/
 
+# Vercel
+.vercel

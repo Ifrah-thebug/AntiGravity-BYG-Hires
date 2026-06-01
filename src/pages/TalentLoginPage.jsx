@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { formatAuthError, routeAfterAuth } from '../lib/talentAuth';
 import logo from '../assets/BYG Hires Logo.png';
 
 const TalentLoginPage = () => {
@@ -21,9 +22,9 @@ const TalentLoginPage = () => {
     setLoading(true);
     try {
       await signIn(form.email, form.password);
-      navigate('/portal');
+      await routeAfterAuth(navigate);
     } catch (err) {
-      setError(err.message || 'Invalid email or password.');
+      setError(formatAuthError(err));
     } finally {
       setLoading(false);
     }

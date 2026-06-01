@@ -7,7 +7,11 @@ import {
   CheckCircle2, ChevronRight, Mail, Lock, User, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { parseCV } from '../lib/geminiCV';
+import { parseCV, GEMINI_CV_MODEL } from '../lib/geminiCV';
+import { supabase } from '../lib/supabase';
+import { formatAuthError } from '../lib/talentAuth';
+import { savePendingSetup, uploadSignupFiles } from '../lib/talentStorage';
+import { useProfilePhotoUpload } from '../lib/useProfilePhotoUpload';
 
 const TalentSignupPage = () => {
   const navigate = useNavigate();
@@ -17,26 +21,23 @@ const TalentSignupPage = () => {
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [cvFile, setCvFile] = useState(null);
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState('');
   const [error, setError] = useState('');
-  const [step, setStep] = useState('idle'); // idle | uploading | parsing | done
+  const {
+    photoFile,
+    photoPreview,
+    photoProcessing,
+    handlePhotoSelect,
+    clearPhoto,
+    getPhotoDataUrl,
+  } = useProfilePhotoUpload({ onError: setError });
+  const [step, setStep] = useState('idle'); // idle | auth | parsing | uploading | done
+  const [emailConfirmPending, setEmailConfirmPending] = useState(false);
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
   const handleCV = (e) => {
     const f = e.target.files?.[0];
     if (f) { setCvFile(f); setError(''); }
-  };
-
-  const handlePhoto = (e) => {
-    const f = e.target.files?.[0];
-    if (f) {
-      setPhotoFile(f);
-      const reader = new FileReader();
-      reader.onloadend = () => setPhotoPreview(reader.result);
-      reader.readAsDataURL(f);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -53,59 +54,70 @@ const TalentSignupPage = () => {
     }
 
     try {
-      setStep('uploading');
+      setStep('auth');
+      await signUp(form.email, form.password, { full_name: form.name });
 
-      // Generate a local userId since we don't have Supabase auth yet
-      const userId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const { data: { session } } = await supabase.auth.getSession();
 
-      // Read CV as base64 and store in localStorage
+      setStep('parsing');
       const cvBase64 = await new Promise((res, rej) => {
         const r = new FileReader();
         r.onloadend = () => res(r.result);
         r.onerror = rej;
         r.readAsDataURL(cvFile);
       });
-      const cvExt = cvFile.name.split('.').pop();
-      localStorage.setItem(`talent_cv_${userId}`, cvBase64);
-      const cvUrl = `local://talent-files/${userId}/cv.${cvExt}`;
+      const cvParsed = await parseCV(
+        cvBase64.split(',')[1],
+        cvFile.type || 'application/pdf'
+      );
 
-      // Read photo as base64 and store in localStorage
-      const photoBase64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onloadend = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(photoFile);
-      });
-      const photoExt = photoFile.name.split('.').pop();
-      localStorage.setItem(`talent_photo_${userId}`, photoBase64);
-      const photoUrl = photoBase64; // use actual base64 so preview works
+      const photoBase64 = await getPhotoDataUrl();
 
-      setStep('parsing');
-      const cvParsed = await (async () => {
-        const base64 = cvBase64.split(',')[1];
-        const mime = cvFile.type || 'application/pdf';
-        return await parseCV(base64, mime);
-      })();
+      const setupBase = {
+        name: form.name || cvParsed.name || '',
+        email: form.email,
+        parsed: cvParsed,
+        photoUrl: photoBase64,
+        cvUrl: '',
+        uploadWarnings: [],
+      };
+
+      if (!session) {
+        savePendingSetup(setupBase);
+        setEmailConfirmPending(true);
+        setStep('done');
+        return;
+      }
+
+      setStep('uploading');
+      const { cvUrl, photoUrl, warnings } = await uploadSignupFiles(
+        session.user.id,
+        cvFile,
+        photoFile
+      );
 
       setStep('done');
-
       navigate('/talent/setup', {
         state: {
-          userId,
-          name: form.name || cvParsed.name || '',
+          userId: session.user.id,
           email: form.email,
-          cvUrl,
-          photoUrl,
+          name: setupBase.name,
           parsed: cvParsed,
+          cvUrl: cvUrl || '',
+          photoUrl: photoUrl || photoBase64,
+          cvFile,
+          photoFile,
+          uploadWarnings: warnings,
         },
       });
     } catch (err) {
       setStep('idle');
-      setError(err.message || 'Something went wrong. Please try again.');
+      setEmailConfirmPending(false);
+      setError(formatAuthError(err));
     }
   };
 
-  const isLoading = step !== 'idle' && step !== 'done';
+  const isLoading = step !== 'idle' && step !== 'done' && !emailConfirmPending;
 
   return (
     <div className="bg-white min-h-screen font-sans pb-24 pt-20">
@@ -118,12 +130,18 @@ const TalentSignupPage = () => {
           >
             <div className="w-16 h-16 border-4 border-red/20 border-t-red rounded-full animate-spin mb-6" />
             <h3 className="text-white font-black text-xl uppercase tracking-wider mb-2">
-              {step === 'uploading' ? 'Uploading Your Files…' : 'Parsing Your CV with AI…'}
+              {step === 'auth'
+                ? 'Creating Your Account…'
+                : step === 'uploading'
+                  ? 'Uploading Your Files…'
+                  : 'Parsing Your CV with AI…'}
             </h3>
             <p className="text-gray-400 text-xs font-mono max-w-xs">
-              {step === 'uploading'
-                ? 'Securely storing your CV and photo in the talent files vault.'
-                : 'Reading your CV and extracting your professional profile…'}
+              {step === 'auth'
+                ? 'Registering you with BYG Hires.'
+                : step === 'uploading'
+                  ? 'Saving your CV and photo to secure storage.'
+                  : `Calling ${GEMINI_CV_MODEL} — extracting your profile…`}
             </p>
           </motion.div>
         )}
@@ -179,10 +197,37 @@ const TalentSignupPage = () => {
           >
             <form onSubmit={handleSubmit} className="p-8 md:p-10 space-y-8">
 
+              {emailConfirmPending && (
+                <div className="p-5 bg-green-50 border border-green-200 text-green-900 rounded-2xl space-y-3">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 size={20} className="shrink-0 text-green-600 mt-0.5" />
+                    <div>
+                      <p className="font-black text-sm">Check your email to continue</p>
+                      <p className="text-xs font-medium mt-1 text-green-800/80">
+                        We saved your parsed profile. Confirm <strong>{form.email}</strong>, then log in to finish setup.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/talent/login"
+                    className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-wider text-red hover:underline"
+                  >
+                    Go to Log In <ChevronRight size={12} />
+                  </Link>
+                </div>
+              )}
+
               {error && (
                 <div className="p-4 bg-red/5 border border-red/20 text-red rounded-2xl flex items-start gap-3 text-sm font-semibold">
                   <AlertTriangle size={18} className="shrink-0 mt-0.5" />
-                  <span>{error}</span>
+                  <div>
+                    <span>{error}</span>
+                    {/already registered/i.test(error) && (
+                      <p className="mt-2">
+                        <Link to="/talent/login" className="font-black underline">Log in here</Link>
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -229,25 +274,31 @@ const TalentSignupPage = () => {
                     <div className="w-6 h-6 rounded-full bg-black text-white flex items-center justify-center font-bold text-[10px]">2</div>
                     <h3 className="font-black text-xs tracking-widest uppercase">Profile Photo <span className="text-red">*</span></h3>
                   </div>
-                  {!photoPreview ? (
+                  {!photoPreview && !photoProcessing ? (
                     <label className="flex flex-col items-center justify-center min-h-[180px] border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-red hover:bg-gray-50 transition-all cursor-pointer group">
                       <Camera size={32} className="text-gray-400 mb-2 group-hover:text-red transition-colors" />
                       <p className="font-black text-xs text-gray-700 mb-1">Upload headshot</p>
-                      <p className="text-[10px] text-gray-400">JPG, PNG (square preferred)</p>
-                      <input type="file" accept="image/*" onChange={handlePhoto} className="hidden" />
+                      <p className="text-[10px] text-gray-400 max-w-[220px]">JPG or PNG headshot — plain wall behind you works best</p>
+                      <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
                     </label>
+                  ) : photoProcessing ? (
+                    <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
+                      <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
+                      <p className="font-black text-xs text-gray-700 uppercase tracking-wider">Formatting photo…</p>
+                      <p className="text-[10px] text-gray-500 font-medium">Cropping to passport size</p>
+                    </div>
                   ) : (
                     <div className="min-h-[180px] border border-green-200 bg-green-50/40 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
                       <div className="relative">
-                        <img src={photoPreview} alt="Preview" className="w-24 h-24 rounded-2xl object-cover border-2 border-green-500 shadow-md" />
-                        <button type="button" onClick={() => { setPhotoPreview(''); setPhotoFile(null); }}
+                        <img src={photoPreview} alt="Preview" className="w-24 h-28 rounded-2xl object-cover object-top border-2 border-green-500 shadow-md" />
+                        <button type="button" onClick={clearPhoto}
                           className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-green-200 rounded-full flex items-center justify-center text-gray-400 hover:text-red transition-colors">
                           <X size={11} />
                         </button>
                       </div>
                       <div className="flex items-center gap-2 text-green-700 text-[9px] font-black uppercase tracking-wider border-t border-green-200 pt-3 mt-3 w-full justify-center">
                         <CheckCircle2 size={11} className="text-green-500" />
-                        Photo ready
+                        Passport photo ready
                       </div>
                     </div>
                   )}
@@ -330,8 +381,8 @@ const TalentSignupPage = () => {
               {/* Submit */}
               <button
                 type="submit"
-                disabled={isLoading || !form.name || !form.email || !form.password || !cvFile || !photoFile || !agreementChecked}
-                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${!isLoading && form.name && form.email && form.password && cvFile && photoFile && agreementChecked
+                disabled={emailConfirmPending || isLoading || photoProcessing || !form.name || !form.email || !form.password || !cvFile || !photoFile || !agreementChecked}
+                className={`w-full py-4 rounded-2xl font-black text-xs tracking-[0.2em] uppercase flex items-center justify-center gap-2 transition-all border-2 ${!isLoading && !photoProcessing && form.name && form.email && form.password && cvFile && photoFile && agreementChecked
                   ? 'border-red text-red hover:bg-red hover:text-white shadow-xl shadow-red/10 cursor-pointer'
                   : 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed'
                   }`}

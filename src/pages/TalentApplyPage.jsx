@@ -6,7 +6,8 @@ import {
   ChevronRight, UploadCloud, FileText, X, AlertTriangle, CheckCircle2, User, Mail, Phone, Briefcase, Star, Sparkles, ShieldCheck, Calendar, ArrowRight, Camera
 } from 'lucide-react';
 import { talentService } from '../services/talentService';
-import { stylizeProfilePhoto } from '../services/geminiPhotoService';
+import { formatDisplayName } from '../lib/formatDisplayName';
+import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
 
 // Fallback initial generator when no photo is uploaded
 const Avatar = ({ name, size = 96 }) => {
@@ -78,22 +79,24 @@ const TalentApplyPage = () => {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  // Profile photo file selector — sends to Gemini for brand stylization
   const handlePhotoChange = async (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const rawBase64 = reader.result;
-        // Show original immediately as preview
-        setPhotoPreview(rawBase64);
-        setFormData(prev => ({ ...prev, photo: rawBase64 }));
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
 
-        // Bypass Gemini for photo stylization to preserve original face,
-        // and rely on brand-aligned CSS filtering on the frontend instead.
-        setPhotoProcessing(false);
-      };
-      reader.readAsDataURL(file);
+    setPhotoProcessing(true);
+    setErrorMsg('');
+    try {
+      const processed = await processProfilePhoto(file);
+      const dataUrl = await fileToDataUrl(processed);
+      setPhotoPreview(dataUrl);
+      setFormData((prev) => ({ ...prev, photo: dataUrl }));
+    } catch (err) {
+      setPhotoPreview('');
+      setFormData((prev) => ({ ...prev, photo: '' }));
+      setErrorMsg(err.message || 'Could not process photo.');
+    } finally {
+      setPhotoProcessing(false);
     }
   };
 
@@ -217,7 +220,7 @@ const TalentApplyPage = () => {
                   <CheckCircle2 size={12} /> Profile Created
                 </div>
                 <h2 className="text-2xl md:text-3xl font-bold tracking-tight uppercase leading-none text-white">
-                  Welcome to the Pool, <span className="text-red">{registrationResult.name}</span>
+                  Welcome to the Pool, <span className="text-red">{formatDisplayName(registrationResult.name)}</span>
                 </h2>
                 <p className="text-gray-400 text-sm leading-relaxed max-w-2xl font-medium">
                   Your CV has been reviewed, your key strengths have been identified, and your profile card has been added to the Talent Pool.
@@ -268,7 +271,7 @@ const TalentApplyPage = () => {
                     {/* Info */}
                     <div className="p-4 flex flex-col gap-3 flex-1 text-left">
                       <div className="min-h-[56px] flex flex-col justify-start">
-                        <p className="text-black font-black text-sm leading-tight">{registrationResult.name}</p>
+                        <p className="text-black font-black text-sm leading-tight">{formatDisplayName(registrationResult.name)}</p>
                         <p className="text-gray-500 text-xs font-medium mt-0.5">{registrationResult.parsedResumeData?.detected_expertise || 'Remote Specialist'}</p>
                       </div>
 

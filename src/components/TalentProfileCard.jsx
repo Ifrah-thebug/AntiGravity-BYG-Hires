@@ -3,10 +3,12 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Briefcase } from 'lucide-react';
+import { formatDisplayName } from '../lib/formatDisplayName';
 
 const TalentProfileCard = ({ profile }) => {
   const navigate = useNavigate();
   const { id, name, job_title, skills, about, experience_years, photo_url } = profile;
+  const displayName = formatDisplayName(name);
 
   // Generate initials + gradient from name
   const initials = name
@@ -62,7 +64,7 @@ const TalentProfileCard = ({ profile }) => {
       <div className="p-5 flex flex-col gap-3 flex-1">
         {/* Name & Title */}
         <div className="h-[52px] flex flex-col justify-start overflow-hidden">
-          <p className="text-black font-black text-sm leading-tight line-clamp-1">{name}</p>
+          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={name}>{displayName}</p>
           <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug">{job_title}</p>
         </div>
 

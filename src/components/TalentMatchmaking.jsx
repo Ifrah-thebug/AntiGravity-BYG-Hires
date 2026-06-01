@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatDisplayName } from '../lib/formatDisplayName';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Clock, Star, ArrowRight, X, Briefcase, Award, CheckCircle2, Moon, Zap } from 'lucide-react';
@@ -57,7 +58,7 @@ const TalentModal = ({ talent, onClose }) => {
                   <CheckCircle2 size={14} className="text-green-400" />
                   <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
                 </div>
-                <h2 className="text-2xl font-black tracking-tight">{talent.name}</h2>
+                <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
                   <span className="flex items-center gap-1"><Briefcase size={10} />{talent.experience} experience</span>
@@ -163,29 +164,7 @@ const TalentMatchmaking = () => {
   const [selectedTalent, setSelectedTalent] = useState(null);
   const navigate = useNavigate();
 
-  const allTalentsDynamic = talentService.getAllBrowseTalents();
-  const featuredIds = ['t013', 't015', 't016', 't017', 't014'];
-  
-  const staticFeatured = featuredIds
-    .map(id => {
-      const t = allTalentsDynamic.find(talent => talent.id === id);
-      if (!t) return null;
-      return {
-        ...t,
-        match: t.score,
-      };
-    })
-    .filter(Boolean);
-
-  const dynamicFeatured = allTalentsDynamic
-    .filter(t => t.isDynamic)
-    .map(t => ({ ...t, match: t.score || 0 }));
-
-  const allTalent = [...dynamicFeatured, ...staticFeatured];
-
-  const displayed = selected === 'All'
-    ? allTalent
-    : allTalent.filter(t => t.industries && t.industries.includes(selected));
+  const displayed = talentService.getFeaturedTalents({ industry: selected });
 
   return (
     <section className="py-28 bg-white border-t border-gray-100">
@@ -292,7 +271,7 @@ const TalentMatchmaking = () => {
                 <div className="p-5 flex flex-col gap-3.5 flex-1">
                   {/* Name & Title */}
                   <div className="h-[48px] flex flex-col justify-start overflow-hidden">
-                    <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{talent.name}</p>
+                    <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{formatDisplayName(talent.name)}</p>
                     <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
                   </div>
 

@@ -6,6 +6,7 @@ import {
   CheckCircle2, Star, Eye, MessageSquare, Briefcase, User, Calendar, Award, LogOut, ChevronDown, Sparkles 
 } from 'lucide-react';
 import { talentService } from '../services/talentService';
+import { formatDisplayName } from '../lib/formatDisplayName';
 
 const TalentDashboardPage = () => {
   const [searchParams] = useSearchParams();
@@ -100,7 +101,7 @@ const TalentDashboardPage = () => {
               <Sparkles size={12} className="text-red animate-pulse" />
               <span>BYG HIRES TALENT MEMBER PANEL</span>
             </span>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none uppercase">Hello, {talent.name}!</h1>
+            <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none uppercase">Hello, {formatDisplayName(talent.name)}!</h1>
             <p className="text-gray-500 font-medium text-sm mt-2">Welcome back to your Verified Talent Dashboard.</p>
           </div>
           <button 

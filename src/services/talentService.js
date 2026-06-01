@@ -443,6 +443,40 @@ export const talentService = {
     });
   },
 
+  /** Homepage + directory featured row (static seed IDs + admitted local submissions) */
+  getFeaturedTalents: ({ industry, department, limit = 5 } = {}) => {
+    const all = talentService.getAllBrowseTalents();
+    const featuredIds = ['t013', 't015', 't016', 't017', 't014'];
+
+    const staticFeatured = featuredIds
+      .map((id) => {
+        const t = all.find((talent) => talent.id === id);
+        if (!t) return null;
+        return { ...t, match: t.score ?? t.match ?? 0 };
+      })
+      .filter(Boolean);
+
+    const dynamicFeatured = all
+      .filter((t) => t.isDynamic)
+      .map((t) => ({ ...t, match: t.score ?? t.match ?? 0 }));
+
+    const seen = new Set();
+    let combined = [...dynamicFeatured, ...staticFeatured].filter((t) => {
+      if (seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+
+    if (industry && industry !== 'All') {
+      combined = combined.filter((t) => t.industries?.includes(industry));
+    }
+    if (department && department !== 'all') {
+      combined = combined.filter((t) => t.department === department);
+    }
+
+    return combined.slice(0, limit);
+  },
+
   // Save draft answers
   saveDraftAnswers: (token, answers) => {
     const sub = talentService.getSubmissionByToken(token);
@@ -618,7 +652,7 @@ function sendMockEmail(to, subject, body, type, token = null, id = null) {
 
 async function realGeminiResumeParse(name, base64Data, mimeType) {
   try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
     
     const prompt = `You are a strict JSON data extractor. Read this CV/Resume document and extract the following information. Return ONLY valid JSON and nothing else (do not use markdown code blocks).
 {

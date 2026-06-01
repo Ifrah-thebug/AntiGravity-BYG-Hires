@@ -1,15 +1,70 @@
 // src/components/Navbar.jsx
 import React, { useState } from 'react';
-import { Menu, X, ChevronDown, LogOut, User, LayoutDashboard } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Menu, X, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
 import { useAuth } from '../context/AuthContext';
 
+/** Match current route to nav href (directory vs signup/login, etc.) */
+function isNavLinkActive(pathname, href) {
+  if (href === '/talent') {
+    if (
+      pathname === '/talent/login' ||
+      pathname === '/talent/signup' ||
+      pathname === '/talent/setup'
+    ) {
+      return false;
+    }
+    return pathname === '/talent' || pathname.startsWith('/talent/');
+  }
+  if (href === '/talent/signup') {
+    return pathname === '/talent/signup' || pathname === '/talent/setup';
+  }
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
 const Navbar = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { pathname } = location;
   const { user, signOut } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [isScaleOpen, setIsScaleOpen] = useState(false);
+
+  const isScaleSectionActive = (dropdown) =>
+    dropdown?.some((item) => isNavLinkActive(pathname, item.href));
+
+  const desktopLinkClass = (href, isCta = false) => {
+    const active = isNavLinkActive(pathname, href);
+    if (isCta) {
+      return `font-bold transition-colors duration-200 border-b-2 pb-0.5 ${
+        active
+          ? 'text-red border-red'
+          : 'text-red border-transparent hover:text-red-700 hover:border-red/40'
+      }`;
+    }
+    return `font-medium transition-colors duration-200 border-b-2 pb-0.5 ${
+      active
+        ? 'text-red border-red font-bold'
+        : 'text-black border-transparent hover:text-red'
+    }`;
+  };
+
+  const mobileLinkClass = (href, isCta = false) => {
+    const active = isNavLinkActive(pathname, href);
+    if (isCta) {
+      return `block px-3 py-3 text-base font-medium rounded-md ${
+        active
+          ? 'text-red bg-red/5 font-bold'
+          : 'text-red hover:text-red-700 hover:bg-gray-50'
+      }`;
+    }
+    return `block px-3 py-3 text-base font-medium rounded-md ${
+      active
+        ? 'text-red bg-red/5 font-bold'
+        : 'text-black hover:text-red hover:bg-gray-50'
+    }`;
+  };
 
   const handleLogout = async () => {
     try {
@@ -54,22 +109,36 @@ const Navbar = () => {
                   onMouseEnter={() => setIsScaleOpen(true)}
                   onMouseLeave={() => setIsScaleOpen(false)}
                 >
-                  <button className="flex items-center text-black font-medium hover:text-red transition-colors duration-200 py-2">
+                  <button
+                    type="button"
+                    className={`flex items-center transition-colors duration-200 py-2 border-b-2 pb-0.5 ${
+                      isScaleSectionActive(link.dropdown)
+                        ? 'text-red border-red font-bold'
+                        : 'text-black border-transparent font-medium hover:text-red'
+                    }`}
+                  >
                     {link.name}
                     <ChevronDown size={16} className={`ml-1 transition-transform duration-200 ${isScaleOpen ? 'rotate-180' : ''}`} />
                   </button>
 
                   {isScaleOpen && (
                     <div className="absolute left-0 mt-0 w-56 bg-white border border-gray-100 shadow-lg rounded-md py-2 z-50">
-                      {link.dropdown.map((subItem) => (
-                        <Link
-                          key={subItem.name}
-                          to={subItem.href}
-                          className="block px-4 py-2 text-sm text-black hover:bg-gray-50 hover:text-red transition-colors"
-                        >
-                          {subItem.name}
-                        </Link>
-                      ))}
+                      {link.dropdown.map((subItem) => {
+                        const subActive = isNavLinkActive(pathname, subItem.href);
+                        return (
+                          <Link
+                            key={subItem.name}
+                            to={subItem.href}
+                            className={`block px-4 py-2 text-sm transition-colors ${
+                              subActive
+                                ? 'text-red bg-red/5 font-bold'
+                                : 'text-black hover:bg-gray-50 hover:text-red'
+                            }`}
+                          >
+                            {subItem.name}
+                          </Link>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -77,11 +146,7 @@ const Navbar = () => {
                 <Link
                   key={link.name}
                   to={link.href}
-                  className={`font-medium transition-colors duration-200 ${
-                    link.name === 'Join Talent Pool'
-                      ? 'text-red hover:text-red-700'
-                      : 'text-black hover:text-red'
-                  }`}
+                  className={desktopLinkClass(link.href, link.name === 'Join Talent Pool')}
                 >
                   {link.name}
                 </Link>
@@ -93,7 +158,11 @@ const Navbar = () => {
               <div className="flex items-center gap-4 border-l border-gray-200 pl-6 ml-2">
                 <Link
                   to="/portal"
-                  className="text-sm font-bold text-black hover:text-red flex items-center gap-2 transition-colors"
+                  className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                    pathname === '/portal' || pathname.startsWith('/portal/')
+                      ? 'text-red border-red'
+                      : 'text-black border-transparent hover:text-red'
+                  }`}
                 >
                   <LayoutDashboard size={15} /> My Portal
                 </Link>
@@ -108,7 +177,11 @@ const Navbar = () => {
               <div className="border-l border-gray-200 pl-6 ml-2">
                 <Link
                   to="/talent/login"
-                  className="text-sm font-bold text-red hover:text-black transition-colors"
+                  className={`text-sm font-bold transition-colors border-b-2 pb-0.5 ${
+                    pathname === '/talent/login'
+                      ? 'text-red border-red'
+                      : 'text-red border-transparent hover:text-black'
+                  }`}
                 >
                   Log In
                 </Link>
@@ -136,8 +209,13 @@ const Navbar = () => {
               link.dropdown ? (
                 <div key={link.name} className="space-y-1">
                   <button
+                    type="button"
                     onClick={() => setIsScaleOpen(!isScaleOpen)}
-                    className="flex items-center justify-between w-full px-3 py-3 text-base font-medium text-black hover:text-red hover:bg-gray-50 rounded-md"
+                    className={`flex items-center justify-between w-full px-3 py-3 text-base font-medium rounded-md ${
+                      isScaleSectionActive(link.dropdown)
+                        ? 'text-red bg-red/5 font-bold'
+                        : 'text-black hover:text-red hover:bg-gray-50'
+                    }`}
                   >
                     {link.name}
                     <ChevronDown size={20} className={`transition-transform duration-200 ${isScaleOpen ? 'rotate-180' : ''}`} />
@@ -149,7 +227,7 @@ const Navbar = () => {
                           key={subItem.name}
                           to={subItem.href}
                           onClick={() => { setIsOpen(false); setIsScaleOpen(false); }}
-                          className="block px-3 py-2 text-sm font-medium text-black hover:text-red hover:bg-gray-50 rounded-md"
+                          className={mobileLinkClass(subItem.href)}
                         >
                           {subItem.name}
                         </Link>
@@ -162,11 +240,7 @@ const Navbar = () => {
                   key={link.name}
                   to={link.href}
                   onClick={() => setIsOpen(false)}
-                  className={`block px-3 py-3 text-base font-medium hover:bg-gray-50 rounded-md ${
-                    link.name === 'Join Talent Pool'
-                      ? 'text-red hover:text-red-700'
-                      : 'text-black hover:text-red'
-                  }`}
+                  className={mobileLinkClass(link.href, link.name === 'Join Talent Pool')}
                 >
                   {link.name}
                 </Link>
@@ -179,7 +253,7 @@ const Navbar = () => {
                   <Link
                     to="/portal"
                     onClick={() => setIsOpen(false)}
-                    className="block px-3 py-3 text-base font-medium text-black hover:text-red hover:bg-gray-50 rounded-md"
+                    className={mobileLinkClass('/portal')}
                   >
                     My Portal
                   </Link>
@@ -194,7 +268,7 @@ const Navbar = () => {
                 <Link
                   to="/talent/login"
                   onClick={() => setIsOpen(false)}
-                  className="block px-3 py-3 text-base font-medium text-red hover:text-black hover:bg-gray-50 rounded-md"
+                  className={mobileLinkClass('/talent/login', true)}
                 >
                   Log In
                 </Link>

@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { formatDisplayName, formatFirstName } from '../lib/formatDisplayName';
 
 const TalentProfilePage = () => {
   const { id } = useParams();
@@ -53,7 +54,9 @@ const TalentProfilePage = () => {
     );
   }
 
-  const { name, job_title, about, skills, experience_years, photo_url, email } = profile;
+  const { id: profileId, name, job_title, about, skills, experience_years, photo_url } = profile;
+  const displayName = formatDisplayName(name);
+  const firstName = formatFirstName(name);
   const initials = name ? name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
   const hue = name ? (name.charCodeAt(0) * 37 + (name.charCodeAt(1) || 0) * 17) % 360 : 200;
 
@@ -103,7 +106,7 @@ const TalentProfilePage = () => {
                   <CheckCircle2 size={10} /> Verified Talent
                 </div>
                 <div>
-                  <h1 className="text-3xl md:text-4xl font-black tracking-tight">{name}</h1>
+                  <h1 className="text-3xl md:text-4xl font-black tracking-tight" title={name}>{displayName}</h1>
                   <p className="text-red font-bold text-base uppercase tracking-wider mt-1">{job_title}</p>
                 </div>
                 {experience_years > 0 && (
@@ -146,7 +149,7 @@ const TalentProfilePage = () => {
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Interested?</p>
               <p className="text-white font-bold text-sm leading-snug">Request a personal intro to this talent.</p>
               <Link
-                to={`/request-intro?name=${encodeURIComponent(name)}`}
+                to={`/request-intro?id=${profileId}`}
                 className="block w-full py-3 bg-red hover:bg-white hover:text-black text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all text-center flex items-center justify-center gap-2"
               >
                 Request Intro <ArrowRight size={11} />
@@ -178,12 +181,12 @@ const TalentProfilePage = () => {
           className="bg-gray-50 border border-gray-100 rounded-3xl p-8 flex flex-col md:flex-row items-center justify-between gap-6"
         >
           <div className="text-left">
-            <p className="font-black text-black text-lg">Ready to bring {name?.split(' ')[0]} on board?</p>
+            <p className="font-black text-black text-lg">Ready to bring {firstName} on board?</p>
             <p className="text-gray-500 text-sm font-medium mt-1">Let us make the introduction — we handle the matching process.</p>
           </div>
           <div className="flex gap-3 shrink-0">
             <Link
-              to={`/request-intro?name=${encodeURIComponent(name)}`}
+              to={`/request-intro?id=${profileId}`}
               className="px-6 py-3.5 bg-black text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red transition-colors flex items-center gap-2"
             >
               Request Intro <ArrowRight size={12} />

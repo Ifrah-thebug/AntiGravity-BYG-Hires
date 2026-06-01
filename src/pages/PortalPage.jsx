@@ -9,7 +9,9 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { isProfileComplete } from '../lib/talentAuth';
 import logo from '../assets/BYG Hires Logo.png';
+import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
 
 const PortalPage = () => {
   const navigate = useNavigate();
@@ -26,9 +28,11 @@ const PortalPage = () => {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saved' | 'error'
   const [error, setError] = useState('');
   const justCreated = location.state?.justCreated;
+  const portalUploadWarnings = location.state?.uploadWarnings;
 
   // Guard: redirect to login if not authed
   useEffect(() => {
@@ -44,23 +48,52 @@ const PortalPage = () => {
 
   const fetchProfile = async () => {
     setLoadingProfile(true);
-    const { data } = await supabase
+    setError('');
+    const { data, error: fetchErr } = await supabase
       .from('profiles')
       .select('*')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (data) {
-      setProfile(data);
-      setForm({
-        name: data.name || '',
-        job_title: data.job_title || '',
-        about: data.about || '',
-        experience_years: data.experience_years || 0,
-        skills: data.skills || [],
-      });
-      setPhotoPreview(data.photo_url || '');
+    if (fetchErr) {
+      setError(fetchErr.message);
+      setLoadingProfile(false);
+      return;
     }
+
+    if (!data || !isProfileComplete(data)) {
+      setLoadingProfile(false);
+      navigate('/talent/setup', {
+        state: {
+          userId: user.id,
+          email: user.email,
+          name: data?.name || user.user_metadata?.full_name || '',
+          parsed: data
+            ? {
+                job_title: data.job_title,
+                about: data.about,
+                skills: data.skills || [],
+                experience_years: data.experience_years,
+              }
+            : null,
+          photoUrl: data?.photo_url || '',
+          cvUrl: data?.cv_url || '',
+          incompleteProfile: true,
+          resumeSetup: true,
+        },
+      });
+      return;
+    }
+
+    setProfile(data);
+    setForm({
+      name: data.name || '',
+      job_title: data.job_title || '',
+      about: data.about || '',
+      experience_years: data.experience_years || 0,
+      skills: data.skills || [],
+    });
+    setPhotoPreview(data.photo_url || '');
     setLoadingProfile(false);
   };
 
@@ -78,19 +111,31 @@ const PortalPage = () => {
 
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    setPhotoFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setPhotoPreview(reader.result);
-    reader.readAsDataURL(file);
+
+    setPhotoProcessing(true);
+    setError('');
+    try {
+      const processed = await processProfilePhoto(file);
+      setPhotoFile(processed);
+      const dataUrl = await fileToDataUrl(processed);
+      setPhotoPreview(dataUrl);
+    } catch (err) {
+      setError(err.message || 'Could not process photo.');
+    } finally {
+      setPhotoProcessing(false);
+    }
   };
 
   const uploadPhoto = async () => {
     if (!photoFile || !user) return null;
     setUploadingPhoto(true);
-    const ext = photoFile.name.split('.').pop();
-    const path = `${user.id}/photo.${ext}`;
-    const { error: upErr } = await supabase.storage.from('talent-files').upload(path, photoFile, { upsert: true });
+    const path = `${user.id}/photo.jpg`;
+    const { error: upErr } = await supabase.storage.from('talent-files').upload(path, photoFile, {
+      upsert: true,
+      contentType: 'image/jpeg',
+    });
     setUploadingPhoto(false);
     if (upErr) { setError('Photo upload failed: ' + upErr.message); return null; }
     const { data } = supabase.storage.from('talent-files').getPublicUrl(path);
@@ -176,6 +221,13 @@ const PortalPage = () => {
         </div>
 
         {/* ── Welcome Banner ── */}
+        {portalUploadWarnings?.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs font-semibold text-amber-900 space-y-1">
+            <p className="font-black uppercase tracking-wider text-[10px]">Some files may need re-upload</p>
+            {portalUploadWarnings.map((w, i) => <p key={i}>{w}</p>)}
+          </div>
+        )}
+
         {justCreated && (
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
@@ -215,10 +267,15 @@ const PortalPage = () => {
                   {initials}
                 </div>
               )}
-              <label className="absolute -bottom-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center cursor-pointer shadow-md hover:bg-gray-100 transition-colors border border-gray-200">
+              <label className={`absolute -bottom-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-200 transition-colors ${photoProcessing ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-gray-100'}`}>
                 <Camera size={12} className="text-black" />
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" disabled={photoProcessing} />
               </label>
+              {photoProcessing && (
+                <p className="absolute -bottom-8 left-0 right-0 text-center text-[9px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
+                  Processing…
+                </p>
+              )}
             </div>
 
             <div className="flex-1 min-w-0">
@@ -261,35 +318,35 @@ const PortalPage = () => {
 
           {/* Name */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name *</label>
             <input name="name" value={form.name} onChange={handleInput}
-              className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
+              className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
           {/* Job Title */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Professional Title *</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Professional Title *</label>
             <input name="job_title" value={form.job_title} onChange={handleInput}
-              className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
+              className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
           {/* About */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">About</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">About</label>
             <textarea name="about" value={form.about} onChange={handleInput} rows={4}
-              className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red focus:bg-white outline-none transition-all resize-none leading-relaxed" />
+              className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red focus:bg-white outline-none transition-all resize-none leading-relaxed" />
           </div>
 
           {/* Experience */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Years of Experience</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Years of Experience</label>
             <input type="number" name="experience_years" min={0} max={50} value={form.experience_years} onChange={handleInput}
-              className="w-32 px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
+              className="block w-full max-w-[8rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
           {/* Skills */}
           <div className="space-y-3">
-            <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Skills ({form.skills.length}/8)</label>
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Skills ({form.skills.length}/8)</label>
             <div className="flex flex-wrap gap-2 min-h-[36px]">
               {form.skills.map(skill => (
                 <span key={skill} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-full">
@@ -313,25 +370,32 @@ const PortalPage = () => {
           </div>
 
           {/* Photo upload hint */}
-          {photoFile && (
+          {photoProcessing && (
+            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600 font-bold">
+              <div className="w-5 h-5 border-2 border-red/20 border-t-red rounded-full animate-spin shrink-0" />
+              Formatting passport-style photo…
+            </div>
+          )}
+
+          {photoFile && !photoProcessing && (
             <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4 text-sm text-blue-700 font-bold">
               <Camera size={16} className="shrink-0" />
-              New photo will be uploaded when you save.
+              New passport photo will upload when you save.
             </div>
           )}
 
           {/* Save button */}
           <button
             onClick={handleSave}
-            disabled={saving || uploadingPhoto}
+            disabled={saving || uploadingPhoto || photoProcessing}
             className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-              !saving && !uploadingPhoto
+              !saving && !uploadingPhoto && !photoProcessing
                 ? 'bg-black text-white hover:bg-red cursor-pointer shadow-lg'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
           >
-            {uploadingPhoto ? 'Uploading photo…' : saving ? 'Saving…' : 'Save Changes'}
-            {!saving && !uploadingPhoto && <Save size={14} />}
+            {photoProcessing ? 'Processing photo…' : uploadingPhoto ? 'Uploading photo…' : saving ? 'Saving…' : 'Save Changes'}
+            {!saving && !uploadingPhoto && !photoProcessing && <Save size={14} />}
           </button>
         </motion.div>
 

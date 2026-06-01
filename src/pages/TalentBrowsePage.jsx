@@ -9,6 +9,7 @@ import {
 import {
   DEPARTMENTS, SORT_OPTIONS, AVAILABILITY_OPTIONS, ROLE_TYPE_OPTIONS
 } from '../data/talentData';
+import { formatDisplayName } from '../lib/formatDisplayName';
 import { talentService } from '../services/talentService';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
@@ -145,7 +146,7 @@ const TalentCard = ({ talent, onSelect }) => {
       <div className="p-5 flex flex-col gap-3.5 flex-1">
         {/* Name & Title */}
         <div className="h-[48px] flex flex-col justify-start overflow-hidden">
-          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{talent.name}</p>
+          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{formatDisplayName(talent.name)}</p>
           <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
         </div>
 
@@ -229,7 +230,7 @@ const TalentModal = ({ talent, onClose }) => {
                   <CheckCircle2 size={14} className="text-green-400" />
                   <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
                 </div>
-                <h2 className="text-2xl font-black tracking-tight">{talent.name}</h2>
+                <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
                   <span className="flex items-center gap-1"><Briefcase size={10} />{talent.experience} experience</span>

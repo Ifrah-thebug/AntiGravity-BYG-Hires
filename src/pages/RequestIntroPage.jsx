@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { TALENTS } from '../data/talentData';
 import { talentService } from '../services/talentService';
+import { formatDisplayName } from '../lib/formatDisplayName';
 
 const CALENDLY_URL = 'https://calendly.com/recruitment-bnyahyagroup/30min';
 
@@ -113,7 +114,7 @@ const RequestIntroPage = () => {
                     <CheckCircle2 size={14} className="text-green-400" />
                     <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
                   </div>
-                  <h2 className="text-xl font-black tracking-tight">{talent.name}</h2>
+                  <h2 className="text-xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                   <p className="text-red font-bold text-xs uppercase tracking-wide">{talent.role}</p>
                 </div>
               </div>
@@ -186,7 +187,7 @@ const RequestIntroPage = () => {
               <div className="px-8 py-6 border-b border-gray-100">
                 <h3 className="font-black text-lg uppercase tracking-wide text-gray-900">Schedule an Introduction</h3>
                 <p className="text-gray-500 text-sm font-medium mt-1">
-                  Book a 30-minute intro call with our team to discuss hiring <span className="font-bold text-black">{talent.name}</span>
+                  Book a 30-minute intro call with our team to discuss hiring <span className="font-bold text-black">{formatDisplayName(talent.name)}</span>
                 </p>
               </div>
 

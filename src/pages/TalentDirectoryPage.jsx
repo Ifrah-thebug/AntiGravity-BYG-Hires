@@ -11,6 +11,7 @@ import {
 } from '../data/talentData';
 import { talentService } from '../services/talentService';
 import { supabase } from '../lib/supabase';
+import { formatDisplayName } from '../lib/formatDisplayName';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -146,7 +147,7 @@ const TalentCard = ({ talent, onSelect }) => {
       <div className="p-5 flex flex-col gap-3.5 flex-1">
         {/* Name & Title */}
         <div className="h-[48px] flex flex-col justify-start overflow-hidden">
-          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{talent.name}</p>
+          <p className="text-black font-black text-sm leading-tight line-clamp-1" title={talent.name}>{formatDisplayName(talent.name)}</p>
           <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
         </div>
 
@@ -234,7 +235,7 @@ const TalentModal = ({ talent, onClose }) => {
                   <CheckCircle2 size={14} className="text-green-400" />
                   <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
                 </div>
-                <h2 className="text-2xl font-black tracking-tight">{talent.name}</h2>
+                <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
                   <span className="flex items-center gap-1"><Briefcase size={10} />{talent.experience} experience</span>
@@ -463,8 +464,18 @@ const TalentDirectoryPage = () => {
   const activeFilterCount =
     filters.availability.length + filters.roleType.length + (filters.maxFee < 2000 ? 1 : 0);
 
+  const featuredTalents = useMemo(
+    () => talentService.getFeaturedTalents({ department: activedept }),
+    [activedept]
+  );
+
+  const featuredIdSet = useMemo(
+    () => new Set(featuredTalents.map((t) => t.id)),
+    [featuredTalents]
+  );
+
   const visible = useMemo(() => {
-    let list = talents;
+    let list = talents.filter((t) => !featuredIdSet.has(t.id));
 
     // Department filter
     if (activedept !== 'all') list = list.filter(t => t.department === activedept);
@@ -495,7 +506,7 @@ const TalentDirectoryPage = () => {
     }
 
     return list;
-  }, [talents, activedept, search, sortBy, filters]);
+  }, [talents, activedept, search, sortBy, filters, featuredIdSet]);
 
   const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || 'Sort';
 
@@ -614,12 +625,40 @@ const TalentDirectoryPage = () => {
         </div>
       </div>
 
+      {/* ─── Top Recommendations ─────────────────────────────────────────────── */}
+      {!loading && featuredTalents.length > 0 && (
+        <div className="max-w-7xl mx-auto px-6 mb-12">
+          <div className="flex items-center gap-4 mb-8">
+            <Star size={14} className="text-red fill-red" />
+            <span className="text-xs font-black text-gray-400 tracking-[0.2em] uppercase">
+              Top Recommendations
+            </span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
+          >
+            {featuredTalents.map((talent) => (
+              <TalentCard
+                key={`featured-${talent.id}`}
+                talent={talent}
+                onSelect={setSelectedTalent}
+              />
+            ))}
+          </motion.div>
+        </div>
+      )}
+
       {/* ─── Results ────────────────────────────────────────────────────────── */}
       <div className="max-w-7xl mx-auto px-6">
         {/* Count bar */}
         <div className="flex items-center justify-between mb-6">
           <p className="text-xs font-black text-gray-400 uppercase tracking-widest">
-            {loading ? 'Loading…' : `${visible.length} talent${visible.length !== 1 ? 's' : ''} found`}
+            {loading
+              ? 'Loading…'
+              : `${visible.length + featuredTalents.length} talent${visible.length + featuredTalents.length !== 1 ? 's' : ''} found`}
           </p>
           <div className="flex items-center gap-2">
             <Award size={12} className="text-red" />
