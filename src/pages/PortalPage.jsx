@@ -4,14 +4,166 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
-  LogOut, User, Save, AlertTriangle, CheckCircle2,
-  X, Plus, ExternalLink, Camera
+  LogOut, Save, AlertTriangle, CheckCircle2,
+  X, Plus, ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
+  Sparkles, ArrowRight, Lock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { isProfileComplete } from '../lib/talentAuth';
+import { fetchIsAdmin } from '../lib/adminAuth';
 import logo from '../assets/BYG Hires Logo.png';
 import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
+import { normalizeProfileName } from '../lib/formatDisplayName';
+import {
+  PROFILE_CONTENT_HINT,
+  prepareProfileForSave,
+  formatProfileValidationErrors,
+  validateProfileFields,
+} from '../lib/profileContentPolicy';
+
+const STRENGTHEN_ACTIONS = [
+  {
+    id: 'assessment',
+    label: 'Take skills assessment',
+    description: 'Prove your skills with a real-world task (~25 min).',
+    href: '/assessment',
+    primary: true,
+    available: true,
+  },
+  {
+    id: 'status',
+    label: 'Assessment status',
+    description: 'See your score and reviewer feedback.',
+    href: null,
+    available: false,
+  },
+  {
+    id: 'prep',
+    label: 'Assessment prep tips',
+    description: 'How to stand out before you start.',
+    href: null,
+    available: false,
+  },
+  {
+    id: 'visibility',
+    label: 'Boost directory ranking',
+    description: 'Higher scores appear higher to clients.',
+    href: null,
+    available: false,
+  },
+];
+
+function StrengthenProfilePanel() {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="bg-white border border-gray-200 rounded-[2rem] p-8 shadow-sm lg:sticky lg:top-28 space-y-6"
+    >
+      <div>
+        <p className="text-red font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
+          <Sparkles size={11} /> Grow your presence
+        </p>
+        <h3 className="text-2xl font-black tracking-tight text-black leading-tight">
+          Strengthen your profile
+        </h3>
+        <p className="text-gray-500 text-sm font-medium mt-3 leading-relaxed">
+          Take the assessment and rank your profile higher in the talent directory. Verified scores
+          help clients trust your skills faster.
+        </p>
+      </div>
+
+      <div className="rounded-2xl bg-gray-50 border border-gray-100 p-5 space-y-3">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shrink-0">
+            <Award size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Why it matters</p>
+            <p className="text-xs font-semibold text-gray-600 leading-relaxed mt-1">
+              Assessed talent is featured more prominently and stands out in client searches.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+          <TrendingUp size={12} className="text-red" />
+          Higher score → stronger visibility
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {STRENGTHEN_ACTIONS.map((action) => {
+          const isPrimaryCta = action.primary && action.available;
+          const inner = (
+            <>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3 min-w-0">
+                  <ClipboardCheck
+                    size={18}
+                    className={`shrink-0 mt-0.5 ${
+                      isPrimaryCta ? 'text-red' : 'text-gray-400'
+                    }`}
+                  />
+                  <div className="min-w-0">
+                    <p className={`font-black text-sm ${isPrimaryCta ? 'text-white' : 'text-black'}`}>
+                      {action.label}
+                    </p>
+                    <p
+                      className={`text-[11px] font-medium mt-1 leading-snug ${
+                        isPrimaryCta ? 'text-white/70' : 'text-gray-500'
+                      }`}
+                    >
+                      {action.description}
+                    </p>
+                  </div>
+                </div>
+                {action.available ? (
+                  <ArrowRight size={16} className={`shrink-0 ${isPrimaryCta ? 'text-white' : 'text-red'}`} />
+                ) : (
+                  <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1">
+                    <Lock size={9} /> Soon
+                  </span>
+                )}
+              </div>
+            </>
+          );
+
+          if (action.available && action.href) {
+            return (
+              <Link
+                key={action.id}
+                to={action.href}
+                className={`block w-full text-left rounded-2xl border p-4 transition-all ${
+                  action.primary
+                    ? 'bg-black text-white border-black hover:bg-red hover:border-red shadow-lg shadow-black/10'
+                    : 'bg-white border-gray-200 hover:border-red/40'
+                }`}
+              >
+                {inner}
+              </Link>
+            );
+          }
+
+          return (
+            <div
+              key={action.id}
+              className="w-full text-left rounded-2xl border border-gray-100 bg-gray-50/80 p-4 opacity-75 cursor-not-allowed"
+              aria-disabled
+            >
+              {inner}
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-gray-400 font-medium leading-relaxed text-center">
+        More profile tools are on the way. Check back after you complete your assessment.
+      </p>
+    </motion.div>
+  );
+}
 
 const PortalPage = () => {
   const navigate = useNavigate();
@@ -34,7 +186,14 @@ const PortalPage = () => {
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
 
-  // Guard: redirect to login if not authed
+  // Guard: redirect to login if not authed; admins use super-admin dashboard
+  useEffect(() => {
+    if (authLoading || !user) return;
+    fetchIsAdmin().then((isAdmin) => {
+      if (isAdmin) navigate('/admin/dashboard', { replace: true });
+    });
+  }, [authLoading, user, navigate]);
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate('/talent/login');
@@ -67,7 +226,7 @@ const PortalPage = () => {
         state: {
           userId: user.id,
           email: user.email,
-          name: data?.name || user.user_metadata?.full_name || '',
+          name: normalizeProfileName(data?.name || user.user_metadata?.full_name || ''),
           parsed: data
             ? {
                 job_title: data.job_title,
@@ -87,7 +246,7 @@ const PortalPage = () => {
 
     setProfile(data);
     setForm({
-      name: data.name || '',
+      name: normalizeProfileName(data.name || ''),
       job_title: data.job_title || '',
       about: data.about || '',
       experience_years: data.experience_years || 0,
@@ -99,11 +258,22 @@ const PortalPage = () => {
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
+  const handleNameBlur = () => {
+    setForm((f) => ({ ...f, name: normalizeProfileName(f.name) }));
+  };
+
   const addSkill = () => {
     const s = newSkill.trim();
-    if (s && form.skills.length < 8 && !form.skills.includes(s)) {
+    if (!s) return;
+    const skillErrors = validateProfileFields({ name: '', job_title: '', about: '', skills: [s] });
+    if (skillErrors.length) {
+      setError(skillErrors[0]);
+      return;
+    }
+    if (form.skills.length < 8 && !form.skills.includes(s)) {
       setForm(f => ({ ...f, skills: [...f.skills, s] }));
       setNewSkill('');
+      setError('');
     }
   };
 
@@ -145,7 +315,12 @@ const PortalPage = () => {
   const handleSave = async () => {
     setError('');
     setSaveStatus('');
-    if (!form.name || !form.job_title) { setError('Name and job title are required.'); return; }
+    const prepared = prepareProfileForSave(form);
+    if (!prepared.ok) {
+      setError(formatProfileValidationErrors(prepared.errors));
+      setSaveStatus('error');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -160,16 +335,26 @@ const PortalPage = () => {
         .upsert({
           user_id: user.id,
           email: user.email,
-          name: form.name.trim(),
-          job_title: form.job_title.trim(),
-          about: form.about.trim(),
-          experience_years: Number(form.experience_years) || 0,
-          skills: form.skills,
+          name: prepared.data.name,
+          job_title: prepared.data.job_title,
+          about: prepared.data.about,
+          experience_years: prepared.data.experience_years,
+          skills: prepared.data.skills,
           photo_url: photoUrl,
           cv_url: profile?.cv_url || '',
         }, { onConflict: 'user_id' });
 
       if (dbErr) throw new Error(dbErr.message);
+
+      setForm((f) => ({
+        ...f,
+        name: prepared.data.name,
+        job_title: prepared.data.job_title,
+        about: prepared.data.about,
+        skills: prepared.data.skills,
+        experience_years: prepared.data.experience_years,
+      }));
+
       await fetchProfile();
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(''), 3000);
@@ -203,7 +388,7 @@ const PortalPage = () => {
 
   return (
     <div className="bg-white min-h-screen pt-24 pb-24 px-4 font-sans">
-      <div className="max-w-3xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
 
         {/* ── Top Bar ── */}
         <div className="flex items-center justify-between">
@@ -248,6 +433,9 @@ const PortalPage = () => {
           </motion.div>
         )}
 
+        <div className="grid lg:grid-cols-5 gap-8 items-start">
+          {/* ── Left: profile summary + edit ── */}
+          <div className="lg:col-span-3 space-y-8">
         {/* ── Header Card ── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
@@ -288,6 +476,7 @@ const PortalPage = () => {
               <Link
                 to={`/talent/${profile.id}`}
                 target="_blank"
+                rel="noopener noreferrer"
                 className="shrink-0 flex items-center gap-1.5 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors"
               >
                 View Public Profile <ExternalLink size={10} />
@@ -302,6 +491,8 @@ const PortalPage = () => {
           className="bg-white border border-gray-200 rounded-[2rem] p-8 space-y-7"
         >
           <h3 className="font-black text-sm uppercase tracking-widest text-gray-800">Edit Profile</h3>
+
+          <p className="text-[11px] text-gray-500 font-medium leading-relaxed -mt-4">{PROFILE_CONTENT_HINT}</p>
 
           {error && (
             <div className="p-4 bg-red/5 border border-red/20 text-red rounded-2xl flex items-start gap-3 text-sm font-semibold">
@@ -319,7 +510,7 @@ const PortalPage = () => {
           {/* Name */}
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name *</label>
-            <input name="name" value={form.name} onChange={handleInput}
+            <input name="name" value={form.name} onChange={handleInput} onBlur={handleNameBlur}
               className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
@@ -334,6 +525,7 @@ const PortalPage = () => {
           <div className="space-y-1.5">
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">About</label>
             <textarea name="about" value={form.about} onChange={handleInput} rows={4}
+              placeholder="Professional summary only — no contact details."
               className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red focus:bg-white outline-none transition-all resize-none leading-relaxed" />
           </div>
 
@@ -409,6 +601,13 @@ const PortalPage = () => {
           <Link to="/talent" className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
             ← Talent Directory
           </Link>
+        </div>
+          </div>
+
+          {/* ── Right: strengthen profile ── */}
+          <div className="lg:col-span-2">
+            <StrengthenProfilePanel />
+          </div>
         </div>
       </div>
     </div>

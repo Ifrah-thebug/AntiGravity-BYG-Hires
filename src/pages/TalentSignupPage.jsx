@@ -12,6 +12,11 @@ import { supabase } from '../lib/supabase';
 import { formatAuthError } from '../lib/talentAuth';
 import { savePendingSetup, uploadSignupFiles } from '../lib/talentStorage';
 import { useProfilePhotoUpload } from '../lib/useProfilePhotoUpload';
+import { normalizeProfileName } from '../lib/formatDisplayName';
+import {
+  formatProfileValidationErrors,
+  validateProfileFields,
+} from '../lib/profileContentPolicy';
 
 const TalentSignupPage = () => {
   const navigate = useNavigate();
@@ -53,9 +58,21 @@ const TalentSignupPage = () => {
       return;
     }
 
+    const normalizedName = normalizeProfileName(form.name);
+    const signupFieldErrors = validateProfileFields({
+      name: normalizedName,
+      job_title: '',
+      about: '',
+      skills: [],
+    });
+    if (signupFieldErrors.length) {
+      setError(formatProfileValidationErrors(signupFieldErrors));
+      return;
+    }
+
     try {
       setStep('auth');
-      await signUp(form.email, form.password, { full_name: form.name });
+      await signUp(form.email, form.password, { full_name: normalizedName });
 
       const { data: { session } } = await supabase.auth.getSession();
 
@@ -74,7 +91,7 @@ const TalentSignupPage = () => {
       const photoBase64 = await getPhotoDataUrl();
 
       const setupBase = {
-        name: form.name || cvParsed.name || '',
+        name: normalizeProfileName(form.name || cvParsed.name || ''),
         email: form.email,
         parsed: cvParsed,
         photoUrl: photoBase64,

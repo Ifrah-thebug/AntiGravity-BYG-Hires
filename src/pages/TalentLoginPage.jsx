@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Mail, Lock, AlertTriangle, ArrowRight, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatAuthError, routeAfterAuth } from '../lib/talentAuth';
+import { adminSignupConfigured } from '../lib/adminAuth';
 import logo from '../assets/BYG Hires Logo.png';
 
 const TalentLoginPage = () => {
@@ -104,6 +105,31 @@ const TalentLoginPage = () => {
             </Link>
           </div>
         </motion.div>
+
+        {adminSignupConfigured() && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-gray-50 border border-gray-200 rounded-[1.5rem] p-6 space-y-3"
+          >
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+              <Shield size={11} className="text-red" /> BYG internal
+            </p>
+            <Link
+              to="/admin/login"
+              className="block w-full py-3.5 bg-black text-white text-center text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red transition-colors"
+            >
+              Log in as admin
+            </Link>
+            <Link
+              to="/admin/signup"
+              className="block w-full py-3.5 bg-white border border-gray-200 text-center text-xs font-black uppercase tracking-widest rounded-xl text-gray-700 hover:border-red hover:text-red transition-colors"
+            >
+              Register as admin
+            </Link>
+          </motion.div>
+        )}
       </div>
     </div>
   );

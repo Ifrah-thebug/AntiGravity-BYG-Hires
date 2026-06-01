@@ -35,6 +35,11 @@ import TalentSetupPage from './pages/TalentSetupPage';
 import TalentDirectoryPage from './pages/TalentDirectoryPage';
 import TalentProfilePage from './pages/TalentProfilePage';
 import PortalPage from './pages/PortalPage';
+import AdminLoginPage from './pages/AdminLoginPage';
+import AdminSignupPage from './pages/AdminSignupPage';
+import AdminDashboardPage from './pages/AdminDashboardPage';
+import AdminClientsPage from './pages/AdminClientsPage';
+import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
 
 // Import Global Sandbox Tools
@@ -70,6 +75,9 @@ const AppContent = () => {
   const debug = new URLSearchParams(location.search).get('debug') === 'true';
   const isAssessment = location.pathname === '/assessment';
   const isAdmin = location.pathname.startsWith('/admin');
+  const isSuperAdminShell =
+    location.pathname === '/admin/login' ||
+    location.pathname === '/admin/signup';
   const isPortalPage = location.pathname === '/portal' || location.pathname.startsWith('/talent/login') || location.pathname.startsWith('/talent/signup') || location.pathname.startsWith('/talent/setup');
 
   // One-time cleanup: remove any test/Ifrah profiles from localStorage
@@ -81,7 +89,7 @@ const AppContent = () => {
   return (
     <div className="min-h-screen bg-white">
       <ScrollToTop />
-      <Navbar />
+      {!isSuperAdminShell && <Navbar />}
       <CalendlyPreloader />
       <main>
         <Routes>
@@ -95,7 +103,33 @@ const AppContent = () => {
           <Route path="/talent-pool/apply" element={<TalentApplyPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/status" element={<StatusPage />} />
-          <Route path="/admin/reviews" element={<AdminReviewsPage />} />
+          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin/signup" element={<AdminSignupPage />} />
+          <Route
+            path="/admin/dashboard"
+            element={(
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
+            )}
+          />
+          <Route
+            path="/admin/clients"
+            element={(
+              <AdminRoute>
+                <AdminClientsPage />
+              </AdminRoute>
+            )}
+          />
+          <Route
+            path="/admin/reviews"
+            element={(
+              <AdminRoute>
+                <AdminReviewsPage />
+              </AdminRoute>
+            )}
+          />
+          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
           <Route path="/request-intro" element={<RequestIntroPage />} />

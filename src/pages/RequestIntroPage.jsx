@@ -1,20 +1,18 @@
 // src/pages/RequestIntroPage.jsx
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, Star, CheckCircle2, Briefcase, Clock, Zap, Moon, Award
+  ArrowLeft, CheckCircle2, Briefcase, Clock, Zap, Moon, Award
 } from 'lucide-react';
-import { TALENTS } from '../data/talentData';
-import { talentService } from '../services/talentService';
 import { formatDisplayName } from '../lib/formatDisplayName';
+import { resolveRequestIntroTalent } from '../lib/requestIntroTalent';
 
 const CALENDLY_URL = 'https://calendly.com/recruitment-bnyahyagroup/30min';
 
-// ─── Avatar initials (fallback when no photo) ─────────────────────────────────
 const Avatar = ({ name, size = 96 }) => {
   const initials = name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
-  const hue = (name.charCodeAt(0) * 37 + name.charCodeAt(1) * 17) % 360;
+  const hue = (name.charCodeAt(0) * 37 + (name.charCodeAt(1) || 0) * 17) % 360;
   return (
     <div
       className="rounded-3xl flex items-center justify-center text-white font-black shadow-xl"
@@ -29,7 +27,6 @@ const Avatar = ({ name, size = 96 }) => {
   );
 };
 
-// ─── Role type badge ──────────────────────────────────────────────────────────
 const RoleTypeBadge = ({ type }) => {
   const map = {
     night:    { label: 'Night Role',  icon: <Moon size={11} />,      cls: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
@@ -45,7 +42,6 @@ const RoleTypeBadge = ({ type }) => {
   );
 };
 
-// ─── Availability label ───────────────────────────────────────────────────────
 const availLabel = (a) => {
   const map = { immediate: 'Available Now', '2weeks': 'In 2 Weeks', '1month': 'In 1 Month', july: 'Available from July' };
   return map[a] || a;
@@ -55,22 +51,40 @@ const RequestIntroPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const talentId = searchParams.get('id');
-  const talent = talentService.getAllBrowseTalents().find(t => t.id === talentId);
+  const [talent, setTalent] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [widgetLoading, setWidgetLoading] = React.useState(true);
 
   useEffect(() => {
     window.scrollTo(0, 0);
-  }, []);
+    let cancelled = false;
+    setLoading(true);
+    resolveRequestIntroTalent(talentId).then((t) => {
+      if (!cancelled) {
+        setTalent(t);
+        setLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [talentId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center pt-28">
+        <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!talent) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center pt-28 font-sans text-black">
-        <div className="text-center max-w-md">
+        <div className="text-center max-w-md px-4">
           <Award size={48} className="text-red mx-auto mb-6" />
           <h2 className="text-2xl font-black uppercase mb-3">Talent Not Found</h2>
-          <p className="text-gray-500 font-medium text-sm mb-6">The profile you're looking for is not available.</p>
-          <button onClick={() => navigate('/talent')} className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors">
-            Browse All Talent
+          <p className="text-gray-500 font-medium text-sm mb-6">The profile you&apos;re looking for is not available.</p>
+          <button onClick={() => navigate(-1)} className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors">
+            Go Back
           </button>
         </div>
       </div>
@@ -81,7 +95,6 @@ const RequestIntroPage = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 pt-24 font-sans text-black">
-      {/* Back button */}
       <div className="max-w-7xl mx-auto px-6 mb-6">
         <button
           onClick={() => navigate(-1)}
@@ -94,13 +107,10 @@ const RequestIntroPage = () => {
 
       <div className="max-w-7xl mx-auto px-6 pb-20">
         <div className="grid lg:grid-cols-5 gap-8 items-start">
-
-          {/* ─── LEFT: Profile Card (2 cols) ─────────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }}
             className="lg:col-span-2 bg-white rounded-[2.5rem] border border-gray-200 shadow-sm overflow-hidden sticky top-28"
           >
-            {/* Profile header */}
             <div className="bg-black text-white p-8 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-40 h-40 bg-red rounded-full blur-[90px] opacity-20 -mr-12 -mt-12 pointer-events-none" />
               <div className="flex items-center gap-5 relative z-10">
@@ -114,117 +124,94 @@ const RequestIntroPage = () => {
                     <CheckCircle2 size={14} className="text-green-400" />
                     <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
                   </div>
-                  <h2 className="text-xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
+                  <h2 className="text-xl font-black tracking-tight">{formatDisplayName(talent.name)}</h2>
                   <p className="text-red font-bold text-xs uppercase tracking-wide">{talent.role}</p>
                 </div>
               </div>
-              {/* Score bar */}
-              <div className="mt-6 relative z-10">
-                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                  <span>Assessment Score</span>
-                  <span className={scoreColor}>{talent.score}/100</span>
+              {talent.score > 0 && (
+                <div className="mt-6 relative z-10">
+                  <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                    <span>Assessment Score</span>
+                    <span className={scoreColor}>{talent.score}/100</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }} animate={{ width: `${talent.score}%` }}
+                      transition={{ delay: 0.4, duration: 0.8 }}
+                      className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300"
+                    />
+                  </div>
                 </div>
-                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                  <motion.div
-                    initial={{ width: 0 }} animate={{ width: `${talent.score}%` }}
-                    transition={{ delay: 0.4, duration: 0.8 }}
-                    className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300"
-                  />
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Profile body */}
             <div className="p-7 space-y-6">
-              {/* Bio */}
               <div>
                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">About</p>
                 <p className="text-gray-700 text-sm font-medium leading-relaxed">{talent.bio}</p>
               </div>
 
-              {/* Skills */}
-              <div>
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Skills & Expertise</p>
-                <div className="flex flex-wrap gap-2">
-                  {talent.tags.map(tag => (
-                    <span key={tag} className="px-3 py-1.5 bg-red/5 border border-red/10 text-red font-bold text-[10px] uppercase tracking-wide rounded-xl">
-                      {tag}
-                    </span>
-                  ))}
+              {talent.tags?.length > 0 && (
+                <div>
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Skills & Expertise</p>
+                  <div className="flex flex-wrap gap-2">
+                    {talent.tags.map(tag => (
+                      <span key={tag} className="px-3 py-1.5 bg-red/5 border border-red/10 text-red font-bold text-[10px] uppercase tracking-wide rounded-xl">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Details grid */}
               <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Monthly Fee</p>
-                  <p className="font-black text-gray-900 text-base">${talent.fee.toLocaleString()}<span className="text-gray-400 text-xs font-semibold">{talent.period}</span></p>
-                </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Availability</p>
-                  <p className="font-black text-gray-900 text-sm">{availLabel(talent.availability)}</p>
-                </div>
+                {talent.fee > 0 && (
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Monthly Fee</p>
+                    <p className="font-black text-gray-900 text-base">${talent.fee.toLocaleString()}<span className="text-gray-400 text-xs font-semibold">{talent.period}</span></p>
+                  </div>
+                )}
                 <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Experience</p>
                   <p className="font-black text-gray-900 text-sm">{talent.experience}</p>
                 </div>
-                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
-                  <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Role Type</p>
-                  <RoleTypeBadge type={talent.roleType} />
-                </div>
+                {talent.availability && (
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Availability</p>
+                    <p className="font-black text-gray-900 text-sm">{availLabel(talent.availability)}</p>
+                  </div>
+                )}
+                {talent.roleType && (
+                  <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
+                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Role Type</p>
+                    <RoleTypeBadge type={talent.roleType} />
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
 
-          {/* ─── RIGHT: Calendly Widget (3 cols) ─────────────────────────── */}
           <motion.div
             initial={{ opacity: 0, x: 24 }} animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.15 }}
             className="lg:col-span-3"
           >
             <div className="bg-white rounded-[2.5rem] border border-gray-200 shadow-sm overflow-hidden">
-              {/* Header */}
               <div className="px-8 py-6 border-b border-gray-100">
                 <h3 className="font-black text-lg uppercase tracking-wide text-gray-900">Schedule an Introduction</h3>
                 <p className="text-gray-500 text-sm font-medium mt-1">
-                  Book a 30-minute intro call with our team to discuss hiring <span className="font-bold text-black">{formatDisplayName(talent.name)}</span>
+                  Book a 30-minute intro call with our team to discuss hiring{' '}
+                  <span className="font-bold text-black">{formatDisplayName(talent.name)}</span>
                 </p>
               </div>
 
-              {/* Calendly iframe */}
               <div className="w-full relative" style={{ minHeight: '700px' }}>
                 {widgetLoading && (
-                  <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-8 z-10 transition-opacity duration-300">
-                    <div className="w-full max-w-md space-y-6 animate-pulse">
-                      {/* Top Mock Header */}
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-full animate-pulse" />
-                        <div className="space-y-2 flex-1">
-                          <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse" />
-                          <div className="h-3 bg-gray-200 rounded w-1/2 animate-pulse" />
-                        </div>
-                      </div>
-                      
-                      {/* Calendar Grid Skeleton */}
-                      <div className="space-y-3 pt-4">
-                        <div className="h-4 bg-gray-200 rounded w-1/4 animate-pulse" />
-                        <div className="grid grid-cols-7 gap-2">
-                          {[...Array(28)].map((_, index) => (
-                            <div key={index} className="h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-                              <div className="w-4 h-4 bg-gray-200/60 rounded-full animate-pulse" />
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      
-                      {/* Support Message */}
-                      <div className="pt-8 flex flex-col items-center justify-center text-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red mb-3"></div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                          Loading secure scheduler...
-                        </p>
-                      </div>
-                    </div>
+                  <div className="absolute inset-0 bg-white flex flex-col items-center justify-center p-8 z-10">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red mb-3" />
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                      Loading secure scheduler...
+                    </p>
                   </div>
                 )}
                 <iframe
@@ -240,7 +227,6 @@ const RequestIntroPage = () => {
               </div>
             </div>
           </motion.div>
-
         </div>
       </div>
     </div>

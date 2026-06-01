@@ -10,6 +10,16 @@ function capitalizeToken(token) {
 }
 
 /**
+ * Canonical full name for DB + talent portal (title case, collapsed spaces).
+ * @example "i frah i rshad" → "Ifrah Irshad"
+ */
+export function normalizeProfileName(fullName) {
+  if (!fullName || typeof fullName !== 'string') return '';
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  return parts.map(capitalizeToken).join(' ');
+}
+
+/**
  * Public talent display — normalizes messy uploads and formats as "First L."
  *
  * @example "IfRaH irshad" → "Ifrah I."

@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { loadPendingSetup, clearPendingSetup } from './talentStorage';
+import { fetchIsAdmin } from './adminAuth';
 
 /** User-friendly auth / API errors */
 export function formatAuthError(err) {
@@ -45,6 +46,11 @@ export async function routeAfterAuth(navigate) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
     navigate('/talent/login');
+    return;
+  }
+
+  if (await fetchIsAdmin()) {
+    navigate('/admin/dashboard');
     return;
   }
 

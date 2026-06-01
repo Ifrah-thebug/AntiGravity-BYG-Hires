@@ -12,6 +12,13 @@ import {
   uploadSignupFiles,
   uploadTalentFile,
 } from '../lib/talentStorage';
+import { normalizeProfileName } from '../lib/formatDisplayName';
+import {
+  PROFILE_CONTENT_HINT,
+  prepareProfileForSave,
+  formatProfileValidationErrors,
+  validateProfileFields,
+} from '../lib/profileContentPolicy';
 
 const TalentSetupPage = () => {
   const navigate = useNavigate();
@@ -25,7 +32,7 @@ const TalentSetupPage = () => {
   const initialName = stateData.name || pending?.name || '';
 
   const [form, setForm] = useState({
-    name: initialName,
+    name: normalizeProfileName(initialName),
     job_title: initialParsed?.job_title || '',
     about: initialParsed?.about || '',
     experience_years: initialParsed?.experience_years ?? 3,
@@ -46,7 +53,7 @@ const TalentSetupPage = () => {
   useEffect(() => {
     if (pending && !stateData.parsed) {
       setForm({
-        name: pending.name || '',
+        name: normalizeProfileName(pending.name || ''),
         job_title: pending.parsed?.job_title || '',
         about: pending.parsed?.about || '',
         experience_years: pending.parsed?.experience_years ?? 3,
@@ -78,11 +85,22 @@ const TalentSetupPage = () => {
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
+  const handleNameBlur = () => {
+    setForm((f) => ({ ...f, name: normalizeProfileName(f.name) }));
+  };
+
   const addSkill = () => {
     const s = newSkill.trim();
-    if (s && form.skills.length < 8 && !form.skills.includes(s)) {
+    if (!s) return;
+    const skillErrors = validateProfileFields({ name: '', job_title: '', about: '', skills: [s] });
+    if (skillErrors.length) {
+      setError(skillErrors[0]);
+      return;
+    }
+    if (form.skills.length < 8 && !form.skills.includes(s)) {
       setForm(f => ({ ...f, skills: [...f.skills, s] }));
       setNewSkill('');
+      setError('');
     }
   };
 
@@ -124,8 +142,9 @@ const TalentSetupPage = () => {
 
   const handleConfirm = async () => {
     setError('');
-    if (!form.name || !form.job_title) {
-      setError('Name and job title are required.');
+    const prepared = prepareProfileForSave(form);
+    if (!prepared.ok) {
+      setError(formatProfileValidationErrors(prepared.errors));
       return;
     }
 
@@ -147,16 +166,24 @@ const TalentSetupPage = () => {
       const { error: dbErr } = await supabase.from('profiles').upsert({
         user_id: authUser.id,
         email: authUser.email,
-        name: form.name.trim(),
-        job_title: form.job_title.trim(),
-        about: form.about.trim(),
-        skills: form.skills,
-        experience_years: Number(form.experience_years) || 0,
+        name: prepared.data.name,
+        job_title: prepared.data.job_title,
+        about: prepared.data.about,
+        skills: prepared.data.skills,
+        experience_years: prepared.data.experience_years,
         photo_url: finalPhoto || '',
         cv_url: finalCv || '',
       }, { onConflict: 'user_id' });
 
       if (dbErr) throw dbErr;
+
+      setForm((f) => ({
+        ...f,
+        name: prepared.data.name,
+        job_title: prepared.data.job_title,
+        about: prepared.data.about,
+        skills: prepared.data.skills,
+      }));
 
       clearPendingSetup();
       navigate('/portal', {
@@ -234,10 +261,12 @@ const TalentSetupPage = () => {
               </div>
             )}
 
+            <p className="text-[11px] text-gray-500 font-medium leading-relaxed">{PROFILE_CONTENT_HINT}</p>
+
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name *</label>
               <input
-                name="name" value={form.name} onChange={handleInput}
+                name="name" value={form.name} onChange={handleInput} onBlur={handleNameBlur}
                 disabled={awaitingEmailConfirm}
                 className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
               />
@@ -256,6 +285,7 @@ const TalentSetupPage = () => {
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">About</label>
               <textarea
                 name="about" value={form.about} onChange={handleInput} rows={4}
+                placeholder="Professional summary only — no contact details."
                 disabled={awaitingEmailConfirm}
                 className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red focus:bg-white outline-none transition-all resize-none disabled:opacity-60"
               />

@@ -4,11 +4,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Lock, Eye, Filter, ArrowUpDown, FileText, CheckCircle2, AlertTriangle, XCircle, ChevronRight, User, Mail, Award, MessageSquare, LogOut, Check 
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { talentService } from '../services/talentService';
+import { useAuth } from '../context/AuthContext';
+import { fetchIsAdmin } from '../lib/adminAuth';
 
 const AdminReviewsPage = () => {
+  const { user } = useAuth();
   const [passcode, setPasscode] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isSupabaseAdmin, setIsSupabaseAdmin] = useState(false);
   const [loginError, setLoginError] = useState('');
 
   // Queue and Review state
@@ -37,6 +42,20 @@ const AdminReviewsPage = () => {
   };
 
   useEffect(() => {
+    if (!user) return;
+    fetchIsAdmin()
+      .then((ok) => {
+        if (ok) {
+          setIsSupabaseAdmin(true);
+          setIsLoggedIn(true);
+          loadData();
+        }
+      })
+      .catch(() => {});
+  }, [user]);
+
+  useEffect(() => {
+    if (!isLoggedIn) return;
     loadData();
     window.addEventListener('storage', loadData);
     const interval = setInterval(loadData, 3000);
@@ -44,7 +63,7 @@ const AdminReviewsPage = () => {
       window.removeEventListener('storage', loadData);
       clearInterval(interval);
     };
-  }, [selectedSub]);
+  }, [selectedSub, isLoggedIn]);
 
   const handleLogin = (e) => {
     e.preventDefault();
@@ -174,14 +193,32 @@ const AdminReviewsPage = () => {
               AUTHORIZE SIGN IN
             </button>
           </form>
+
+          <p className="text-gray-600 text-xs font-medium mt-8 leading-relaxed">
+            Signed in as super admin?{' '}
+            <Link to="/admin/dashboard" className="text-red font-bold hover:underline">
+              Browse Candidates
+            </Link>
+            {' '}(no passcode required).
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-[#0b0b0e] text-white min-h-screen pt-28 pb-12 font-sans px-4 sm:px-6">
-      
+    <div className="bg-[#0b0b0e] text-white min-h-screen pt-24 pb-12 font-sans px-4 sm:px-6">
+
+      {isSupabaseAdmin && (
+        <div className="max-w-8xl mx-auto mb-6 p-4 bg-red/10 border border-red/20 rounded-2xl text-xs font-semibold text-red-200">
+          Signed in as super admin. This queue uses local assessment demo data. For live talent, use{' '}
+          <Link to="/admin/dashboard" className="text-red font-black hover:underline">
+            Browse Candidates
+          </Link>
+          .
+        </div>
+      )}
+
       {/* Dashboard Top bar */}
       <div className="max-w-8xl mx-auto flex items-center justify-between border-b border-gray-800 pb-6 mb-8 gap-4">
         <div>

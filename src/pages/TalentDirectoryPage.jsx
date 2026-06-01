@@ -427,7 +427,7 @@ const TalentDirectoryPage = () => {
       supabaseTalents = data.map(p => ({
         id: p.id,
         isReal: true,
-        name: p.name || 'Anonymous',
+        name: formatDisplayName(p.name) || 'Anonymous',
         photo: p.photo_url || null,
         score: 95, // mock high score for real profiles
         role: p.job_title || 'Professional',
