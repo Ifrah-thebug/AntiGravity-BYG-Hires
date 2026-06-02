@@ -4,6 +4,56 @@ import { normalizeProfileName } from './formatDisplayName';
 export const PROFILE_CONTENT_HINT =
   'Do not include phone numbers, email, LinkedIn URLs, or street addresses in your name, title, about, or skills.';
 
+export const AVAILABILITY_OPTIONS = [
+  { value: 'immediate', label: 'Available now' },
+  { value: '2weeks', label: 'From 2 weeks' },
+  { value: '1month', label: 'From 1 month' },
+  { value: 'from_month', label: 'From specific date' },
+];
+
+export const ROLE_TYPE_OPTIONS = [
+  { value: 'flexible', label: 'Flexible' },
+  { value: 'fulltime', label: '9-5' },
+  { value: 'night', label: 'Night' },
+  { value: 'parttime', label: 'Part-time' },
+];
+
+export function calculateDirectoryFeeUsd(monthlyFeeUsd) {
+  const base = Number(monthlyFeeUsd) || 0;
+  return Math.round(base * 1.1);
+}
+
+export function normalizeAvailabilityFromMonth(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}$/.test(raw)) return `${raw}-01`;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  return null;
+}
+
+export function formatAvailabilityLabel(availability, availabilityFromMonth) {
+  const value = String(availability || '').trim();
+  if (value === 'immediate') return 'Available Now';
+  if (value === '2weeks') return 'In 2 Weeks';
+  if (value === '1month') return 'In 1 Month';
+  if (/^\d{4}-\d{2}$/.test(value) || /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const normalized = normalizeAvailabilityFromMonth(value);
+    if (!normalized) return 'From selected date';
+    const date = new Date(`${normalized}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return 'From selected date';
+    return `From ${date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  }
+  if (value === 'from_month') {
+    const normalized = normalizeAvailabilityFromMonth(availabilityFromMonth);
+    if (!normalized) return 'From selected date';
+    const date = new Date(`${normalized}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return 'From selected date';
+    return `From ${date.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  }
+  return value || 'Available Now';
+}
+
 const PHONE_PATTERNS = [
   /\+?\d{1,3}[\s.-]?\(?\d{2,4}\)?[\s.-]?\d{3}[\s.-]?\d{4,}/,
   /\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/,
@@ -82,12 +132,24 @@ export function validateProfileFields({ name, job_title, about, skills }) {
  * @returns {{ ok: boolean, errors: string[], data: object | null }}
  */
 export function prepareProfileForSave(fields) {
+  const monthlyFeeUsd = Number(fields.monthly_fee_usd);
+  const availability = String(fields.availability || 'immediate');
+  const roleType = String(fields.role_type || 'flexible');
+  const availabilityDate = normalizeAvailabilityFromMonth(fields.availability_from_month);
+
   const data = {
     name: normalizeProfileName(fields.name),
     job_title: (fields.job_title || '').trim(),
     about: (fields.about || '').trim(),
     skills: (fields.skills || []).map((s) => s.trim()).filter(Boolean),
     experience_years: Number(fields.experience_years) || 0,
+    monthly_fee_usd: Number.isFinite(monthlyFeeUsd) ? Math.max(0, Math.round(monthlyFeeUsd)) : 0,
+    directory_fee_usd: calculateDirectoryFeeUsd(monthlyFeeUsd),
+    availability:
+      availability === 'from_month'
+        ? (availabilityDate || '')
+        : (AVAILABILITY_OPTIONS.some((o) => o.value === availability) ? availability : 'immediate'),
+    role_type: ROLE_TYPE_OPTIONS.some((o) => o.value === roleType) ? roleType : 'flexible',
   };
 
   if (!data.name) {
@@ -95,6 +157,12 @@ export function prepareProfileForSave(fields) {
   }
   if (!data.job_title) {
     return { ok: false, errors: ['Professional title is required.'], data: null };
+  }
+  if (monthlyFeeUsd < 0) {
+    return { ok: false, errors: ['Monthly fee cannot be negative.'], data: null };
+  }
+  if (availability === 'from_month' && !availabilityDate) {
+    return { ok: false, errors: ['Please select a date for availability.'], data: null };
   }
 
   const errors = validateProfileFields(data);

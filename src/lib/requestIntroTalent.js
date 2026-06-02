@@ -1,9 +1,11 @@
 import { supabase } from './supabase';
 import { talentService } from '../services/talentService';
+import { calculateDirectoryFeeUsd } from './profileContentPolicy';
 
 /** Shape expected by RequestIntroPage */
 export function mapProfileToRequestIntroTalent(row) {
   const id = row.user_id || row.id;
+  const baseFee = Number(row.monthly_fee_usd) || 0;
   return {
     id,
     name: row.name || 'Candidate',
@@ -12,11 +14,11 @@ export function mapProfileToRequestIntroTalent(row) {
     tags: Array.isArray(row.skills) ? row.skills : [],
     photo: row.photo_url || null,
     score: 95,
-    fee: 0,
+    fee: Number(row.directory_fee_usd) || calculateDirectoryFeeUsd(baseFee),
     period: '/mo',
     experience: row.experience_years ? `${row.experience_years} yrs` : '—',
-    availability: 'immediate',
-    roleType: 'flexible',
+    availability: row.availability || 'immediate',
+    roleType: row.role_type || 'flexible',
     isReal: true,
   };
 }
@@ -33,7 +35,7 @@ export async function resolveRequestIntroTalent(id) {
   if (!UUID_RE.test(id)) return null;
 
   const profileFields =
-    'id, user_id, name, job_title, about, skills, experience_years, photo_url';
+    'id, user_id, name, job_title, about, skills, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type';
 
   const { data: byProfileId } = await supabase
     .from('profiles')

@@ -12,6 +12,7 @@ import {
 import { talentService } from '../services/talentService';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName } from '../lib/formatDisplayName';
+import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -50,15 +51,16 @@ const RoleTypeBadge = ({ type }) => {
 // ─── Availability badge ───────────────────────────────────────────────────────
 const AvailBadge = ({ avail }) => {
   const map = {
-    immediate: { label: 'Available Now', cls: 'text-green-600' },
-    '2weeks':  { label: 'In 2 Weeks',    cls: 'text-yellow-600' },
-    '1month':  { label: 'In 1 Month',    cls: 'text-gray-500' },
+    immediate: { cls: 'text-green-600' },
+    '2weeks':  { cls: 'text-yellow-600' },
+    '1month':  { cls: 'text-gray-500' },
+    from_month: { cls: 'text-indigo-600' },
   };
   const b = map[avail] || map.immediate;
   return (
     <span className={`flex items-center gap-1 text-[10px] font-bold ${b.cls}`}>
       <span className={`w-1.5 h-1.5 rounded-full bg-current ${avail === 'immediate' ? 'animate-pulse' : ''}`} />
-      {b.label}
+      {formatAvailabilityLabel(avail)}
     </span>
   );
 };
@@ -83,6 +85,7 @@ const ScoreRing = ({ score }) => {
 // ─── Talent Card ──────────────────────────────────────────────────────────────
 const TalentCard = ({ talent, onSelect }) => {
   const navigate = useNavigate();
+  const showMatchBadge = Boolean(talent.verified) && (Number(talent.score) > 0 || Number(talent.match) > 0);
 
   // Mapping roleType values to match availability badge styles from TalentMatchmaking
   const roleTypeColors = {
@@ -130,12 +133,12 @@ const TalentCard = ({ talent, onSelect }) => {
 
         {/* Availability Badge */}
         <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-          <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'july' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
-          <span>{talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : talent.availability === 'july' ? 'From July' : 'In 1 Month'}</span>
+          <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'from_month' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
+          <span>{formatAvailabilityLabel(talent.availability)}</span>
         </div>
 
         {/* Match Score Badge (Only show if > 0) */}
-        {(talent.score > 0 || talent.match > 0) && (
+        {showMatchBadge && (
           <div className="absolute top-3 right-3 bg-black text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
             <span className="text-red">{talent.score || talent.match}%</span>
             <span>match</span>
@@ -221,7 +224,12 @@ const TalentModal = ({ talent, onClose }) => {
           {/* Header */}
           <div className="bg-black text-white p-8 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-red rounded-full blur-[100px] opacity-20 -mr-16 -mt-16 pointer-events-none" />
-            <button onClick={onClose} className="absolute top-5 right-5 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close profile"
+              className="absolute top-5 right-5 z-20 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors"
+            >
               <X size={16} />
             </button>
             <div className="flex items-start gap-6 relative z-10">
@@ -274,7 +282,7 @@ const TalentModal = ({ talent, onClose }) => {
             <div className="grid grid-cols-2 gap-4">
               {[
                 { label: 'Monthly Fee', value: `$${talent.fee.toLocaleString()}${talent.period}` },
-                { label: 'Availability', value: talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : talent.availability === 'july' ? 'Available from July' : 'In 1 Month' },
+                { label: 'Availability', value: formatAvailabilityLabel(talent.availability) },
                 { label: 'Role Type', value: { night: 'Night Role', flexible: 'Flexible Hours', fulltime: 'Full-Time Remote', parttime: 'Part-Time' }[talent.roleType] },
                 { label: 'Experience', value: talent.experience },
               ].map(({ label, value }) => (
@@ -409,7 +417,7 @@ const TalentDirectoryPage = () => {
     // 1. Fetch Supabase profiles
     const { data, error: err } = await supabase
       .from('profiles')
-      .select('id, name, job_title, skills, about, experience_years, photo_url')
+      .select('id, name, job_title, skills, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type')
       .order('created_at', { ascending: false });
 
     let supabaseTalents = [];
@@ -419,13 +427,14 @@ const TalentDirectoryPage = () => {
         name: formatDisplayName(p.name) || 'Anonymous',
         photo: p.photo_url || null,
         score: 95, // mock high score for real profiles
+        verified: false,
         role: p.job_title || 'Professional',
         experience: p.experience_years ? `${p.experience_years} yrs` : 'Flexible',
         tags: p.skills || [],
-        fee: 1000, // default fee
-        availability: 'immediate',
+        fee: Number(p.directory_fee_usd) || Math.round((Number(p.monthly_fee_usd) || 1000) * 1.1),
+        availability: p.availability || 'immediate',
         department: 'operations', // default dept
-        roleType: 'fulltime',
+        roleType: p.role_type || 'flexible',
         bio: p.about || 'No bio provided.',
         period: '/mo'
       }));

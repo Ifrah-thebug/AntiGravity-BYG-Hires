@@ -430,7 +430,10 @@ export const talentService = {
       });
 
     // Merge static talents with our dynamic talents, ensuring no duplicates by ID
-    const staticTalents = TALENTS || [];
+    const staticTalents = (TALENTS || []).map((t) => ({
+      ...t,
+      verified: t.verified ?? true,
+    }));
     const merged = [...dynamicTalents, ...staticTalents];
     
     // Remove duplicates just in case, and hide profiles that don't have a photo

@@ -6,6 +6,7 @@ import {
   ArrowLeft, CheckCircle2, Briefcase, Clock, Zap, Moon, Award
 } from 'lucide-react';
 import { formatDisplayName } from '../lib/formatDisplayName';
+import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
 import { resolveRequestIntroTalent } from '../lib/requestIntroTalent';
 
 const CALENDLY_URL = 'https://calendly.com/recruitment-bnyahyagroup/30min';
@@ -40,11 +41,6 @@ const RoleTypeBadge = ({ type }) => {
       {b.icon}{b.label}
     </span>
   );
-};
-
-const availLabel = (a) => {
-  const map = { immediate: 'Available Now', '2weeks': 'In 2 Weeks', '1month': 'In 1 Month', july: 'Available from July' };
-  return map[a] || a;
 };
 
 const RequestIntroPage = () => {
@@ -178,7 +174,7 @@ const RequestIntroPage = () => {
                 {talent.availability && (
                   <div className="bg-gray-50 border border-gray-100 rounded-2xl p-4">
                     <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Availability</p>
-                    <p className="font-black text-gray-900 text-sm">{availLabel(talent.availability)}</p>
+                    <p className="font-black text-gray-900 text-sm">{formatAvailabilityLabel(talent.availability)}</p>
                   </div>
                 )}
                 {talent.roleType && (

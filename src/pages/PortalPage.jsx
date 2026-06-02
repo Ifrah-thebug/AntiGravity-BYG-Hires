@@ -17,6 +17,8 @@ import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
 import { normalizeProfileName } from '../lib/formatDisplayName';
 import {
   PROFILE_CONTENT_HINT,
+  AVAILABILITY_OPTIONS,
+  ROLE_TYPE_OPTIONS,
   prepareProfileForSave,
   formatProfileValidationErrors,
   validateProfileFields,
@@ -60,35 +62,35 @@ function StrengthenProfilePanel() {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="bg-white border border-gray-200 rounded-[2rem] p-8 shadow-sm lg:sticky lg:top-28 space-y-6"
+      className="bg-gradient-to-br from-red to-[#b10f1f] border border-red/80 rounded-[2rem] p-8 shadow-xl shadow-red/20 lg:sticky lg:top-28 space-y-6"
     >
       <div>
-        <p className="text-red font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
+        <p className="text-white/90 font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
           <Sparkles size={11} /> Grow your presence
         </p>
-        <h3 className="text-2xl font-black tracking-tight text-black leading-tight">
+        <h3 className="text-2xl font-black tracking-tight text-white leading-tight">
           Strengthen your profile
         </h3>
-        <p className="text-gray-500 text-sm font-medium mt-3 leading-relaxed">
+        <p className="text-white/90 text-sm font-semibold mt-3 leading-relaxed">
           Take the assessment and rank your profile higher in the talent directory. Verified scores
           help clients trust your skills faster.
         </p>
       </div>
 
-      <div className="rounded-2xl bg-gray-50 border border-gray-100 p-5 space-y-3">
+      <div className="rounded-2xl bg-black/20 border border-white/20 p-5 space-y-3">
         <div className="flex items-start gap-3">
           <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shrink-0">
             <Award size={18} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Why it matters</p>
-            <p className="text-xs font-semibold text-gray-600 leading-relaxed mt-1">
+            <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">Why it matters</p>
+            <p className="text-xs font-semibold text-white leading-relaxed mt-1">
               Assessed talent is featured more prominently and stands out in client searches.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-          <TrendingUp size={12} className="text-red" />
+        <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-wider">
+          <TrendingUp size={12} className="text-black" />
           Higher score → stronger visibility
         </div>
       </div>
@@ -103,16 +105,16 @@ function StrengthenProfilePanel() {
                   <ClipboardCheck
                     size={18}
                     className={`shrink-0 mt-0.5 ${
-                      isPrimaryCta ? 'text-red' : 'text-gray-400'
+                      isPrimaryCta ? 'text-red' : 'text-white/75'
                     }`}
                   />
                   <div className="min-w-0">
-                    <p className={`font-black text-sm ${isPrimaryCta ? 'text-white' : 'text-black'}`}>
+                    <p className={`font-black text-sm ${isPrimaryCta ? 'text-white' : 'text-white'}`}>
                       {action.label}
                     </p>
                     <p
                       className={`text-[11px] font-medium mt-1 leading-snug ${
-                        isPrimaryCta ? 'text-white/70' : 'text-gray-500'
+                        isPrimaryCta ? 'text-white/75' : 'text-white/80'
                       }`}
                     >
                       {action.description}
@@ -120,9 +122,9 @@ function StrengthenProfilePanel() {
                   </div>
                 </div>
                 {action.available ? (
-                  <ArrowRight size={16} className={`shrink-0 ${isPrimaryCta ? 'text-white' : 'text-red'}`} />
+                  <ArrowRight size={16} className={`shrink-0 ${isPrimaryCta ? 'text-white' : 'text-white/90'}`} />
                 ) : (
-                  <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-gray-400 bg-gray-100 px-2 py-1 rounded-full flex items-center gap-1">
+                  <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-white/70 bg-black/30 border border-white/20 px-2 py-1 rounded-full flex items-center gap-1">
                     <Lock size={9} /> Soon
                   </span>
                 )}
@@ -138,7 +140,7 @@ function StrengthenProfilePanel() {
                 className={`block w-full text-left rounded-2xl border p-4 transition-all ${
                   action.primary
                     ? 'bg-black text-white border-black hover:bg-red hover:border-red shadow-lg shadow-black/10'
-                    : 'bg-white border-gray-200 hover:border-red/40'
+                    : 'bg-black/30 border-white/30 hover:bg-black/40 hover:border-white/40'
                 }`}
               >
                 {inner}
@@ -149,7 +151,7 @@ function StrengthenProfilePanel() {
           return (
             <div
               key={action.id}
-              className="w-full text-left rounded-2xl border border-gray-100 bg-gray-50/80 p-4 opacity-75 cursor-not-allowed"
+              className="w-full text-left rounded-2xl border border-white/20 bg-black/20 p-4 opacity-90 cursor-not-allowed"
               aria-disabled
             >
               {inner}
@@ -158,7 +160,7 @@ function StrengthenProfilePanel() {
         })}
       </div>
 
-      <p className="text-[10px] text-gray-400 font-medium leading-relaxed text-center">
+      <p className="text-[10px] text-white/80 font-medium leading-relaxed text-center">
         More profile tools are on the way. Check back after you complete your assessment.
       </p>
     </motion.div>
@@ -172,7 +174,15 @@ const PortalPage = () => {
 
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({
-    name: '', job_title: '', about: '', experience_years: 0, skills: [],
+    name: '',
+    job_title: '',
+    about: '',
+    experience_years: 0,
+    monthly_fee_usd: 1000,
+    availability: 'immediate',
+    availability_from_month: '',
+    role_type: 'flexible',
+    skills: [],
   });
   const [newSkill, setNewSkill] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
@@ -233,6 +243,10 @@ const PortalPage = () => {
                 about: data.about,
                 skills: data.skills || [],
                 experience_years: data.experience_years,
+                monthly_fee_usd: data.monthly_fee_usd,
+                availability: data.availability,
+                availability_from_month: data.availability_from_month,
+                role_type: data.role_type,
               }
             : null,
           photoUrl: data?.photo_url || '',
@@ -245,11 +259,17 @@ const PortalPage = () => {
     }
 
     setProfile(data);
+    const availabilityRaw = String(data.availability || '');
+    const availabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(availabilityRaw) ? availabilityRaw : '';
     setForm({
       name: normalizeProfileName(data.name || ''),
       job_title: data.job_title || '',
       about: data.about || '',
       experience_years: data.experience_years || 0,
+      monthly_fee_usd: data.monthly_fee_usd ?? 1000,
+      availability: availabilityDate ? 'from_month' : (data.availability || 'immediate'),
+      availability_from_month: availabilityDate,
+      role_type: data.role_type || 'flexible',
       skills: data.skills || [],
     });
     setPhotoPreview(data.photo_url || '');
@@ -339,6 +359,10 @@ const PortalPage = () => {
           job_title: prepared.data.job_title,
           about: prepared.data.about,
           experience_years: prepared.data.experience_years,
+          monthly_fee_usd: prepared.data.monthly_fee_usd,
+          directory_fee_usd: prepared.data.directory_fee_usd,
+          availability: prepared.data.availability,
+          role_type: prepared.data.role_type,
           skills: prepared.data.skills,
           photo_url: photoUrl,
           cv_url: profile?.cv_url || '',
@@ -353,6 +377,14 @@ const PortalPage = () => {
         about: prepared.data.about,
         skills: prepared.data.skills,
         experience_years: prepared.data.experience_years,
+        monthly_fee_usd: prepared.data.monthly_fee_usd,
+        directory_fee_usd: prepared.data.directory_fee_usd,
+        availability: prepared.data.availability,
+        availability_from_month:
+          prepared.data.availability && /^\d{4}-\d{2}-\d{2}$/.test(prepared.data.availability)
+            ? prepared.data.availability
+            : '',
+        role_type: prepared.data.role_type,
       }));
 
       await fetchProfile();
@@ -534,6 +566,62 @@ const PortalPage = () => {
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Years of Experience</label>
             <input type="number" name="experience_years" min={0} max={50} value={form.experience_years} onChange={handleInput}
               className="block w-full max-w-[8rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
+          </div>
+
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Monthly Fee (USD)</label>
+              <input
+                type="number"
+                name="monthly_fee_usd"
+                min={0}
+                step={50}
+                value={form.monthly_fee_usd}
+                onChange={handleInput}
+                className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all"
+              />
+              <p className="text-[10px] text-gray-400 font-semibold">BYG Hires will add a 10% markup as platform fees.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Availability</label>
+              <select
+                name="availability"
+                value={form.availability}
+                onChange={handleInput}
+                className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all"
+              >
+                {AVAILABILITY_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {form.availability === 'from_month' && (
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Available From (Date)</label>
+              <input
+                type="date"
+                name="availability_from_month"
+                value={String(form.availability_from_month || '').slice(0, 10)}
+                onChange={handleInput}
+                className="block w-full max-w-[14rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all"
+              />
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Timing Preference</label>
+            <select
+              name="role_type"
+              value={form.role_type}
+              onChange={handleInput}
+              className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all"
+            >
+              {ROLE_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           {/* Skills */}

@@ -48,7 +48,12 @@ const TalentModal = ({ talent, onClose }) => {
           {/* Header */}
           <div className="bg-black text-white p-8 relative overflow-hidden text-left">
             <div className="absolute top-0 right-0 w-48 h-48 bg-red rounded-full blur-[100px] opacity-20 -mr-16 -mt-16 pointer-events-none" />
-            <button onClick={onClose} className="absolute top-5 right-5 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close profile"
+              className="absolute top-5 right-5 z-20 w-9 h-9 bg-white/10 hover:bg-white/20 rounded-full flex items-center justify-center transition-colors"
+            >
               <X size={16} />
             </button>
             <div className="flex items-start gap-6 relative z-10">
@@ -236,7 +241,9 @@ const TalentMatchmaking = () => {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-14"
           >
-            {displayed.slice(0, 5).map((talent, i) => (
+            {displayed.slice(0, 5).map((talent, i) => {
+              const showMatchBadge = Boolean(talent.verified) && Number(talent.match) > 0;
+              return (
               <motion.div
                 key={talent.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -259,7 +266,7 @@ const TalentMatchmaking = () => {
                   </div>
 
                   {/* Match Score Badge */}
-                  {talent.match > 0 && (
+                  {showMatchBadge && (
                     <div className="absolute top-3 right-3 bg-black text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
                       <span className="text-red">{talent.match}%</span>
                       <span>match</span>
@@ -318,7 +325,8 @@ const TalentMatchmaking = () => {
                   </button>
                 </div>
               </motion.div>
-            ))}
+              );
+            })}
           </motion.div>
         </AnimatePresence>
 

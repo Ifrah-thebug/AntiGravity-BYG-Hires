@@ -15,12 +15,18 @@ import {
 import { normalizeProfileName } from '../lib/formatDisplayName';
 import {
   PROFILE_CONTENT_HINT,
+  AVAILABILITY_OPTIONS,
+  ROLE_TYPE_OPTIONS,
   prepareProfileForSave,
   formatProfileValidationErrors,
   validateProfileFields,
 } from '../lib/profileContentPolicy';
 
 const TalentSetupPage = () => {
+  const parsedAvailability = String(initialParsed?.availability || '');
+  const initialAvailabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(parsedAvailability)
+    ? parsedAvailability
+    : '';
   const navigate = useNavigate();
   const location = useLocation();
   const { session, loading: authLoading } = useAuth();
@@ -36,6 +42,10 @@ const TalentSetupPage = () => {
     job_title: initialParsed?.job_title || '',
     about: initialParsed?.about || '',
     experience_years: initialParsed?.experience_years ?? 3,
+    monthly_fee_usd: initialParsed?.monthly_fee_usd ?? 1000,
+    availability: initialAvailabilityDate ? 'from_month' : (initialParsed?.availability || 'immediate'),
+    availability_from_month: initialAvailabilityDate,
+    role_type: initialParsed?.role_type || 'flexible',
     skills: initialParsed?.skills || [],
   });
   const [cvUrl, setCvUrl] = useState(stateData.cvUrl || pending?.cvUrl || '');
@@ -52,11 +62,19 @@ const TalentSetupPage = () => {
 
   useEffect(() => {
     if (pending && !stateData.parsed) {
+      const pendingAvailability = String(pending.parsed?.availability || '');
+      const pendingAvailabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(pendingAvailability)
+        ? pendingAvailability
+        : '';
       setForm({
         name: normalizeProfileName(pending.name || ''),
         job_title: pending.parsed?.job_title || '',
         about: pending.parsed?.about || '',
         experience_years: pending.parsed?.experience_years ?? 3,
+        monthly_fee_usd: pending.parsed?.monthly_fee_usd ?? 1000,
+        availability: pendingAvailabilityDate ? 'from_month' : (pending.parsed?.availability || 'immediate'),
+        availability_from_month: pendingAvailabilityDate,
+        role_type: pending.parsed?.role_type || 'flexible',
         skills: pending.parsed?.skills || [],
       });
       setPhotoUrl(pending.photoUrl || '');
@@ -171,6 +189,10 @@ const TalentSetupPage = () => {
         about: prepared.data.about,
         skills: prepared.data.skills,
         experience_years: prepared.data.experience_years,
+        monthly_fee_usd: prepared.data.monthly_fee_usd,
+        directory_fee_usd: prepared.data.directory_fee_usd,
+        availability: prepared.data.availability,
+        role_type: prepared.data.role_type,
         photo_url: finalPhoto || '',
         cv_url: finalCv || '',
       }, { onConflict: 'user_id' });
@@ -183,6 +205,14 @@ const TalentSetupPage = () => {
         job_title: prepared.data.job_title,
         about: prepared.data.about,
         skills: prepared.data.skills,
+        monthly_fee_usd: prepared.data.monthly_fee_usd,
+        directory_fee_usd: prepared.data.directory_fee_usd,
+        availability: prepared.data.availability,
+        availability_from_month:
+          prepared.data.availability && /^\d{4}-\d{2}-\d{2}$/.test(prepared.data.availability)
+            ? prepared.data.availability
+            : '',
+        role_type: prepared.data.role_type,
       }));
 
       clearPendingSetup();
@@ -299,6 +329,62 @@ const TalentSetupPage = () => {
                 disabled={awaitingEmailConfirm}
                 className="block w-full max-w-[8rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
               />
+            </div>
+
+            <div className="grid sm:grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Monthly Fee (USD)</label>
+                <input
+                  type="number" name="monthly_fee_usd" min={0} step={50}
+                  value={form.monthly_fee_usd} onChange={handleInput}
+                  disabled={awaitingEmailConfirm}
+                  className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
+                />
+                <p className="text-[10px] text-gray-400 font-semibold">BYG Hires will add a 10% markup as platform fees.</p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Availability</label>
+                <select
+                  name="availability"
+                  value={form.availability}
+                  onChange={handleInput}
+                  disabled={awaitingEmailConfirm}
+                  className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
+                >
+                  {AVAILABILITY_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {form.availability === 'from_month' && (
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Available From (Date)</label>
+                <input
+                  type="date"
+                  name="availability_from_month"
+                  value={String(form.availability_from_month || '').slice(0, 10)}
+                  onChange={handleInput}
+                  disabled={awaitingEmailConfirm}
+                  className="block w-full max-w-[14rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
+                />
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Timing Preference</label>
+              <select
+                name="role_type"
+                value={form.role_type}
+                onChange={handleInput}
+                disabled={awaitingEmailConfirm}
+                className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
+              >
+                {ROLE_TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-3">

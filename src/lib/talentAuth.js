@@ -84,6 +84,10 @@ export async function routeAfterAuth(navigate) {
               about: profile.about,
               skills: profile.skills || [],
               experience_years: profile.experience_years,
+              monthly_fee_usd: profile.monthly_fee_usd,
+              availability: profile.availability,
+              availability_from_month: profile.availability_from_month,
+              role_type: profile.role_type,
             }
           : null,
         photoUrl: profile?.photo_url || '',
