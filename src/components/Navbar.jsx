@@ -4,16 +4,9 @@ import { Menu, X, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
 import { useAuth } from '../context/AuthContext';
-import { fetchIsAdmin } from '../lib/adminAuth';
+import { useAccountType } from '../hooks/useAccountType';
 
 const PUBLIC_NAV_LINKS = [
-  {
-    name: 'Scale',
-    dropdown: [
-      { name: 'Remote Sales Team', href: '/remote-sales-team' },
-      { name: 'Remote Support Team', href: '/remote-support-team' },
-    ],
-  },
   { name: 'Talent Directory', href: '/talent' },
   { name: 'How It Works', href: '/how-it-works' },
   { name: 'Join Talent Pool', href: '/talent/signup' },
@@ -56,22 +49,18 @@ const Navbar = () => {
   const location = useLocation();
   const { pathname } = location;
   const { user, signOut } = useAuth();
+  const accountType = useAccountType(user);
+  const isAdminUser = accountType === 'admin';
+  const isClientUser = accountType === 'client';
+  const isTalentUser = accountType === 'talent';
   const [isOpen, setIsOpen] = useState(false);
   const [isScaleOpen, setIsScaleOpen] = useState(false);
-  const [isAdminUser, setIsAdminUser] = useState(false);
 
-  useEffect(() => {
-    if (!user) {
-      setIsAdminUser(false);
-      return;
-    }
-    fetchIsAdmin()
-      .then(setIsAdminUser)
-      .catch(() => setIsAdminUser(false));
-  }, [user]);
-
-  const navLinks = isAdminUser ? ADMIN_NAV_LINKS : PUBLIC_NAV_LINKS;
-  const homeHref = isAdminUser ? '/admin/dashboard' : '/';
+  const baseNavLinks = isAdminUser ? ADMIN_NAV_LINKS : PUBLIC_NAV_LINKS;
+  const navLinks = isClientUser
+    ? baseNavLinks.filter((link) => link.href !== '/talent/signup')
+    : baseNavLinks;
+  const homeHref = isAdminUser ? '/admin/dashboard' : isClientUser ? '/client' : '/';
 
   const isScaleSectionActive = (dropdown) =>
     dropdown?.some((item) => isNavLinkActive(pathname, item.href));
@@ -189,7 +178,19 @@ const Navbar = () => {
 
             {user ? (
               <div className="flex items-center gap-4 border-l border-gray-200 pl-6 ml-2">
-                {!isAdminUser && (
+                {isClientUser && (
+                  <Link
+                    to="/client"
+                    className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                      pathname === '/client' || pathname.startsWith('/client/')
+                        ? 'text-red border-red'
+                        : 'text-black border-transparent hover:text-red'
+                    }`}
+                  >
+                    <LayoutDashboard size={15} /> My Dashboard
+                  </Link>
+                )}
+                {isTalentUser && (
                   <Link
                     to="/portal"
                     className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
@@ -212,9 +213,9 @@ const Navbar = () => {
             ) : (
               <div className="border-l border-gray-200 pl-6 ml-2">
                 <Link
-                  to="/talent/login"
+                  to="/login"
                   className={`text-sm font-bold transition-colors border-b-2 pb-0.5 ${
-                    pathname === '/talent/login'
+                    pathname === '/login' || pathname === '/talent/login' || pathname === '/client/login'
                       ? 'text-red border-red'
                       : 'text-red border-transparent hover:text-black'
                   }`}
@@ -286,7 +287,12 @@ const Navbar = () => {
             <div className="pt-4 mt-4 border-t border-gray-100">
               {user ? (
                 <>
-                  {!isAdminUser && (
+                  {isClientUser && (
+                    <Link to="/client" onClick={closeMobile} className={mobileLinkClass('/client')}>
+                      My Dashboard
+                    </Link>
+                  )}
+                  {isTalentUser && (
                     <Link to="/portal" onClick={closeMobile} className={mobileLinkClass('/portal')}>
                       My Portal
                     </Link>
@@ -300,7 +306,7 @@ const Navbar = () => {
                   </button>
                 </>
               ) : (
-                <Link to="/talent/login" onClick={closeMobile} className={mobileLinkClass('/talent/login', true)}>
+                <Link to="/login" onClick={closeMobile} className={mobileLinkClass('/login', true)}>
                   Log In
                 </Link>
               )}

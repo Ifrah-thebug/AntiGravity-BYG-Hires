@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AlertTriangle, X, Plus, ArrowRight, Sparkles, Mail } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Sparkles, Mail } from 'lucide-react';
+import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatAuthError } from '../lib/talentAuth';
@@ -23,10 +24,6 @@ import {
 } from '../lib/profileContentPolicy';
 
 const TalentSetupPage = () => {
-  const parsedAvailability = String(initialParsed?.availability || '');
-  const initialAvailabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(parsedAvailability)
-    ? parsedAvailability
-    : '';
   const navigate = useNavigate();
   const location = useLocation();
   const { session, loading: authLoading } = useAuth();
@@ -36,6 +33,10 @@ const TalentSetupPage = () => {
 
   const initialParsed = stateData.parsed || pending?.parsed;
   const initialName = stateData.name || pending?.name || '';
+  const parsedAvailability = String(initialParsed?.availability || '');
+  const initialAvailabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(parsedAvailability)
+    ? parsedAvailability
+    : '';
 
   const [form, setForm] = useState({
     name: normalizeProfileName(initialName),
@@ -47,6 +48,7 @@ const TalentSetupPage = () => {
     availability_from_month: initialAvailabilityDate,
     role_type: initialParsed?.role_type || 'flexible',
     skills: initialParsed?.skills || [],
+    best_skill: initialParsed?.best_skill || initialParsed?.skills?.[0] || '',
   });
   const [cvUrl, setCvUrl] = useState(stateData.cvUrl || pending?.cvUrl || '');
   const [photoUrl, setPhotoUrl] = useState(stateData.photoUrl || pending?.photoUrl || '');
@@ -76,6 +78,7 @@ const TalentSetupPage = () => {
         availability_from_month: pendingAvailabilityDate,
         role_type: pending.parsed?.role_type || 'flexible',
         skills: pending.parsed?.skills || [],
+        best_skill: pending.parsed?.best_skill || pending.parsed?.skills?.[0] || '',
       });
       setPhotoUrl(pending.photoUrl || '');
       setCvUrl(pending.cvUrl || '');
@@ -116,13 +119,16 @@ const TalentSetupPage = () => {
       return;
     }
     if (form.skills.length < 8 && !form.skills.includes(s)) {
-      setForm(f => ({ ...f, skills: [...f.skills, s] }));
+      setForm((f) => ({
+        ...f,
+        skills: [...f.skills, s],
+        best_skill: f.best_skill || s,
+      }));
       setNewSkill('');
       setError('');
     }
   };
 
-  const removeSkill = (skill) => setForm(f => ({ ...f, skills: f.skills.filter(s => s !== skill) }));
 
   const ensureFileUrls = async (userId) => {
     let nextCv = cvUrl;
@@ -188,6 +194,7 @@ const TalentSetupPage = () => {
         job_title: prepared.data.job_title,
         about: prepared.data.about,
         skills: prepared.data.skills,
+        best_skill: prepared.data.best_skill,
         experience_years: prepared.data.experience_years,
         monthly_fee_usd: prepared.data.monthly_fee_usd,
         directory_fee_usd: prepared.data.directory_fee_usd,
@@ -205,6 +212,7 @@ const TalentSetupPage = () => {
         job_title: prepared.data.job_title,
         about: prepared.data.about,
         skills: prepared.data.skills,
+        best_skill: prepared.data.best_skill,
         monthly_fee_usd: prepared.data.monthly_fee_usd,
         directory_fee_usd: prepared.data.directory_fee_usd,
         availability: prepared.data.availability,
@@ -387,38 +395,16 @@ const TalentSetupPage = () => {
               </select>
             </div>
 
-            <div className="space-y-3">
-              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                Skills ({form.skills.length}/8)
-              </label>
-              <div className="flex flex-wrap gap-2 min-h-[40px]">
-                {form.skills.map(skill => (
-                  <span key={skill} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-[10px] font-black uppercase rounded-full">
-                    {skill}
-                    {!awaitingEmailConfirm && (
-                      <button type="button" onClick={() => removeSkill(skill)} className="hover:text-red">
-                        <X size={9} />
-                      </button>
-                    )}
-                  </span>
-                ))}
-              </div>
-              {!awaitingEmailConfirm && (
-                <div className="flex gap-2">
-                  <input
-                    value={newSkill}
-                    onChange={e => setNewSkill(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
-                    placeholder="Add a skill…"
-                    className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold"
-                  />
-                  <button type="button" onClick={addSkill} disabled={!newSkill.trim() || form.skills.length >= 8}
-                    className="px-4 py-2.5 bg-black text-white text-xs font-black rounded-xl disabled:opacity-40">
-                    <Plus size={12} className="inline" /> Add
-                  </button>
-                </div>
-              )}
-            </div>
+            <ProfileSkillsEditor
+              skills={form.skills}
+              bestSkill={form.best_skill}
+              onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
+              onBestSkillChange={(best_skill) => setForm((f) => ({ ...f, best_skill }))}
+              newSkill={newSkill}
+              onNewSkillChange={setNewSkill}
+              onAddSkill={addSkill}
+              disabled={awaitingEmailConfirm}
+            />
 
             {photoUrl && (
               <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-2xl p-4">

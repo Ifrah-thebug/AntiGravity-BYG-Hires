@@ -11,6 +11,10 @@ import {
 } from '../data/talentData';
 import { formatDisplayName } from '../lib/formatDisplayName';
 import { talentService } from '../services/talentService';
+import TalentSkillTags from '../components/TalentSkillTags';
+import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
+import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
+import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -62,27 +66,13 @@ const AvailBadge = ({ avail }) => {
   );
 };
 
-// ─── Score Ring ───────────────────────────────────────────────────────────────
-const ScoreRing = ({ score }) => {
-  const r = 18, circ = 2 * Math.PI * r;
-  const offset = circ - (score / 100) * circ;
-  const color = score >= 90 ? '#22c55e' : score >= 80 ? '#f59e0b' : '#ef4444';
-  return (
-    <div className="relative w-12 h-12 shrink-0">
-      <svg viewBox="0 0 44 44" className="w-full h-full -rotate-90">
-        <circle cx="22" cy="22" r={r} fill="none" stroke="#f1f5f9" strokeWidth="4" />
-        <circle cx="22" cy="22" r={r} fill="none" stroke={color} strokeWidth="4"
-          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
-      </svg>
-      <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-gray-800">{score}</span>
-    </div>
-  );
-};
-
 // ─── Talent Card ──────────────────────────────────────────────────────────────
-const TalentCard = ({ talent, onSelect }) => {
+const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
   const navigate = useNavigate();
-  const showMatchBadge = Boolean(talent.verified) && (Number(talent.score) > 0 || Number(talent.match) > 0);
+  const showMatchBadge =
+    SHOW_ASSESSMENT_SCORE &&
+    Boolean(talent.verified) &&
+    (Number(talent.score) > 0 || Number(talent.match) > 0);
 
   // Mapping roleType values to match availability badge styles from TalentMatchmaking
   const roleTypeColors = {
@@ -151,19 +141,7 @@ const TalentCard = ({ talent, onSelect }) => {
           <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
         </div>
 
-        {/* Skills */}
-        <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
-          {talent.tags && talent.tags.slice(0, 2).map(tag => (
-            <span key={tag} className="px-2 py-1 bg-gray-50 border border-gray-100 text-gray-600 font-bold text-[9px] uppercase tracking-widest rounded-lg whitespace-nowrap">
-              {tag}
-            </span>
-          ))}
-          {talent.tags && talent.tags.length > 2 && (
-            <span className="px-2 py-1 text-gray-400 font-bold text-[9px] whitespace-nowrap">
-              +{talent.tags.length - 2} more
-            </span>
-          )}
-        </div>
+        <TalentSkillTags tags={talent.tags} bestSkill={talent.bestSkill} className="h-[24px]" />
 
         {/* Experience & Role Type */}
         <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
@@ -183,22 +161,35 @@ const TalentCard = ({ talent, onSelect }) => {
           </p>
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/request-intro?id=${talent.id}`);
-          }}
-          className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
-        >
-          Request Intro
-        </button>
+        {canRequestIntro ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/request-intro?id=${talent.id}`);
+            }}
+            className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
+          >
+            Request Intro
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(talent);
+            }}
+            className="w-full py-3.5 border border-gray-200 bg-gray-50 text-gray-700 text-[10px] font-black tracking-widest uppercase rounded-xl hover:border-gray-300 hover:bg-gray-100 transition-colors"
+          >
+            View profile
+          </button>
+        )}
       </div>
     </motion.div>
   );
 };
 
 // ─── Talent Detail Modal ──────────────────────────────────────────────────────
-const TalentModal = ({ talent, onClose }) => {
+const TalentModal = ({ talent, onClose, canRequestIntro = true }) => {
   const navigate = useNavigate();
   if (!talent) return null;
   return (
@@ -232,10 +223,7 @@ const TalentModal = ({ talent, onClose }) => {
             <div className="flex items-start gap-6 relative z-10">
               <Avatar name={talent.name} score={talent.score} photo={talent.photo} size="w-48 h-48 text-5xl" />
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle2 size={14} className="text-green-400" />
-                  <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
-                </div>
+                <ProfileVerificationBadge talent={talent} variant="dark" />
                 <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
@@ -243,16 +231,17 @@ const TalentModal = ({ talent, onClose }) => {
                 </div>
               </div>
             </div>
-            {/* Score bar */}
-            <div className="mt-6 relative z-10">
-              <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                <span>Assessment Score</span><span className="text-white">{talent.score}/100</span>
+            {SHOW_ASSESSMENT_SCORE && talent.score > 0 && (
+              <div className="mt-6 relative z-10">
+                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                  <span>Assessment Score</span><span className="text-white">{talent.score}/100</span>
+                </div>
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${talent.score}%` }} transition={{ delay: 0.3, duration: 0.7 }}
+                    className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300" />
+                </div>
               </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${talent.score}%` }} transition={{ delay: 0.3, duration: 0.7 }}
-                  className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300" />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Body */}
@@ -290,17 +279,18 @@ const TalentModal = ({ talent, onClose }) => {
               ))}
             </div>
 
-            {/* CTA */}
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => navigate(`/request-intro?id=${talent.id}`)}
-                className="flex-1 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
-              >
-                Request Intro <ArrowRight size={14} />
-              </button>
+              {canRequestIntro && (
+                <button
+                  onClick={() => navigate(`/request-intro?id=${talent.id}`)}
+                  className="flex-1 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
+                >
+                  Request Intro <ArrowRight size={14} />
+                </button>
+              )}
               <button
                 onClick={onClose}
-                className="px-6 py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors"
+                className={`${canRequestIntro ? 'px-6' : 'flex-1'} py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors`}
               >
                 Close
               </button>
@@ -400,16 +390,18 @@ const FilterPanel = ({ filters, onChange, onClear }) => {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 const TalentBrowsePage = () => {
+  const { isLoggedInTalent } = useIsLoggedInTalent();
+  const canRequestIntro = !isLoggedInTalent;
   const [talents, setTalents] = useState([]);
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    setTalents(talentService.getAllBrowseTalents());
+    setTalents(sanitizeTalentList(talentService.getAllBrowseTalents()));
   }, []);
 
   const [activedept, setActivedept] = useState('all');
   const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('score-desc');
+  const [sortBy, setSortBy] = useState('name-asc');
   const [showSort, setShowSort] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ availability: [], roleType: [], maxFee: 2000 });
@@ -468,7 +460,7 @@ const TalentBrowsePage = () => {
             Find your<br /><span className="text-red">perfect match.</span>
           </h1>
           <p className="text-gray-500 text-lg font-medium max-w-xl mx-auto leading-relaxed">
-            Every talent here passed a real-world assessment, scored by our team. No resume roulette.
+            Browse vetted talent profiles. Assessment scores will appear in a future release.
           </p>
         </motion.div>
 
@@ -581,7 +573,7 @@ const TalentBrowsePage = () => {
           </p>
           <div className="flex items-center gap-2">
             <Award size={12} className="text-red" />
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">All profiles are assessment-verified</p>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Assessment verification coming soon</p>
           </div>
         </div>
 
@@ -594,7 +586,12 @@ const TalentBrowsePage = () => {
               className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
             >
               {visible.map(talent => (
-                <TalentCard key={talent.id} talent={talent} onSelect={setSelectedTalent} />
+                <TalentCard
+                  key={talent.id}
+                  talent={talent}
+                  onSelect={setSelectedTalent}
+                  canRequestIntro={canRequestIntro}
+                />
               ))}
             </motion.div>
           ) : (
@@ -616,7 +613,13 @@ const TalentBrowsePage = () => {
       </div>
 
       {/* Talent Detail Modal */}
-      {selectedTalent && <TalentModal talent={selectedTalent} onClose={() => setSelectedTalent(null)} />}
+      {selectedTalent && (
+        <TalentModal
+          talent={selectedTalent}
+          onClose={() => setSelectedTalent(null)}
+          canRequestIntro={canRequestIntro}
+        />
+      )}
     </div>
   );
 };

@@ -11,12 +11,30 @@ const talentRouter = require('./routes/talent');
 const fileRouter = require('./routes/files');
 const assessmentRouter = require('./routes/assessment');
 const adminRouter = require('./routes/admin');
+const calRouter = require('./routes/cal');
+const introRouter = require('./routes/intro');
+const profilePhotoRouter = require('./routes/profilePhoto');
+const clientRouter = require('./routes/client');
+const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
 
 // Middleware
 app.use(helmet());
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+const corsOrigins = [
+  process.env.CLIENT_URI,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+].filter(Boolean);
+
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin || corsOrigins.includes(origin)) return cb(null, true);
+    return cb(null, false);
+  },
+  credentials: true,
+  exposedHeaders: ['X-Photo-Sharp', 'X-Photo-Leonardo', 'X-Photo-Model', 'X-Photo-Heic', 'X-Photo-Pipeline'],
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -32,6 +50,10 @@ app.use('/api/talent', talentRouter);
 app.use('/api/files', fileRouter);
 app.use('/api/assessment', assessmentRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/cal', calRouter);
+app.use('/api/intro', introRouter);
+app.use('/api/profile', profilePhotoRouter);
+app.use('/api/client', clientRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -39,4 +61,24 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`Backend server listening on port ${PORT}`);
+  if (process.env.LEONARDO_API_KEY) {
+    console.log(
+      `[profilePhoto] Leonardo AI (${process.env.LEONARDO_MODEL || 'nano-banana-2'}) enhancement enabled`
+    );
+  } else {
+    console.log(
+      '[profilePhoto] LEONARDO_API_KEY not set — sharp-only crop fallback for /api/profile/enhance-photo'
+    );
+  }
+  if (useConsoleProvider()) {
+    if (process.env.EMAIL_PROVIDER === 'console') {
+      console.log('[email] EMAIL_PROVIDER=console — activation links logged to console');
+    } else {
+      console.log(
+        '[email] RESEND_API_KEY missing in .env — activation links logged to console (save project root .env and restart backend)'
+      );
+    }
+  } else {
+    console.log('[email] Resend client activation emails enabled');
+  }
 });

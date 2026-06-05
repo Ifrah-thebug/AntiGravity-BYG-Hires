@@ -1,4 +1,5 @@
 import { normalizeProfileName } from './formatDisplayName';
+import { resolveBestSkill } from './talentSkillsDisplay';
 
 /** Shown under About / profile fields */
 export const PROFILE_CONTENT_HINT =
@@ -105,7 +106,7 @@ function issuesToMessage(fieldLabel, issueKeys) {
 /**
  * @returns {string[]} Human-readable validation errors (empty = ok)
  */
-export function validateProfileFields({ name, job_title, about, skills }) {
+export function validateProfileFields({ name, job_title, about, skills, best_skill }) {
   const errors = [];
 
   const scalarFields = [
@@ -124,6 +125,9 @@ export function validateProfileFields({ name, job_title, about, skills }) {
     if (issues.length) errors.push(issuesToMessage(`Skill "${skill}"`, issues));
   }
 
+  const bestIssues = getRestrictedContentIssues(best_skill || '');
+  if (bestIssues.length) errors.push(issuesToMessage('Top skill', bestIssues));
+
   return errors;
 }
 
@@ -137,11 +141,15 @@ export function prepareProfileForSave(fields) {
   const roleType = String(fields.role_type || 'flexible');
   const availabilityDate = normalizeAvailabilityFromMonth(fields.availability_from_month);
 
+  const skills = (fields.skills || []).map((s) => s.trim()).filter(Boolean);
+  const best_skill = resolveBestSkill(fields.best_skill, skills);
+
   const data = {
     name: normalizeProfileName(fields.name),
     job_title: (fields.job_title || '').trim(),
     about: (fields.about || '').trim(),
-    skills: (fields.skills || []).map((s) => s.trim()).filter(Boolean),
+    skills,
+    best_skill,
     experience_years: Number(fields.experience_years) || 0,
     monthly_fee_usd: Number.isFinite(monthlyFeeUsd) ? Math.max(0, Math.round(monthlyFeeUsd)) : 0,
     directory_fee_usd: calculateDirectoryFeeUsd(monthlyFeeUsd),
@@ -157,6 +165,9 @@ export function prepareProfileForSave(fields) {
   }
   if (!data.job_title) {
     return { ok: false, errors: ['Professional title is required.'], data: null };
+  }
+  if (skills.length && !data.best_skill) {
+    return { ok: false, errors: ['Choose your top skill from the list.'], data: null };
   }
   if (monthlyFeeUsd < 0) {
     return { ok: false, errors: ['Monthly fee cannot be negative.'], data: null };

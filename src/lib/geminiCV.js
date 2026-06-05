@@ -12,6 +12,7 @@ Read this CV document and extract the following fields. Return ONLY valid JSON â
 {
   "name": "Full name of the candidate (string)",
   "job_title": "Most recent or most relevant professional job title (string, e.g. 'Senior Operations Manager')",
+  "best_skill": "Single strongest skill from the CV (string, must be one of the skills array)",
   "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6"],
   "experience_years": 5,
   "about": "A 2â€“3 sentence professional bio written in first person (I/my), as if the candidate wrote it. Highlight expertise, key strengths, and value for remote work. Sound premium and confident."
@@ -19,27 +20,37 @@ Read this CV document and extract the following fields. Return ONLY valid JSON â
 
 Rules:
 - skills: exactly 6, specific and relevant (not generic like 'communication')
+- best_skill: the ONE skill they are strongest at (must exactly match one entry in skills)
 - experience_years: a number (integer), estimate from CV
 - about: strictly 2â€“3 sentences, first person only (use I, my, me â€” never he/she/they or the candidate's name), professional tone, no filler phrases
 - Keep "about" under 80 words so the JSON fits in one response`;
 
 function mockData() {
+  const skills = ['Project Management', 'Communication', 'CRM Tools', 'Data Analysis', 'Process Optimisation', 'Remote Collaboration'];
   return {
     name: '',
     job_title: 'Remote Operations Specialist',
-    skills: ['Project Management', 'Communication', 'CRM Tools', 'Data Analysis', 'Process Optimisation', 'Remote Collaboration'],
+    best_skill: skills[0],
+    skills,
     experience_years: 3,
     about: 'I am a motivated remote professional with a proven track record in operations and client management. I bring strong organisational skills and a results-driven mindset to every engagement, and I am available for immediate remote placement.',
   };
 }
 
 function normalizeParsed(parsed) {
+  const skills = Array.isArray(parsed.skills)
+    ? parsed.skills.map((s) => String(s).trim()).filter(Boolean).slice(0, 8)
+    : ['Communication', 'Organisation', 'Microsoft Office', 'Problem Solving', 'Time Management', 'Remote Work'];
+  const rawBest = String(parsed.best_skill || parsed.bestSkill || '').trim();
+  const best_skill = rawBest && skills.some((s) => s.toLowerCase() === rawBest.toLowerCase())
+    ? skills.find((s) => s.toLowerCase() === rawBest.toLowerCase())
+    : skills[0] || '';
+
   return {
     name: parsed.name || '',
     job_title: parsed.job_title || 'Remote Professional',
-    skills: Array.isArray(parsed.skills)
-      ? parsed.skills.slice(0, 6)
-      : ['Communication', 'Organisation', 'Microsoft Office', 'Problem Solving', 'Time Management', 'Remote Work'],
+    best_skill,
+    skills,
     experience_years: typeof parsed.experience_years === 'number' ? parsed.experience_years : 3,
     about: parsed.about || 'I am a dedicated remote professional with a strong track record of delivering results.',
   };
@@ -95,11 +106,17 @@ function trySalvagePartialJson(text) {
     found = true;
   }
 
+  const bestSkillMatch = text.match(/"best_skill"\s*:\s*"([^"]+)"/);
+  if (bestSkillMatch) {
+    salvaged.best_skill = bestSkillMatch[1];
+    found = true;
+  }
+
   const skillsMatch = text.match(/"skills"\s*:\s*\[([\s\S]*?)(?:\]|$)/);
   if (skillsMatch) {
     const skillStrings = skillsMatch[1].match(/"([^"]+)"/g);
     if (skillStrings?.length) {
-      salvaged.skills = skillStrings.map((s) => s.replace(/"/g, '')).slice(0, 6);
+      salvaged.skills = skillStrings.map((s) => s.replace(/"/g, '')).slice(0, 8);
       found = true;
     }
   }

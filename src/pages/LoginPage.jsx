@@ -1,0 +1,177 @@
+import React, { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, Lock, Mail, Shield } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { formatAuthError, routeAfterAuth } from '../lib/talentAuth';
+import { fetchLoginRoleHint, loginHintMessage } from '../lib/clientAuth';
+import { adminSignupConfigured } from '../lib/adminAuth';
+import { useNavigate } from 'react-router-dom';
+import logo from '../assets/BYG Hires Logo.png';
+
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const { signIn } = useAuth();
+  const [form, setForm] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [roleHint, setRoleHint] = useState(null);
+  const [hintLoading, setHintLoading] = useState(false);
+
+  useEffect(() => {
+    const em = form.email.trim().toLowerCase();
+    if (!em || !em.includes('@')) {
+      setRoleHint(null);
+      return undefined;
+    }
+
+    const timer = setTimeout(async () => {
+      setHintLoading(true);
+      const role = await fetchLoginRoleHint(em);
+      setRoleHint(role);
+      setHintLoading(false);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [form.email]);
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      await signIn(form.email, form.password);
+      await routeAfterAuth(navigate);
+    } catch (err) {
+      setError(formatAuthError(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const hintText = loginHintMessage(roleHint);
+
+  return (
+    <div className="bg-white min-h-screen pt-20 pb-24 px-4 font-sans flex items-center justify-center">
+      <div className="w-full max-w-md">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-10"
+        >
+          <img src={logo} alt="BYG Hires" className="h-10 w-auto mx-auto mb-6" />
+          <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">
+            BYG Hires
+          </p>
+          <h1 className="text-3xl md:text-4xl font-black text-black tracking-tight mb-3">
+            Log in
+          </h1>
+          <p className="text-gray-500 text-sm font-medium">
+            Clients and talent use the same sign-in — we route you to the right dashboard.
+          </p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-8 space-y-6"
+        >
+          {error && (
+            <div className="p-4 bg-red/5 border border-red/20 text-red rounded-2xl flex items-start gap-3 text-sm font-semibold">
+              <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Mail size={10} /> Email
+              </label>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                required
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:border-red outline-none"
+                placeholder="you@company.com"
+              />
+              {hintLoading && (
+                <p className="text-[11px] text-gray-400 font-medium">Checking account type…</p>
+              )}
+              {!hintLoading && hintText && (
+                <p
+                  className={`text-[11px] font-semibold leading-relaxed rounded-lg px-3 py-2 ${
+                    roleHint === 'client_pending'
+                      ? 'text-amber-800 bg-amber-50 border border-amber-200'
+                      : 'text-gray-600 bg-gray-50 border border-gray-100'
+                  }`}
+                >
+                  {hintText}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Lock size={10} /> Password
+              </label>
+              <input
+                type="password"
+                name="password"
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                required
+                className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold focus:border-red outline-none"
+                placeholder="••••••••"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 bg-black text-white hover:bg-red transition-colors disabled:opacity-60"
+            >
+              {loading ? 'Signing in…' : 'Continue'}
+              <ArrowRight size={14} />
+            </button>
+          </form>
+
+          <div className="pt-4 border-t border-gray-100 space-y-2 text-center text-xs text-gray-500 font-medium">
+            <p>
+              Booked an intro?{' '}
+              <span className="text-gray-700">Activate via the link in your email first.</span>
+            </p>
+            <p>
+              Talent new here?{' '}
+              <Link to="/talent/signup" className="text-red font-bold hover:underline">
+                Join the Talent Pool
+              </Link>
+            </p>
+          </div>
+        </motion.div>
+
+        {adminSignupConfigured() && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-6 bg-gray-50 border border-gray-200 rounded-[1.5rem] p-6 space-y-3"
+          >
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center flex items-center justify-center gap-1.5">
+              <Shield size={11} className="text-red" /> BYG internal
+            </p>
+            <Link
+              to="/admin/login"
+              className="block w-full py-3.5 bg-black text-white text-center text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red transition-colors"
+            >
+              Log in as admin
+            </Link>
+          </motion.div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
-import { loadPendingSetup, clearPendingSetup } from './talentStorage';
+import { loadPendingSetup } from './talentStorage';
 import { fetchIsAdmin } from './adminAuth';
+import { fetchIsClient } from './clientAuth';
 
 /** User-friendly auth / API errors */
 export function formatAuthError(err) {
@@ -40,12 +41,13 @@ export function isProfileComplete(profile) {
 }
 
 /**
- * After login: pending setup → setup page; no profile → setup; else portal.
+ * After login: admin → talent setup/portal → client dashboard.
+ * Admin uses /admin/login separately; this path is for talent and clients.
  */
 export async function routeAfterAuth(navigate) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) {
-    navigate('/talent/login');
+    navigate('/login');
     return;
   }
 
@@ -72,32 +74,50 @@ export async function routeAfterAuth(navigate) {
   }
 
   const profile = await fetchUserProfile(user.id);
-  if (!isProfileComplete(profile)) {
-    navigate('/talent/setup', {
-      state: {
-        userId: user.id,
-        email: user.email,
-        name: profile?.name || user.user_metadata?.full_name || '',
-        parsed: profile
-          ? {
-              job_title: profile.job_title,
-              about: profile.about,
-              skills: profile.skills || [],
-              experience_years: profile.experience_years,
-              monthly_fee_usd: profile.monthly_fee_usd,
-              availability: profile.availability,
-              availability_from_month: profile.availability_from_month,
-              role_type: profile.role_type,
-            }
-          : null,
-        photoUrl: profile?.photo_url || '',
-        cvUrl: profile?.cv_url || '',
-        resumeSetup: true,
-        incompleteProfile: true,
-      },
-    });
+  if (profile) {
+    if (!isProfileComplete(profile)) {
+      navigate('/talent/setup', {
+        state: {
+          userId: user.id,
+          email: user.email,
+          name: profile?.name || user.user_metadata?.full_name || '',
+          parsed: profile
+            ? {
+                job_title: profile.job_title,
+                about: profile.about,
+                skills: profile.skills || [],
+                experience_years: profile.experience_years,
+                monthly_fee_usd: profile.monthly_fee_usd,
+                availability: profile.availability,
+                availability_from_month: profile.availability_from_month,
+                role_type: profile.role_type,
+              }
+            : null,
+          photoUrl: profile?.photo_url || '',
+          cvUrl: profile?.cv_url || '',
+          resumeSetup: true,
+          incompleteProfile: true,
+        },
+      });
+      return;
+    }
+
+    navigate('/portal');
     return;
   }
 
-  navigate('/portal');
+  if (await fetchIsClient(user.id)) {
+    navigate('/client');
+    return;
+  }
+
+  navigate('/talent/setup', {
+    state: {
+      userId: user.id,
+      email: user.email,
+      name: user.user_metadata?.full_name || '',
+      resumeSetup: true,
+      incompleteProfile: true,
+    },
+  });
 }

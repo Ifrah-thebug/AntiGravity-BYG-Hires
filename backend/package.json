@@ -4,13 +4,14 @@
   "description": "Production backend for BYG Hires Talent Pool",
   "main": "src/server.js",
   "scripts": {
-    "dev": "node src/server.js",
+    "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "test": "jest"
   },
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@imgly/background-removal-node": "^1.4.5",
     "@sendgrid/mail": "^8.0.0",
     "@supabase/supabase-js": "^2.33.0",
     "axios": "^1.16.1",
@@ -20,9 +21,12 @@
     "express-rate-limit": "^7.2.0",
     "express-session": "^1.19.0",
     "googleapis": "^124.0.0",
+    "heic-convert": "^2.1.0",
     "helmet": "^7.0.0",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.11.3",
+    "resend": "^6.12.4",
+    "sharp": "^0.34.5",
     "uuid": "^9.0.0"
   },
   "devDependencies": {

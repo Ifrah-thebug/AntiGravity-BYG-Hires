@@ -5,15 +5,18 @@ import { motion } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LogOut, Save, AlertTriangle, CheckCircle2,
-  X, Plus, ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
-  Sparkles, ArrowRight, Lock
+  ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
+  Sparkles, ArrowRight, Calendar
 } from 'lucide-react';
+import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
+import TalentIntroAvailability from '../components/TalentIntroAvailability';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
-import { isProfileComplete } from '../lib/talentAuth';
+import { isProfileComplete, fetchUserProfile } from '../lib/talentAuth';
 import { fetchIsAdmin } from '../lib/adminAuth';
+import { fetchIsClient } from '../lib/clientAuth';
 import logo from '../assets/BYG Hires Logo.png';
-import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
+import { processProfilePhotoWithAI, fileToDataUrl } from '../lib/processProfilePhoto';
 import { normalizeProfileName } from '../lib/formatDisplayName';
 import {
   PROFILE_CONTENT_HINT,
@@ -24,45 +27,45 @@ import {
   validateProfileFields,
 } from '../lib/profileContentPolicy';
 
-const STRENGTHEN_ACTIONS = [
-  {
-    id: 'assessment',
-    label: 'Take skills assessment',
-    description: 'Prove your skills with a real-world task (~25 min).',
-    href: '/assessment',
-    primary: true,
-    available: true,
-  },
-  {
-    id: 'status',
-    label: 'Assessment status',
-    description: 'See your score and reviewer feedback.',
-    href: null,
-    available: false,
-  },
-  {
-    id: 'prep',
-    label: 'Assessment prep tips',
-    description: 'How to stand out before you start.',
-    href: null,
-    available: false,
-  },
-  {
-    id: 'visibility',
-    label: 'Boost directory ranking',
-    description: 'Higher scores appear higher to clients.',
-    href: null,
-    available: false,
-  },
-];
+function buildStrengthenActions(connectCalendarUrl) {
+  const actions = [
+    {
+      id: 'assessment',
+      label: 'Take skills assessment',
+      description: 'Prove your skills with a real-world task (~25 min).',
+      href: '/assessment',
+      variant: 'assessment',
+    },
+  ];
+  if (connectCalendarUrl) {
+    actions.push({
+      id: 'calendar',
+      label: 'Connect your calendar',
+      description: 'Sync Cal.com so HR can book intro interviews when clients request you.',
+      href: connectCalendarUrl,
+      external: true,
+      variant: 'calendar',
+    });
+  }
+  return actions;
+}
 
-function StrengthenProfilePanel() {
+function scrollToClientIntroSection() {
+  const el = document.getElementById('client-intro-scheduling');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  window.history.replaceState(null, '', '#client-intro-scheduling');
+}
+
+function StrengthenProfilePanel({ connectCalendarUrl }) {
+  const actions = buildStrengthenActions(connectCalendarUrl);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="bg-gradient-to-br from-red to-[#b10f1f] border border-red/80 rounded-[2rem] p-8 shadow-xl shadow-red/20 lg:sticky lg:top-28 space-y-6"
+      className="bg-red border border-red rounded-[2rem] p-8 shadow-xl shadow-red/20 lg:sticky lg:top-28 space-y-6"
     >
       <div>
         <p className="text-white/90 font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
@@ -72,10 +75,97 @@ function StrengthenProfilePanel() {
           Strengthen your profile
         </h3>
         <p className="text-white/90 text-sm font-semibold mt-3 leading-relaxed">
-          Take the assessment and rank your profile higher in the talent directory. Verified scores
-          help clients trust your skills faster.
+          Complete your assessment and connect your calendar. Then use the link below to publish intro
+          availability for clients.
         </p>
       </div>
+
+      <div className="space-y-3">
+        {actions.map((action) => {
+          const isAssessment = action.variant === 'assessment';
+          const isCalendar = action.variant === 'calendar';
+          const Icon = isCalendar ? Calendar : ClipboardCheck;
+
+          const inner = (
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div
+                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    isAssessment
+                      ? 'bg-red text-white'
+                      : 'bg-red/10 text-red'
+                  }`}
+                >
+                  <Icon size={18} />
+                </div>
+                <div className="min-w-0">
+                  <p
+                    className={`font-black text-sm ${
+                      isCalendar ? 'text-gray-900' : 'text-white'
+                    }`}
+                  >
+                    {action.label}
+                  </p>
+                  <p
+                    className={`text-[11px] font-medium mt-1 leading-snug ${
+                      isCalendar ? 'text-gray-600' : 'text-white/75'
+                    }`}
+                  >
+                    {action.description}
+                  </p>
+                </div>
+              </div>
+              <ArrowRight
+                size={16}
+                className={`shrink-0 mt-1 ${isCalendar ? 'text-red' : 'text-white'}`}
+              />
+            </div>
+          );
+
+          if (action.external) {
+            return (
+              <a
+                key={action.id}
+                href={action.href}
+                className="block w-full text-left rounded-2xl border-2 border-white p-4 transition-all bg-white hover:bg-gray-50 shadow-lg shadow-black/15 hover:shadow-xl"
+              >
+                {inner}
+              </a>
+            );
+          }
+
+          return (
+            <Link
+              key={action.id}
+              to={action.href}
+              className="block w-full text-left rounded-2xl border p-4 transition-all bg-black text-white border-black hover:bg-[#1a1a1a] hover:border-[#1a1a1a] shadow-lg shadow-black/20"
+            >
+              {inner}
+            </Link>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={scrollToClientIntroSection}
+        className="block w-full text-left rounded-2xl border-2 border-white/90 p-4 transition-all bg-white/95 hover:bg-white shadow-lg shadow-black/15 hover:shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-red/10 text-red flex items-center justify-center shrink-0">
+              <Calendar size={18} />
+            </div>
+            <div className="min-w-0">
+              <p className="font-black text-sm text-gray-900">Client intro scheduling</p>
+              <p className="text-[11px] font-medium text-gray-600 mt-1 leading-snug">
+                Jump to available slots and upcoming intro calls on this page.
+              </p>
+            </div>
+          </div>
+          <ArrowRight size={16} className="shrink-0 mt-1 text-red" />
+        </div>
+      </button>
 
       <div className="rounded-2xl bg-black/20 border border-white/20 p-5 space-y-3">
         <div className="flex items-start gap-3">
@@ -90,79 +180,10 @@ function StrengthenProfilePanel() {
           </div>
         </div>
         <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-wider">
-          <TrendingUp size={12} className="text-black" />
-          Higher score → stronger visibility
+          <TrendingUp size={12} className="text-white" />
+          Complete assessment (Phase 2) → stronger visibility
         </div>
       </div>
-
-      <div className="space-y-3">
-        {STRENGTHEN_ACTIONS.map((action) => {
-          const isPrimaryCta = action.primary && action.available;
-          const inner = (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3 min-w-0">
-                  <ClipboardCheck
-                    size={18}
-                    className={`shrink-0 mt-0.5 ${
-                      isPrimaryCta ? 'text-red' : 'text-white/75'
-                    }`}
-                  />
-                  <div className="min-w-0">
-                    <p className={`font-black text-sm ${isPrimaryCta ? 'text-white' : 'text-white'}`}>
-                      {action.label}
-                    </p>
-                    <p
-                      className={`text-[11px] font-medium mt-1 leading-snug ${
-                        isPrimaryCta ? 'text-white/75' : 'text-white/80'
-                      }`}
-                    >
-                      {action.description}
-                    </p>
-                  </div>
-                </div>
-                {action.available ? (
-                  <ArrowRight size={16} className={`shrink-0 ${isPrimaryCta ? 'text-white' : 'text-white/90'}`} />
-                ) : (
-                  <span className="shrink-0 text-[9px] font-black uppercase tracking-wider text-white/70 bg-black/30 border border-white/20 px-2 py-1 rounded-full flex items-center gap-1">
-                    <Lock size={9} /> Soon
-                  </span>
-                )}
-              </div>
-            </>
-          );
-
-          if (action.available && action.href) {
-            return (
-              <Link
-                key={action.id}
-                to={action.href}
-                className={`block w-full text-left rounded-2xl border p-4 transition-all ${
-                  action.primary
-                    ? 'bg-black text-white border-black hover:bg-red hover:border-red shadow-lg shadow-black/10'
-                    : 'bg-black/30 border-white/30 hover:bg-black/40 hover:border-white/40'
-                }`}
-              >
-                {inner}
-              </Link>
-            );
-          }
-
-          return (
-            <div
-              key={action.id}
-              className="w-full text-left rounded-2xl border border-white/20 bg-black/20 p-4 opacity-90 cursor-not-allowed"
-              aria-disabled
-            >
-              {inner}
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="text-[10px] text-white/80 font-medium leading-relaxed text-center">
-        More profile tools are on the way. Check back after you complete your assessment.
-      </p>
     </motion.div>
   );
 }
@@ -183,6 +204,7 @@ const PortalPage = () => {
     availability_from_month: '',
     role_type: 'flexible',
     skills: [],
+    best_skill: '',
   });
   const [newSkill, setNewSkill] = useState('');
   const [photoFile, setPhotoFile] = useState(null);
@@ -196,17 +218,26 @@ const PortalPage = () => {
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
 
-  // Guard: redirect to login if not authed; admins use super-admin dashboard
+  // Guard: clients → client dashboard; admins → admin; guests → login
   useEffect(() => {
     if (authLoading || !user) return;
-    fetchIsAdmin().then((isAdmin) => {
-      if (isAdmin) navigate('/admin/dashboard', { replace: true });
-    });
+    (async () => {
+      if (await fetchIsAdmin()) {
+        navigate('/admin/dashboard', { replace: true });
+        return;
+      }
+      if (await fetchIsClient(user.id)) {
+        const profile = await fetchUserProfile(user.id);
+        if (!profile) {
+          navigate('/client', { replace: true });
+        }
+      }
+    })();
   }, [authLoading, user, navigate]);
 
   useEffect(() => {
     if (!authLoading && !user) {
-      navigate('/talent/login');
+      navigate('/login');
     }
   }, [authLoading, user, navigate]);
 
@@ -214,6 +245,22 @@ const PortalPage = () => {
   useEffect(() => {
     if (user) fetchProfile();
   }, [user]);
+
+  // Refresh profile after Cal.com OAuth redirect (?cal=connected)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('cal') === 'connected' && user) {
+      fetchProfile();
+    }
+  }, [location.search, user]);
+
+  // Deep link: /portal#client-intro-scheduling
+  useEffect(() => {
+    if (loadingProfile) return;
+    if (location.hash === '#client-intro-scheduling') {
+      requestAnimationFrame(() => scrollToClientIntroSection());
+    }
+  }, [loadingProfile, location.hash]);
 
   const fetchProfile = async () => {
     setLoadingProfile(true);
@@ -242,6 +289,7 @@ const PortalPage = () => {
                 job_title: data.job_title,
                 about: data.about,
                 skills: data.skills || [],
+                best_skill: data.best_skill || data.skills?.[0] || '',
                 experience_years: data.experience_years,
                 monthly_fee_usd: data.monthly_fee_usd,
                 availability: data.availability,
@@ -271,6 +319,7 @@ const PortalPage = () => {
       availability_from_month: availabilityDate,
       role_type: data.role_type || 'flexible',
       skills: data.skills || [],
+      best_skill: data.best_skill || data.skills?.[0] || '',
     });
     setPhotoPreview(data.photo_url || '');
     setLoadingProfile(false);
@@ -291,13 +340,15 @@ const PortalPage = () => {
       return;
     }
     if (form.skills.length < 8 && !form.skills.includes(s)) {
-      setForm(f => ({ ...f, skills: [...f.skills, s] }));
+      setForm((f) => ({
+        ...f,
+        skills: [...f.skills, s],
+        best_skill: f.best_skill || s,
+      }));
       setNewSkill('');
       setError('');
     }
   };
-
-  const removeSkill = (skill) => setForm(f => ({ ...f, skills: f.skills.filter(s => s !== skill) }));
 
   const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
@@ -364,6 +415,7 @@ const PortalPage = () => {
           availability: prepared.data.availability,
           role_type: prepared.data.role_type,
           skills: prepared.data.skills,
+          best_skill: prepared.data.best_skill,
           photo_url: photoUrl,
           cv_url: profile?.cv_url || '',
         }, { onConflict: 'user_id' });
@@ -375,8 +427,9 @@ const PortalPage = () => {
         name: prepared.data.name,
         job_title: prepared.data.job_title,
         about: prepared.data.about,
-        skills: prepared.data.skills,
-        experience_years: prepared.data.experience_years,
+          skills: prepared.data.skills,
+          best_skill: prepared.data.best_skill,
+          experience_years: prepared.data.experience_years,
         monthly_fee_usd: prepared.data.monthly_fee_usd,
         directory_fee_usd: prepared.data.directory_fee_usd,
         availability: prepared.data.availability,
@@ -624,36 +677,21 @@ const PortalPage = () => {
             </select>
           </div>
 
-          {/* Skills */}
-          <div className="space-y-3">
-            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Skills ({form.skills.length}/8)</label>
-            <div className="flex flex-wrap gap-2 min-h-[36px]">
-              {form.skills.map(skill => (
-                <span key={skill} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-[10px] font-black uppercase tracking-wider rounded-full">
-                  {skill}
-                  <button type="button" onClick={() => removeSkill(skill)} className="hover:text-red transition-colors">
-                    <X size={9} />
-                  </button>
-                </span>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input value={newSkill} onChange={e => setNewSkill(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addSkill(); } }}
-                placeholder="Add a skill…"
-                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
-              <button type="button" onClick={addSkill} disabled={!newSkill.trim() || form.skills.length >= 8}
-                className="px-4 py-2.5 bg-black text-white text-xs font-black rounded-xl hover:bg-red transition-colors disabled:opacity-40 flex items-center gap-1">
-                <Plus size={12} /> Add
-              </button>
-            </div>
-          </div>
+          <ProfileSkillsEditor
+            skills={form.skills}
+            bestSkill={form.best_skill}
+            onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
+            onBestSkillChange={(best_skill) => setForm((f) => ({ ...f, best_skill }))}
+            newSkill={newSkill}
+            onNewSkillChange={setNewSkill}
+            onAddSkill={addSkill}
+          />
 
           {/* Photo upload hint */}
           {photoProcessing && (
             <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600 font-bold">
               <div className="w-5 h-5 border-2 border-red/20 border-t-red rounded-full animate-spin shrink-0" />
-              Formatting passport-style photo…
+              Creating your professional photo…
             </div>
           )}
 
@@ -679,6 +717,35 @@ const PortalPage = () => {
           </button>
         </motion.div>
 
+        {/* ── Intro scheduling (availability + booked calls) ── */}
+        <motion.div
+          id="client-intro-scheduling"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.12 }}
+          className="scroll-mt-28 bg-white border border-gray-200 rounded-[2rem] p-8 space-y-2"
+        >
+          <div className="mb-6">
+            <p className="text-[10px] font-black text-red uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
+              <Calendar size={11} /> Client intros
+            </p>
+            <h3 className="font-black text-lg text-gray-900 tracking-tight">Intro scheduling</h3>
+            <p className="text-xs text-gray-500 font-medium mt-2 leading-relaxed max-w-xl">
+              Publish when you are free for intro calls, and see confirmed bookings in one place — separate
+              from profile setup on the right.
+            </p>
+          </div>
+          <TalentIntroAvailability
+            talentId={profile?.id || user?.id}
+            calConnected={Boolean(profile?.cal_username)}
+            connectCalendarUrl={
+              user?.id
+                ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
+                : ''
+            }
+          />
+        </motion.div>
+
         {/* ── Quick links ── */}
         <div className="flex gap-4 flex-wrap">
           {profile?.id && (
@@ -694,7 +761,13 @@ const PortalPage = () => {
 
           {/* ── Right: strengthen profile ── */}
           <div className="lg:col-span-2">
-            <StrengthenProfilePanel />
+            <StrengthenProfilePanel
+              connectCalendarUrl={
+                user?.id
+                  ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
+                  : ''
+              }
+            />
           </div>
         </div>
       </div>

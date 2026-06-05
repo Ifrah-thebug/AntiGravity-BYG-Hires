@@ -6,10 +6,13 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName, formatFirstName } from '../lib/formatDisplayName';
+import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 
 const TalentProfilePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isLoggedInTalent } = useIsLoggedInTalent();
+  const canRequestIntro = !isLoggedInTalent;
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -102,8 +105,8 @@ const TalentProfilePage = () => {
 
               {/* Info */}
               <div className="flex-1 space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-500/10 border border-green-500/20 text-green-400 text-[9px] font-black uppercase tracking-widest rounded-full">
-                  <CheckCircle2 size={10} /> Verified Talent
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-500/10 border border-gray-500/20 text-gray-400 text-[9px] font-black uppercase tracking-widest rounded-full">
+                  Unverified profile
                 </div>
                 <div>
                   <h1 className="text-3xl md:text-4xl font-black tracking-tight" title={name}>{displayName}</h1>
@@ -144,17 +147,18 @@ const TalentProfilePage = () => {
               <p className="font-black text-gray-900 text-2xl">{experience_years}<span className="text-base font-bold text-gray-400 ml-1">yrs</span></p>
             </div>
 
-            {/* Request Intro CTA */}
-            <div className="bg-black rounded-3xl p-6 space-y-4">
-              <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Interested?</p>
-              <p className="text-white font-bold text-sm leading-snug">Request a personal intro to this talent.</p>
-              <Link
-                to={`/request-intro?id=${profileId}`}
-                className="block w-full py-3 bg-red hover:bg-white hover:text-black text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all text-center flex items-center justify-center gap-2"
-              >
-                Request Intro <ArrowRight size={11} />
-              </Link>
-            </div>
+            {canRequestIntro && (
+              <div className="bg-black rounded-3xl p-6 space-y-4">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Interested?</p>
+                <p className="text-white font-bold text-sm leading-snug">Request a personal intro to this talent.</p>
+                <Link
+                  to={`/request-intro?id=${profileId}`}
+                  className="block w-full py-3 bg-red hover:bg-white hover:text-black text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all text-center flex items-center justify-center gap-2"
+                >
+                  Request Intro <ArrowRight size={11} />
+                </Link>
+              </div>
+            )}
           </motion.div>
         </div>
 
@@ -185,12 +189,14 @@ const TalentProfilePage = () => {
             <p className="text-gray-500 text-sm font-medium mt-1">Let us make the introduction — we handle the matching process.</p>
           </div>
           <div className="flex gap-3 shrink-0">
-            <Link
-              to={`/request-intro?id=${profileId}`}
-              className="px-6 py-3.5 bg-black text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red transition-colors flex items-center gap-2"
-            >
-              Request Intro <ArrowRight size={12} />
-            </Link>
+            {canRequestIntro && (
+              <Link
+                to={`/request-intro?id=${profileId}`}
+                className="px-6 py-3.5 bg-black text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-red transition-colors flex items-center gap-2"
+              >
+                Request Intro <ArrowRight size={12} />
+              </Link>
+            )}
             <button
               onClick={() => navigate('/talent')}
               className="px-6 py-3.5 bg-white border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-xl hover:border-gray-400 transition-colors"

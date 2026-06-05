@@ -411,13 +411,17 @@ export const talentService = {
           name: s.name,
           role: s.parsedResumeData?.detected_expertise || 'Remote Specialist',
           department: deptKey,
-          score: s.aiScore?.total_score || 0, // 0 means unverified / no score yet
+          score: 0,
           fee: Math.round((s.fee || 600) * 1.10), // Automatically enrolled at 10% increase rate
           currency: 'USD',
           period: '/mo',
           availability: s.availability || 'immediate',
           roleType: s.roleType || 'flexible',
           tags: s.parsedResumeData?.key_skills || ['Remote Work', 'English'],
+          bestSkill:
+            s.parsedResumeData?.best_skill ||
+            s.parsedResumeData?.key_skills?.[0] ||
+            '',
           experience: `${s.parsedResumeData?.years_experience || 3} yrs`,
           bio: s.parsedResumeData?.notes || 'Talent pool member.',
           photo: s.photo || null, // Real Base64 uploaded photo
@@ -425,14 +429,15 @@ export const talentService = {
           admitted: true,
           token: s.token,
           isDynamic: true,
-          verified: !!s.aiScore
+          verified: false
         };
       });
 
     // Merge static talents with our dynamic talents, ensuring no duplicates by ID
     const staticTalents = (TALENTS || []).map((t) => ({
       ...t,
-      verified: t.verified ?? true,
+      bestSkill: t.bestSkill || t.tags?.[0] || '',
+      verified: false,
     }));
     const merged = [...dynamicTalents, ...staticTalents];
     

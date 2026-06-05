@@ -1,8 +1,29 @@
-/** Passport-style profile photo: 4:5 crop on neutral background (no AI matting). */
+import {
+  isGeminiPhotoEnabled,
+  stylizeProfilePhoto,
+  dataUrlToJpegFile,
+  formatGeminiPhotoError,
+} from '../services/geminiPhotoService';
+import {
+  enhanceProfilePhotoOnServer,
+  isServerPhotoEnhanceEnabled,
+  formatPhotoEnhanceDebugMessage,
+} from './profilePhotoApi';
+import {
+  enhanceProfilePhotoInBrowser,
+  isClientBgRemovalEnabled,
+  formatClientPhotoDebug,
+} from './profilePhotoEnhanceClient';
 
-export const PASSPORT_WIDTH = 1200;
-export const PASSPORT_HEIGHT = 1500;
-export const PASSPORT_BACKGROUND = '#f0f0f0';
+import {
+  PASSPORT_WIDTH,
+  PASSPORT_HEIGHT,
+  PASSPORT_BACKGROUND,
+} from './profilePhotoConstants';
+
+export { PASSPORT_WIDTH, PASSPORT_HEIGHT, PASSPORT_BACKGROUND };
+
+/** Passport-style profile photo: 4:5 crop on neutral background. */
 
 const MAX_SOURCE_EDGE = 1600;
 
@@ -103,8 +124,9 @@ function canvasToJpegFile(canvas, filename = 'profile-photo.jpg', quality = 0.9)
  * @returns {Promise<File>}
  */
 export async function processProfilePhoto(file) {
-  if (!file?.type?.startsWith('image/')) {
-    throw new Error('Please upload a JPG or PNG headshot.');
+  const isHeic = /\.heic$/i.test(file?.name || '') || /\.heif$/i.test(file?.name || '');
+  if (!file?.type?.startsWith('image/') && !isHeic) {
+    throw new Error('Please upload a JPG, PNG, or HEIC headshot.');
   }
   if (file.size > 10 * 1024 * 1024) {
     throw new Error('Image must be under 10MB.');
@@ -121,6 +143,65 @@ export async function processProfilePhoto(file) {
       err.message || 'Could not prepare your photo. Try a JPG or PNG under 10MB.'
     );
   }
+}
+
+/**
+ * Profile photo for directory cards.
+ * Default: server Leonardo AI + sharp frame. Optional browser imgly if VITE_CLIENT_BG_REMOVAL=true.
+ * Optional Gemini if VITE_GEMINI_PHOTO_ENABLED=true.
+ */
+export async function processProfilePhotoWithAI(file, onStep, onWarning, onDebug) {
+  if (isServerPhotoEnhanceEnabled()) {
+    try {
+      onStep?.('enhance');
+      const out = await enhanceProfilePhotoOnServer(file, onStep, (debug) => {
+        onDebug?.(formatPhotoEnhanceDebugMessage(debug));
+      });
+      return out;
+    } catch (err) {
+      console.warn('[processProfilePhotoWithAI] server enhance failed', err);
+      onWarning?.(
+        `${err.message || 'Server enhancement unavailable.'} Trying fallback…`
+      );
+    }
+  }
+
+  if (isClientBgRemovalEnabled()) {
+    try {
+      const { file: out, debug } = await enhanceProfilePhotoInBrowser(file, onStep);
+      onDebug?.(formatClientPhotoDebug(debug));
+      return out;
+    } catch (err) {
+      console.warn('[processProfilePhotoWithAI] browser enhance failed', err);
+      onWarning?.(
+        `${err.message || 'Browser photo enhance failed.'} Using basic crop…`
+      );
+    }
+  }
+
+  if (isGeminiPhotoEnabled()) {
+    onStep?.('crop');
+    const cropped = await processProfilePhoto(file);
+    onStep?.('ai');
+    const dataUrl = await fileToDataUrl(cropped);
+    try {
+      const styledUrl = await stylizeProfilePhoto(dataUrl);
+      if (styledUrl !== dataUrl) {
+        const styledFile = await dataUrlToJpegFile(styledUrl, cropped.name);
+        onStep?.('frame');
+        return processProfilePhoto(styledFile);
+      }
+    } catch (err) {
+      if (err?.code === 'GEMINI_QUOTA_EXCEEDED') {
+        onWarning?.(formatGeminiPhotoError(err));
+      }
+      console.warn('[processProfilePhotoWithAI] Gemini failed', err);
+    }
+    return cropped;
+  }
+
+  onStep?.('crop');
+  return processProfilePhoto(file);
 }
 
 export function fileToDataUrl(file) {

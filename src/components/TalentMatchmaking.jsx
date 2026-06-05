@@ -1,10 +1,184 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatDisplayName } from '../lib/formatDisplayName';
+import TalentSkillTags from './TalentSkillTags';
+import ProfileVerificationBadge from './ProfileVerificationBadge';
+import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
+import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Clock, Star, ArrowRight, X, Briefcase, Award, CheckCircle2, Moon, Zap } from 'lucide-react';
-
+import { Star, ArrowRight, ArrowDown, X, Briefcase } from 'lucide-react';
 import { talentService } from '../services/talentService';
+
+const EXPLORE_STEPS = [
+  { label: 'Filter industry', short: 'Filter' },
+  { label: 'Review matches', short: 'Review' },
+  { label: 'Request intro', short: 'Intro' },
+  { label: 'Explore talent', short: 'Explore' },
+];
+
+const EXPLORE_LINE_START = 12.5;
+const EXPLORE_LINE_SPAN = 75;
+
+/** Matches section labels (Top Recommendations, talent card CTAs). */
+const exploreEyebrowClass =
+  'font-sans text-xs font-black text-gray-400 uppercase tracking-[0.2em]';
+const exploreStepLabelClass =
+  'font-sans text-[10px] sm:text-xs font-black uppercase tracking-widest text-center leading-snug';
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return reduced;
+}
+
+/** Step progress — aligned grid, site typography, sliding active state. */
+function MatchmakingExploreBanner({ onExplore }) {
+  const [active, setActive] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const reducedMotion = usePrefersReducedMotion();
+  const stepCount = EXPLORE_STEPS.length;
+  const lastIndex = stepCount - 1;
+  const progressPct =
+    lastIndex > 0 ? (active / lastIndex) * EXPLORE_LINE_SPAN : 0;
+
+  const motionTransition = reducedMotion
+    ? { duration: 0 }
+    : { type: 'spring', stiffness: 280, damping: 28 };
+
+  useEffect(() => {
+    if (paused || reducedMotion) return undefined;
+    const id = window.setInterval(() => {
+      setActive((i) => (i + 1) % stepCount);
+    }, 4000);
+    return () => window.clearInterval(id);
+  }, [paused, reducedMotion, stepCount]);
+
+  return (
+    <div
+      className="mt-16 flex flex-col items-center w-full font-sans antialiased"
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+      onFocusCapture={() => setPaused(true)}
+      onBlurCapture={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget)) setPaused(false);
+      }}
+    >
+      <div
+        className="w-full max-w-2xl mb-10"
+        role="group"
+        aria-label="How matchmaking works"
+      >
+        <p className={`text-center mb-8 ${exploreEyebrowClass}`}>
+          Your hiring path
+        </p>
+
+        <div className="relative px-2 sm:px-0">
+          <div
+            className="absolute top-[3.35rem] sm:top-[3.6rem] h-px bg-gray-200 pointer-events-none"
+            style={{
+              left: `${EXPLORE_LINE_START}%`,
+              width: `${EXPLORE_LINE_SPAN}%`,
+            }}
+            aria-hidden
+          />
+          <motion.div
+            className="absolute top-[3.35rem] sm:top-[3.6rem] h-0.5 bg-red rounded-full pointer-events-none"
+            style={{ left: `${EXPLORE_LINE_START}%` }}
+            initial={false}
+            animate={{ width: `${progressPct}%` }}
+            transition={motionTransition}
+            aria-hidden
+          />
+
+          <div className="grid grid-cols-4 gap-2 sm:gap-4">
+            {EXPLORE_STEPS.map((step, i) => {
+              const isActive = i === active;
+              return (
+                <button
+                  key={step.label}
+                  type="button"
+                  onClick={() => setActive(i)}
+                  aria-label={`Step ${i + 1}: ${step.label}`}
+                  aria-current={isActive ? 'step' : undefined}
+                  className="group flex flex-col items-center gap-3 sm:gap-4 focus:outline-none"
+                >
+                  <span
+                    className={`min-h-[2.5rem] sm:min-h-0 transition-colors duration-300 ${exploreStepLabelClass} ${
+                      isActive ? 'text-black' : 'text-gray-500 group-hover:text-gray-700'
+                    }`}
+                  >
+                    <span className="hidden sm:inline">{step.label}</span>
+                    <span className="sm:hidden">{step.short}</span>
+                  </span>
+
+                  <div className="relative flex h-11 w-11 items-center justify-center">
+                    {!isActive && (
+                      <span
+                        className="absolute inset-0 rounded-full border-2 border-gray-200 bg-white transition-colors group-hover:border-gray-300"
+                        aria-hidden
+                      />
+                    )}
+                    {isActive && (
+                      <>
+                        <motion.span
+                          layoutId="explore-step-active"
+                          className="absolute inset-0 rounded-full bg-black shadow-md shadow-black/10"
+                          transition={motionTransition}
+                          aria-hidden
+                        />
+                        <span
+                          className="absolute -inset-1 rounded-full border-2 border-red"
+                          aria-hidden
+                        />
+                      </>
+                    )}
+                    <span
+                      className={`relative z-10 font-sans text-xs font-black tabular-nums transition-colors duration-300 ${
+                        isActive ? 'text-white' : 'text-gray-500 group-hover:text-gray-700'
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-2 mb-5 -mt-2" aria-hidden>
+        <span className={exploreEyebrowClass}>Matchmaking</span>
+        <motion.div
+          animate={reducedMotion ? undefined : { y: [0, 6, 0] }}
+          transition={
+            reducedMotion
+              ? undefined
+              : { repeat: Infinity, duration: 1.7, ease: 'easeInOut' }
+          }
+          className="text-red"
+        >
+          <ArrowDown size={26} strokeWidth={2.5} />
+        </motion.div>
+      </div>
+
+      <button
+        type="button"
+        onClick={onExplore}
+        className="inline-flex items-center gap-2 rounded-xl bg-red px-7 py-3.5 text-white font-sans font-black text-xs uppercase tracking-widest hover:bg-red-600 transition-colors shadow-md shadow-red/20"
+      >
+        Explore Matchmaking
+        <ArrowRight size={16} strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -25,7 +199,7 @@ const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
 };
 
 // ─── Talent Detail Modal ──────────────────────────────────────────────────────
-const TalentModal = ({ talent, onClose }) => {
+const TalentModal = ({ talent, onClose, canRequestIntro = true }) => {
   const navigate = useNavigate();
   if (!talent) return null;
   return (
@@ -59,10 +233,7 @@ const TalentModal = ({ talent, onClose }) => {
             <div className="flex items-start gap-6 relative z-10">
               <Avatar name={talent.name} score={talent.score} photo={talent.photo} size="w-48 h-48 text-5xl" />
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <CheckCircle2 size={14} className="text-green-400" />
-                  <span className="text-green-400 text-[9px] font-black uppercase tracking-wider">Verified</span>
-                </div>
+                <ProfileVerificationBadge talent={talent} variant="dark" />
                 <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
@@ -70,16 +241,17 @@ const TalentModal = ({ talent, onClose }) => {
                 </div>
               </div>
             </div>
-            {/* Score bar */}
-            <div className="mt-6 relative z-10">
-              <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
-                <span>Assessment Score</span><span className="text-white">{talent.score}/100</span>
+            {SHOW_ASSESSMENT_SCORE && talent.score > 0 && (
+              <div className="mt-6 relative z-10">
+                <div className="flex justify-between text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                  <span>Assessment Score</span><span className="text-white">{talent.score}/100</span>
+                </div>
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${talent.score}%` }} transition={{ delay: 0.3, duration: 0.7 }}
+                    className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300" />
+                </div>
               </div>
-              <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${talent.score}%` }} transition={{ delay: 0.3, duration: 0.7 }}
-                  className="h-full rounded-full bg-gradient-to-r from-green-400 to-emerald-300" />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Body */}
@@ -117,17 +289,18 @@ const TalentModal = ({ talent, onClose }) => {
               ))}
             </div>
 
-            {/* CTA */}
             <div className="flex gap-3 pt-2">
-              <button
-                onClick={() => navigate(`/request-intro?id=${talent.id}`)}
-                className="flex-1 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
-              >
-                Request Intro <ArrowRight size={14} />
-              </button>
+              {canRequestIntro && (
+                <button
+                  onClick={() => navigate(`/request-intro?id=${talent.id}`)}
+                  className="flex-1 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
+                >
+                  Request Intro <ArrowRight size={14} />
+                </button>
+              )}
               <button
                 onClick={onClose}
-                className="px-6 py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors"
+                className={`${canRequestIntro ? 'px-6' : 'flex-1'} py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors`}
               >
                 Close
               </button>
@@ -165,11 +338,15 @@ const roleTypeLabels = {
 };
 
 const TalentMatchmaking = () => {
+  const { isLoggedInTalent } = useIsLoggedInTalent();
+  const canRequestIntro = !isLoggedInTalent;
   const [selected, setSelected] = useState('All');
   const [selectedTalent, setSelectedTalent] = useState(null);
   const navigate = useNavigate();
 
-  const displayed = talentService.getFeaturedTalents({ industry: selected });
+  const displayed = sanitizeTalentList(
+    talentService.getFeaturedTalents({ industry: selected })
+  );
 
   return (
     <section className="py-28 bg-white border-t border-gray-100">
@@ -242,7 +419,8 @@ const TalentMatchmaking = () => {
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-14"
           >
             {displayed.slice(0, 5).map((talent, i) => {
-              const showMatchBadge = Boolean(talent.verified) && Number(talent.match) > 0;
+              const showMatchBadge =
+                SHOW_ASSESSMENT_SCORE && Boolean(talent.verified) && Number(talent.match) > 0;
               return (
               <motion.div
                 key={talent.id}
@@ -282,19 +460,11 @@ const TalentMatchmaking = () => {
                     <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
                   </div>
 
-                  {/* Skills */}
-                  <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
-                    {talent.tags && talent.tags.slice(0, 2).map(tag => (
-                      <span key={tag} className="px-2 py-1 bg-gray-50 border border-gray-100 text-gray-600 font-bold text-[9px] uppercase tracking-widest rounded-lg whitespace-nowrap">
-                        {tag}
-                      </span>
-                    ))}
-                    {talent.tags && talent.tags.length > 2 && (
-                      <span className="px-2 py-1 text-gray-400 font-bold text-[9px] whitespace-nowrap">
-                        +{talent.tags.length - 2} more
-                      </span>
-                    )}
-                  </div>
+                  <TalentSkillTags
+                    tags={talent.tags}
+                    bestSkill={talent.bestSkill}
+                    className="h-[24px]"
+                  />
 
                   {/* Experience & Role Type */}
                   <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">
@@ -314,15 +484,28 @@ const TalentMatchmaking = () => {
                     </p>
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/request-intro?id=${talent.id}`);
-                    }}
-                    className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
-                  >
-                    Request Intro
-                  </button>
+                  {canRequestIntro ? (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/request-intro?id=${talent.id}`);
+                      }}
+                      className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
+                    >
+                      Request Intro
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTalent(talent);
+                      }}
+                      className="w-full py-3.5 border border-gray-200 bg-gray-50 text-gray-700 text-[10px] font-black tracking-widest uppercase rounded-xl hover:border-gray-300 hover:bg-gray-100 transition-colors"
+                    >
+                      View profile
+                    </button>
+                  )}
                 </div>
               </motion.div>
               );
@@ -330,20 +513,17 @@ const TalentMatchmaking = () => {
           </motion.div>
         </AnimatePresence>
 
-        {/* Explore CTA */}
-        <div className="flex justify-center">
-          <button
-            onClick={() => navigate('/talent')}
-            className="group flex items-center gap-3 px-10 py-5 border-2 border-red text-red font-black text-xl tracking-wide rounded-2xl hover:bg-red hover:text-white transition-all duration-300"
-          >
-            Explore the Matchmaking
-            <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-          </button>
-        </div>
+        <MatchmakingExploreBanner onExplore={() => navigate('/talent')} />
       </div>
 
       {/* Talent Detail Modal */}
-      {selectedTalent && <TalentModal talent={selectedTalent} onClose={() => setSelectedTalent(null)} />}
+      {selectedTalent && (
+        <TalentModal
+          talent={selectedTalent}
+          onClose={() => setSelectedTalent(null)}
+          canRequestIntro={canRequestIntro}
+        />
+      )}
     </section>
   );
 };

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { talentService } from '../services/talentService';
 import { formatDisplayName } from '../lib/formatDisplayName';
-import { processProfilePhoto, fileToDataUrl } from '../lib/processProfilePhoto';
+import { processProfilePhotoWithAI, fileToDataUrl } from '../lib/processProfilePhoto';
 
 // Fallback initial generator when no photo is uploaded
 const Avatar = ({ name, size = 96 }) => {
@@ -87,7 +87,7 @@ const TalentApplyPage = () => {
     setPhotoProcessing(true);
     setErrorMsg('');
     try {
-      const processed = await processProfilePhoto(file);
+      const processed = await processProfilePhotoWithAI(file);
       const dataUrl = await fileToDataUrl(processed);
       setPhotoPreview(dataUrl);
       setFormData((prev) => ({ ...prev, photo: dataUrl }));

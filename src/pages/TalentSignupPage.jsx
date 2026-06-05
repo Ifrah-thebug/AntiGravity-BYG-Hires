@@ -31,10 +31,15 @@ const TalentSignupPage = () => {
     photoFile,
     photoPreview,
     photoProcessing,
+    photoProgress,
     handlePhotoSelect,
     clearPhoto,
     getPhotoDataUrl,
-  } = useProfilePhotoUpload({ onError: setError });
+    photoEnhanceDebug,
+  } = useProfilePhotoUpload({
+    onError: setError,
+    showEnhanceDebug: import.meta.env.DEV,
+  });
   const [step, setStep] = useState('idle'); // idle | auth | parsing | uploading | done
   const [emailConfirmPending, setEmailConfirmPending] = useState(false);
 
@@ -295,14 +300,16 @@ const TalentSignupPage = () => {
                     <label className="flex flex-col items-center justify-center min-h-[180px] border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-red hover:bg-gray-50 transition-all cursor-pointer group">
                       <Camera size={32} className="text-gray-400 mb-2 group-hover:text-red transition-colors" />
                       <p className="font-black text-xs text-gray-700 mb-1">Upload headshot</p>
-                      <p className="text-[10px] text-gray-400 max-w-[220px]">JPG or PNG headshot — plain wall behind you works best</p>
+                      <p className="text-[10px] text-gray-400 max-w-[240px]">Front-facing selfie (JPG, PNG, or HEIC). Background removal runs in your browser (free) — first upload may take ~1 min to download the model.</p>
                       <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
                     </label>
                   ) : photoProcessing ? (
                     <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
                       <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
-                      <p className="font-black text-xs text-gray-700 uppercase tracking-wider">Formatting photo…</p>
-                      <p className="text-[10px] text-gray-500 font-medium">Cropping to passport size</p>
+                      <p className="font-black text-xs text-gray-700 uppercase tracking-wider">
+                        {photoProgress || 'Processing photo…'}
+                      </p>
+                      <p className="text-[10px] text-gray-500 font-medium">Usually takes 15–40 seconds</p>
                     </div>
                   ) : (
                     <div className="min-h-[180px] border border-green-200 bg-green-50/40 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
@@ -315,8 +322,13 @@ const TalentSignupPage = () => {
                       </div>
                       <div className="flex items-center gap-2 text-green-700 text-[9px] font-black uppercase tracking-wider border-t border-green-200 pt-3 mt-3 w-full justify-center">
                         <CheckCircle2 size={11} className="text-green-500" />
-                        Passport photo ready
+                        Professional photo ready
                       </div>
+                      {import.meta.env.DEV && photoEnhanceDebug && (
+                        <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3 w-full font-mono leading-snug text-left">
+                          {photoEnhanceDebug}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

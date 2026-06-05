@@ -31,6 +31,7 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 // Import Supabase-backed Talent Pool Pages
 import TalentSignupPage from './pages/TalentSignupPage';
 import TalentLoginPage from './pages/TalentLoginPage';
+import LoginPage from './pages/LoginPage';
 import TalentSetupPage from './pages/TalentSetupPage';
 import TalentDirectoryPage from './pages/TalentDirectoryPage';
 import TalentProfilePage from './pages/TalentProfilePage';
@@ -39,6 +40,9 @@ import AdminLoginPage from './pages/AdminLoginPage';
 import AdminSignupPage from './pages/AdminSignupPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminClientsPage from './pages/AdminClientsPage';
+import ClientActivatePage from './pages/ClientActivatePage';
+import ClientLoginPage from './pages/ClientLoginPage';
+import ClientDashboardPage from './pages/ClientDashboardPage';
 import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
 
@@ -46,28 +50,6 @@ import { AuthProvider } from './context/AuthContext';
 import DeveloperConsole from './components/DeveloperConsole';
 import MockEmailSimulator from './components/MockEmailSimulator';
 import { talentService } from './services/talentService';
-
-// Deferred background preloading for Calendly to cache assets and speed up navigation
-const CalendlyPreloader = () => {
-  const [shouldLoad, setShouldLoad] = React.useState(false);
-
-  React.useEffect(() => {
-    const timer = setTimeout(() => {
-      setShouldLoad(true);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!shouldLoad) return null;
-
-  return (
-    <iframe
-      src="https://calendly.com/recruitment-bnyahyagroup/30min?hide_gdpr_banner=1&background_color=ffffff&text_color=1a1a1a&primary_color=e11d48"
-      style={{ display: 'none', width: 0, height: 0, border: 'none', visibility: 'hidden' }}
-      title="preload-calendly"
-    />
-  );
-};
 
 const AppContent = () => {
   const location = useLocation();
@@ -78,7 +60,14 @@ const AppContent = () => {
   const isSuperAdminShell =
     location.pathname === '/admin/login' ||
     location.pathname === '/admin/signup';
-  const isPortalPage = location.pathname === '/portal' || location.pathname.startsWith('/talent/login') || location.pathname.startsWith('/talent/signup') || location.pathname.startsWith('/talent/setup');
+  const isPortalPage =
+    location.pathname === '/portal' ||
+    location.pathname === '/login' ||
+    location.pathname.startsWith('/talent/login') ||
+    location.pathname.startsWith('/talent/signup') ||
+    location.pathname.startsWith('/talent/setup') ||
+    location.pathname === '/client' ||
+    location.pathname.startsWith('/client/');
 
   // One-time cleanup: remove any test/Ifrah profiles from localStorage
   useEffect(() => {
@@ -90,7 +79,6 @@ const AppContent = () => {
     <div className="min-h-screen bg-white">
       <ScrollToTop />
       {!isSuperAdminShell && <Navbar />}
-      <CalendlyPreloader />
       <main>
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -137,10 +125,14 @@ const AppContent = () => {
           {/* Supabase-backed Talent Pool System */}
           <Route path="/talent" element={<TalentDirectoryPage />} />
           <Route path="/talent/signup" element={<TalentSignupPage />} />
-          <Route path="/talent/login" element={<TalentLoginPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/talent/login" element={<Navigate to="/login" replace />} />
           <Route path="/talent/setup" element={<TalentSetupPage />} />
           <Route path="/talent/:id" element={<TalentProfilePage />} />
           <Route path="/portal" element={<PortalPage />} />
+          <Route path="/client/activate" element={<ClientActivatePage />} />
+          <Route path="/client/login" element={<Navigate to="/login" replace />} />
+          <Route path="/client" element={<ClientDashboardPage />} />
         </Routes>
       </main>
       {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && <Footer />}
