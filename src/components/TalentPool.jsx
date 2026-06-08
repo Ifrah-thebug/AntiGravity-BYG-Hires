@@ -80,7 +80,7 @@ const TalentPool = () => {
               className="flex flex-wrap gap-4"
             >
               <button 
-                onClick={() => navigate('/talent-pool/apply')}
+                onClick={() => navigate('/talent/signup')}
                 className="px-10 py-5 bg-red text-white font-black text-sm tracking-[0.15em] rounded-2xl hover:bg-white hover:text-red transition-all duration-300 shadow-[0_10px_40px_rgba(255,74,74,0.35)] uppercase flex items-center gap-3"
               >
                 <span>START APPLICATION</span>
@@ -185,7 +185,7 @@ const TalentPool = () => {
 
           <div className="mt-20 text-center">
             <button
-              onClick={() => navigate('/talent-pool/apply')}
+              onClick={() => navigate('/talent/signup')}
               className="px-10 py-5 bg-black hover:bg-red text-white font-black text-sm tracking-[0.15em] rounded-2xl transition-all uppercase inline-flex items-center gap-3 shadow-lg shadow-black/10 hover:shadow-red/20"
             >
               <span>SUBMIT YOUR RESUME NOW</span>

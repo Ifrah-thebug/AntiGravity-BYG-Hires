@@ -252,7 +252,13 @@ async function completeClientActivation({ token, password }) {
 /**
  * After intro booking — send activation email if client has no active account yet.
  */
-async function sendPostBookingActivation({ clientId, clientEmail, clientName, talentName }) {
+async function sendPostBookingActivation({
+  clientId,
+  clientEmail,
+  clientName,
+  talentName,
+  bookingContext,
+}) {
   if (!clientId) {
     return { sent: false, reason: 'no_client_id' };
   }
@@ -272,6 +278,7 @@ async function sendPostBookingActivation({ clientId, clientEmail, clientName, ta
     name: clientName || client.name,
     talentName,
     token,
+    bookingContext,
   });
 
   return {

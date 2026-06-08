@@ -1,10 +1,29 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
+const CANONICAL_BASE = 'https://byghires.com';
+
+function canonicalUrl(pathname) {
+  if (!pathname || pathname === '/') return CANONICAL_BASE;
+  return `${CANONICAL_BASE}${pathname.replace(/\/$/, '')}`;
+}
+
+function updateCanonicalLink(pathname) {
+  const href = canonicalUrl(pathname);
+  let link = document.querySelector('link[rel="canonical"]');
+  if (!link) {
+    link = document.createElement('link');
+    link.setAttribute('rel', 'canonical');
+    document.head.appendChild(link);
+  }
+  link.setAttribute('href', href);
+}
+
 const ScrollToTop = () => {
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
+    updateCanonicalLink(pathname);
   }, [pathname]);
   return null;
 };
@@ -16,13 +35,10 @@ import CaseStudiesPage from './pages/CaseStudiesPage';
 import WhyUsPage from './pages/WhyUsPage';
 import RemoteSalesTeamPage from './pages/RemoteSalesTeamPage';
 import RemoteSupportTeamPage from './pages/RemoteSupportTeamPage';
-import TalentPoolPage from './pages/TalentPoolPage';
-
 import RequestIntroPage from './pages/RequestIntroPage';
 import TalentDashboardPage from './pages/TalentDashboardPage';
 
 // Import New System Pages
-import TalentApplyPage from './pages/TalentApplyPage';
 import AssessmentPage from './pages/AssessmentPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
@@ -87,8 +103,8 @@ const AppContent = () => {
           <Route path="/why-us" element={<WhyUsPage />} />
           <Route path="/remote-sales-team" element={<RemoteSalesTeamPage />} />
           <Route path="/remote-support-team" element={<RemoteSupportTeamPage />} />
-          <Route path="/talent-pool" element={<TalentPoolPage />} />
-          <Route path="/talent-pool/apply" element={<TalentApplyPage />} />
+          <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
+          <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />

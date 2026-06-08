@@ -59,7 +59,7 @@ const StatusPage = () => {
           <p className="text-gray-500 font-medium text-sm leading-relaxed mb-8">
             We couldn't locate any application corresponding to this status link. Please verify your token or apply again.
           </p>
-          <a href="/talent-pool/apply" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
+          <a href="/talent/signup" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
             APPLY NOW
           </a>
         </div>

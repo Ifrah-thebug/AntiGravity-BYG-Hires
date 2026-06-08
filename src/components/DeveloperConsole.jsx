@@ -176,7 +176,7 @@ const DeveloperConsole = () => {
                     </h3>
 
                     {!activeSub ? (
-                      <p className="text-gray-500 py-8 text-center">No active AI logging details are available. Please submit an application at <a href="/talent-pool/apply" className="text-red hover:underline">/talent-pool/apply</a> to initiate the parser!</p>
+                      <p className="text-gray-500 py-8 text-center">No active AI logging details are available. Please submit an application at <a href="/talent/signup" className="text-red hover:underline">/talent/signup</a> to initiate the parser!</p>
                     ) : (
                       <div className="grid md:grid-cols-3 gap-6">
                         

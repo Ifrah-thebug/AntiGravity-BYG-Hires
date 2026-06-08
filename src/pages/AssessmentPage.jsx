@@ -115,7 +115,7 @@ const AssessmentPage = () => {
           <p className="text-gray-500 font-medium text-sm leading-relaxed mb-8">
             This assessment token appears to be invalid or has expired after the 7-day cutoff period. Please request a new invite.
           </p>
-          <a href="/talent-pool/apply" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
+          <a href="/talent/signup" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
             REAPPLY NOW
           </a>
         </div>

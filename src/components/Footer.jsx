@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { getDiscoveryBookingUrl } from '../lib/discoveryBooking';
 
 const Footer = () => {
   return (
@@ -10,7 +11,7 @@ const Footer = () => {
             <h2 className="text-xl md:text-2xl font-extrabold mb-4">Where is your business feeling the most pressure right now?</h2>
             <p className="text-lg text-red font-bold mb-6">Let's Transform your Operations.</p>
             <a
-              href="https://calendly.com/recruitment-bnyahyagroup/30min"
+              href={getDiscoveryBookingUrl()}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-block bg-transparent border-2 border-red text-red px-5 py-2.5 rounded-full font-bold text-sm hover:bg-red hover:text-white transition-colors shadow-lg"
@@ -26,7 +27,7 @@ const Footer = () => {
               <p><strong>Phone:</strong> <a href="tel:+971507274365" className="hover:text-red transition-colors">+971 50 727 4365</a></p>
               <p><strong>Website:</strong> <a href="https://www.bnyahyagroup.com" target="_blank" rel="noopener noreferrer" className="hover:text-red transition-colors">www.bnyahyagroup.com</a></p>
               <div className="pt-4 mt-4 border-t border-gray-800">
-                <Link to="/talent-pool" className="block w-full bg-black border border-gray-700 hover:border-red hover:bg-gray-800 rounded-2xl p-3.5 transition-all group shadow-lg">
+                <Link to="/talent/signup" className="block w-full bg-black border border-gray-700 hover:border-red hover:bg-gray-800 rounded-2xl p-3.5 transition-all group shadow-lg">
                   <div className="flex items-center justify-between">
                     <div>
                       <span className="text-gray-400 text-[10px] font-bold uppercase tracking-wider block mb-0.5">For Candidates</span>

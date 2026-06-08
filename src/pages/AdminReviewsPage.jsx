@@ -141,7 +141,7 @@ const AdminReviewsPage = () => {
       case 'reject':
         return {
           subject: `Next Steps — Your BYG Hires Assessment`,
-          body: `Thanks for applying, ${selectedSub.name}. Your assessment scored ${score}/100.\n\nReason from our team:\n"${notesStr}"\n\nYou can reapply in 7 days: /talent-pool/apply`
+          body: `Thanks for applying, ${selectedSub.name}. Your assessment scored ${score}/100.\n\nReason from our team:\n"${notesStr}"\n\nYou can reapply in 7 days: /talent/signup`
         };
       case 'revise':
         return {

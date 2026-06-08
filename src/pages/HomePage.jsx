@@ -6,6 +6,7 @@ import Scale from '../components/Scale';
 import TalentMatchmaking from '../components/TalentMatchmaking';
 import Problem from '../components/Problem';
 import Solutions from '../components/Solutions';
+import HowItWorks from '../components/HowItWorks';
 import Roles from '../components/Roles';
 import Industries from '../components/Industries';
 import Testimonials from '../components/Testimonials';
@@ -21,6 +22,7 @@ const HomePage = () => {
       <Scale />
       <Problem />
       <Solutions />
+      <HowItWorks />
       <Roles />
       <Industries />
       <Testimonials />

@@ -15,6 +15,7 @@ const calRouter = require('./routes/cal');
 const introRouter = require('./routes/intro');
 const profilePhotoRouter = require('./routes/profilePhoto');
 const clientRouter = require('./routes/client');
+const calWebhookRouter = require('./routes/calWebhook');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -35,6 +36,12 @@ app.use(cors({
   credentials: true,
   exposedHeaders: ['X-Photo-Sharp', 'X-Photo-Leonardo', 'X-Photo-Model', 'X-Photo-Heic', 'X-Photo-Pipeline'],
 }));
+// Cal.com webhooks need the raw body for signature verification.
+app.use(
+  '/api/cal/webhook',
+  express.raw({ type: 'application/json' }),
+  calWebhookRouter
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -80,5 +87,10 @@ app.listen(PORT, () => {
     }
   } else {
     console.log('[email] Resend client activation emails enabled');
+  }
+  const webhookBase = (process.env.BACKEND_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+  console.log(`[cal] Discovery webhook: POST ${webhookBase}/api/cal/webhook`);
+  if (!process.env.CAL_WEBHOOK_SECRET) {
+    console.log('[cal] CAL_WEBHOOK_SECRET not set — webhook signatures not verified (set in production)');
   }
 });

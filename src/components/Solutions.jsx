@@ -1,31 +1,31 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { CheckCircle2 } from 'lucide-react';
-import solutionsImg from '../assets/solutions-team.jpg';
+import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import setsUsApartGif from '../assets/sets-us-apart.gif';
 
 const Solutions = () => {
   const solutions = [
     {
-      title: "Ready-to-Work Talent",
-      desc: "We do the entire hiring process - sourcing, screening, shortlisting, onboarding. You focus on the final decision, not the process."
+      title: 'Ready-to-Work Talent',
+      desc: 'We do the entire hiring process - sourcing, screening, shortlisting, onboarding. You focus on the final decision, not the process.',
     },
     {
-      title: "People First Always",
-      desc: "When talent feels supported, performance improves. We take care of our Hires same as we care for your business."
+      title: 'People First Always',
+      desc: 'When talent feels supported, performance improves. We take care of our Hires same as we care for your business.',
     },
     {
-      title: "Scale Up or Down with Ease",
-      desc: "Business demands fluctuate. Remote staffing offers flexibility, allowing you to adjust without the burden of overhead that is difficult to untangle."
+      title: 'Scale Up or Down with Ease',
+      desc: 'Business demands fluctuate. Remote staffing offers flexibility, allowing you to adjust without the burden of overhead that is difficult to untangle.',
     },
     {
-      title: "HR and Compliance Covered",
-      desc: "Cross-border hiring comes with payroll, labor rules, and compliance requirements. We manage the details so you can stay focused on the business."
+      title: 'HR and Compliance Covered',
+      desc: 'Cross-border hiring comes with payroll, labor rules, and compliance requirements. We manage the details so you can stay focused on the business.',
     },
     {
-      title: "Curated Talent, Not Bulk Lists",
-      desc: "We don't overwhelm you with dozens of random profiles. Every candidate we share is carefully selected for your role, with quality always taking priority over quantity."
-    }
+      title: 'Curated Talent, Not Bulk Lists',
+      desc: "We don't overwhelm you with dozens of random profiles. Every candidate we share is carefully selected for your role, with quality always taking priority over quantity.",
+    },
   ];
 
   return (
@@ -50,15 +50,16 @@ const Solutions = () => {
           </motion.h2>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
+        {/* Cards scroll with the page; image sticks on the right (desktop only) */}
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 lg:items-start">
           <div className="space-y-6">
             {solutions.map((item, index) => (
               <motion.div
-                key={index}
+                key={item.title}
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: index * 0.1 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ delay: index * 0.06 }}
                 className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex gap-4 items-start"
               >
                 <div className="mt-1 flex-shrink-0">
@@ -76,11 +77,31 @@ const Solutions = () => {
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            className="rounded-3xl overflow-hidden shadow-xl"
+            className="lg:sticky lg:top-28 lg:self-start rounded-3xl overflow-hidden shadow-xl"
           >
-            <img src={setsUsApartGif} alt="Remote team collaboration" className="w-full h-auto object-cover" />
+            <img
+              src={setsUsApartGif}
+              alt="Remote team collaboration"
+              className="w-full h-auto object-cover"
+            />
           </motion.div>
         </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: 0.15 }}
+          className="mt-14 text-center"
+        >
+          <Link
+            to="/talent"
+            className="inline-flex items-center justify-center gap-2 px-10 py-4 bg-red text-white rounded-full font-bold text-lg hover:bg-black transition-colors shadow-lg border-2 border-red"
+          >
+            Find Your Next Great Hire
+            <ArrowRight size={18} />
+          </Link>
+        </motion.div>
       </div>
     </section>
   );

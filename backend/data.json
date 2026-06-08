@@ -1,0 +1,22 @@
+{
+  "talents": [],
+  "assessments": [],
+  "decisions": [],
+  "calConnections": [],
+  "introBookings": [],
+  "introSlots": [],
+  "clients": [
+    {
+      "id": "a16580eb-8f19-46a6-8a43-ab50d2a74d12",
+      "email": "client@test.com",
+      "name": "Test Client",
+      "company": null,
+      "userId": null,
+      "accountConfirmedAt": null,
+      "confirmationToken": "4bfd625d593bfcb93737786b7ca57fa88c937d0c8fd1d32bc5848a212a1b6c26",
+      "confirmationTokenExpiresAt": "2026-06-11T15:52:22.334Z",
+      "createdAt": "2026-06-08T15:52:22.287Z",
+      "updatedAt": "2026-06-08T15:52:22.334Z"
+    }
+  ]
+}

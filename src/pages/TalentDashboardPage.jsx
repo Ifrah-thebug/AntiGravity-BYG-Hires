@@ -38,7 +38,7 @@ const TalentDashboardPage = () => {
   }, [talentId]);
 
   const handleLogout = () => {
-    navigate('/talent-pool');
+    navigate('/');
   };
 
   if (!talent) {
@@ -50,7 +50,7 @@ const TalentDashboardPage = () => {
           <p className="text-gray-500 font-medium text-sm leading-relaxed mb-8">
             Admitted candidates receive a unique dashboard login link in their congratulations email. Please apply or sign in.
           </p>
-          <a href="/talent-pool/apply" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
+          <a href="/talent/signup" className="px-8 py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors block text-center shadow-lg">
             JOIN TALENT POOL
           </a>
         </div>

@@ -557,7 +557,7 @@ export const talentService = {
       sendMockEmail(
         sub.email,
         "Next Steps — Your BYG Hires Assessment",
-        `Thanks for applying, ${sub.name}. Your assessment scored ${sub.aiScore?.total_score || 50}/100.\n\nReason from our team:\n"${notes || 'Clear thinking, but responses lacked specific examples.'}"\n\nYou can reapply in 7 days here: /talent-pool/apply\n\nKeep growing,\nBYG Hires Team`,
+        `Thanks for applying, ${sub.name}. Your assessment scored ${sub.aiScore?.total_score || 50}/100.\n\nReason from our team:\n"${notes || 'Clear thinking, but responses lacked specific examples.'}"\n\nYou can reapply in 7 days here: /talent/signup\n\nKeep growing,\nBYG Hires Team`,
         'reject_email'
       );
     } else if (decision === 'revision_requested') {

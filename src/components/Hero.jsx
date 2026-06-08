@@ -1,12 +1,12 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
 import heroVideo from '../assets/Hero BG.mov';
 
 const Hero = () => {
   return (
-    <div className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 overflow-hidden bg-white min-h-[70vh] flex items-center">
-      {/* Video Background */}
+    <div className="relative pt-28 pb-16 lg:pt-40 lg:pb-24 overflow-hidden bg-white min-h-[65vh] flex items-center">
       <video
         autoPlay
         muted
@@ -18,51 +18,55 @@ const Hero = () => {
         <source src={heroVideo} type="video/mp4" />
       </video>
 
-      {/* Content Overlay */}
-      <div className="absolute top-0 left-0 w-full h-full bg-white/60 z-[1]" />
+      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/75 via-white/60 to-white/80 z-[1]" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="text-center max-w-4xl mx-auto">
+        <div className="text-center max-w-3xl mx-auto">
           <motion.h1
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="text-5xl md:text-6xl lg:text-7xl font-extrabold text-black tracking-tight mb-6"
+            className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-black tracking-tight leading-[1.1] mb-5"
           >
-            Scale more, <span className="text-red">with less.</span>
+            Your first hire
+            <br />
+            shouldn&apos;t be your{' '}
+            <span className="text-red">biggest risk.</span>
           </motion.h1>
 
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-xl md:text-2xl text-gray-800 mb-10 max-w-2xl mx-auto font-medium"
+            transition={{ duration: 0.6, delay: 0.15 }}
+            className="text-base md:text-lg text-gray-700 mb-8 max-w-2xl mx-auto font-medium leading-snug"
           >
+            We find, vet, and place remote talent so founders can focus on building—not recruiting.
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex flex-col sm:flex-row justify-center items-center gap-4"
+            transition={{ duration: 0.6, delay: 0.3 }}
+            className="flex flex-col sm:flex-row justify-center items-center gap-3"
           >
-            <a
-              href="/talent-pool"
-              className="w-full sm:w-auto px-8 py-4 bg-red text-white rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg border-2 border-red"
+            <Link
+              to="/talent/signup"
+              className="group w-full sm:w-auto px-7 py-3.5 bg-red text-white rounded-full font-bold text-base flex items-center justify-center gap-2 hover:bg-black transition-colors shadow-lg border-2 border-red"
             >
               Join the Talent Pool
-            </a>
-            <a
-              href="/talent"
-              className="w-full sm:w-auto px-8 py-4 bg-transparent border-2 border-black text-black rounded-full font-bold text-lg flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg"
+              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
+            <Link
+              to="/talent"
+              className="group w-full sm:w-auto px-7 py-3.5 bg-white/90 border-2 border-black text-black rounded-full font-bold text-base flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg"
             >
               Find a Great Hire
-            </a>
+              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
+            </Link>
           </motion.div>
         </div>
       </div>
 
-      {/* Decorative background elements */}
       <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-red/5 rounded-full blur-3xl" />
       <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-gray-100 rounded-full blur-3xl" />
     </div>
