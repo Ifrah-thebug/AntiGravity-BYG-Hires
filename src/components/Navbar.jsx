@@ -6,26 +6,16 @@ import logo from '../assets/BYG Hires Logo.png';
 import { useAuth } from '../context/AuthContext';
 import { useAccountType } from '../hooks/useAccountType';
 
-const LEGAL_NAV_ITEM = {
-  name: 'Legal',
-  dropdown: [
-    { name: 'Privacy Policy', href: '/privacy' },
-    { name: 'Terms & Conditions', href: '/terms' },
-  ],
-};
-
 const PUBLIC_NAV_LINKS = [
   { name: 'Talent Directory', href: '/talent' },
   { name: 'How It Works', href: '/how-it-works' },
   { name: 'Join Talent Pool', href: '/talent/signup' },
-  LEGAL_NAV_ITEM,
 ];
 
 const ADMIN_NAV_LINKS = [
   { name: 'Browse Candidates', href: '/admin/dashboard' },
   { name: 'Browse Clients', href: '/admin/clients' },
   { name: 'Reviews', href: '/admin/reviews' },
-  LEGAL_NAV_ITEM,
 ];
 
 function isNavLinkActive(pathname, href) {

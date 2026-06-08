@@ -1,235 +1,258 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import {
-  Database,
-  Settings,
-  Share2,
-  Globe,
-  Clock,
-  Shield,
-  Cookie,
-  ExternalLink,
-  UserCheck,
-  Lock,
-  Users,
-  RefreshCw,
-  Mail,
-  User,
-  Building2,
-  Monitor,
-} from 'lucide-react';
-import LegalPageLayout, {
-  LegalSection,
-  LegalCallout,
-  LegalInfoCard,
-  LegalContactCard,
-} from '../components/legal/LegalPageLayout';
+import React, { useEffect } from 'react';
+import { motion } from 'framer-motion';
 
-const SECTIONS = [
-  { id: 'information-collect', number: 1, title: 'Information We Collect' },
-  { id: 'how-we-use', number: 2, title: 'How We Use Information' },
-  { id: 'sharing', number: 3, title: 'Sharing of Information' },
-  { id: 'international', number: 4, title: 'International Data Transfers' },
-  { id: 'retention', number: 5, title: 'Data Retention' },
-  { id: 'security', number: 6, title: 'Data Security' },
-  { id: 'cookies', number: 7, title: 'Cookies' },
-  { id: 'third-party', number: 8, title: 'Third-Party Links' },
-  { id: 'your-rights', number: 9, title: 'Your Rights' },
-  { id: 'confidentiality', number: 10, title: 'Confidentiality' },
-  { id: 'children', number: 11, title: "Children's Privacy" },
-  { id: 'changes', number: 12, title: 'Changes to This Policy' },
-  { id: 'contact', number: 13, title: 'Contact Us' },
-];
+const PrivacyPolicyPage = () => {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
-const PrivacyPolicyPage = () => (
-  <LegalPageLayout
-    title="Privacy Policy"
-    effectiveDate="May 30, 2026"
-    sections={SECTIONS}
-    siblingPage={{ href: '/terms', label: 'Terms & Conditions', shortLabel: 'Terms' }}
-    acknowledgement="By using our website or services, you acknowledge and agree to this Privacy Policy."
-    intro={(
-      <>
-        <p className="text-lg font-bold text-gray-900">
-          Welcome to BYG Hires (&ldquo;BYG Hires&rdquo;, &ldquo;we&rdquo;, &ldquo;our&rdquo;, or &ldquo;us&rdquo;).
-        </p>
-        <p>
-          BYG Hires is committed to protecting your privacy and handling personal data responsibly in accordance
-          with applicable international data protection standards, including the UAE Personal Data Protection Law
-          (PDPL) and other applicable privacy regulations. This Privacy Policy explains how we collect, use,
-          store, share, and protect your information when you use our website or services. For general use of
-          our platform, please also review our{' '}
-          <Link to="/terms" className="text-red hover:underline font-bold">
-            Terms &amp; Conditions
-          </Link>
-          .
-        </p>
-      </>
-    )}
-  >
-    <LegalSection id="information-collect" number={1} title="Information We Collect" icon={Database}>
-      <p>We may collect the following information:</p>
-      <div className="grid md:grid-cols-3 gap-4 pt-1">
-        <LegalInfoCard
-          title="Candidate Information"
-          icon={User}
-          items={[
-            'Name & contact details',
-            'CV/Resume & portfolio links',
-            'Employment & educational background',
-            'Interview feedback & assessments',
-            'Salary expectations & preferences',
-          ]}
-        />
-        <LegalInfoCard
-          title="Client Information"
-          icon={Building2}
-          items={[
-            'Company name & contact info',
-            'Billing & invoicing information',
-            'Hiring requirements & details',
-            'Written and oral communications',
-          ]}
-        />
-        <LegalInfoCard
-          title="Technical Information"
-          icon={Monitor}
-          items={[
-            'IP address & technical details',
-            'Browser & device information',
-            'Website usage statistics',
-            'Cookies & analytics tracking',
-          ]}
-        />
-      </div>
-    </LegalSection>
+  return (
+    <div className="bg-white text-black min-h-screen pt-32 pb-24 font-sans leading-relaxed">
+      <div className="max-w-4xl mx-auto px-6">
+        
+        {/* Header */}
+        <motion.div
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-left border-b border-gray-100 pb-10 mb-12"
+        >
+          <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-4">Legal Obligations</p>
+          <h1 className="text-4xl md:text-6xl font-black text-black tracking-tight leading-tight mb-4 uppercase">
+            Privacy Policy
+          </h1>
+          <p className="text-gray-400 text-sm font-semibold tracking-wide">
+            Effective Date: May 30, 2026
+          </p>
+        </motion.div>
 
-    <LegalSection id="how-we-use" number={2} title="How We Use Information" icon={Settings} delay={0.05}>
-      <p>We use personal data to:</p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {[
-          'Provide recruitment and remote staffing services',
-          'Source, screen, and present candidates',
-          'Coordinate interviews and placements',
-          'Communicate with candidates and clients',
-          'Improve our website and service quality',
-          'Process invoices and business operations',
-          'Maintain security and prevent fraud',
-          'Comply with legal and regulatory obligations',
-        ].map((item) => (
-          <div key={item} className="flex items-start gap-2.5 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
-            <span className="w-1.5 h-1.5 rounded-full bg-red mt-2 shrink-0" />
-            <span className="text-sm font-medium">{item}</span>
+        {/* Content Section */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.15 }}
+          className="prose prose-lg max-w-none text-gray-700 space-y-10"
+        >
+          <div>
+            <p className="text-lg font-medium text-gray-800 leading-relaxed mb-4">
+              Welcome to BYG Hires (“BYG Hires”, “we”, “our”, or “us”).
+            </p>
+            <p className="leading-relaxed text-gray-600">
+              BYG Hires is committed to protecting your privacy and handling personal data responsibly in accordance with applicable international data protection standards, including the UAE Personal Data Protection Law (PDPL) and other applicable privacy regulations.
+              This Privacy Policy explains how we collect, use, store, share, and protect your information when you use our website or services.
+            </p>
           </div>
-        ))}
+
+          {/* Section 1 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">1.</span> Information We Collect
+            </h2>
+            <p className="text-gray-600">We may collect the following information:</p>
+            
+            <div className="grid md:grid-cols-3 gap-6 pt-2">
+              <div className="bg-gray-50 border border-gray-100 p-6 rounded-2xl">
+                <h3 className="font-black text-xs text-black uppercase tracking-wider mb-3">Candidate Information</h3>
+                <ul className="space-y-2 text-[13px] text-gray-600 font-medium list-disc list-inside">
+                  <li>Name & Contact details</li>
+                  <li>CV/Resume & portfolio links</li>
+                  <li>Employment & educational background</li>
+                  <li>Interview feedback & assessments</li>
+                  <li>Salary expectations & preferences</li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-100 p-6 rounded-2xl">
+                <h3 className="font-black text-xs text-black uppercase tracking-wider mb-3">Client Information</h3>
+                <ul className="space-y-2 text-[13px] text-gray-600 font-medium list-disc list-inside">
+                  <li>Company name & contact info</li>
+                  <li>Billing & invoicing information</li>
+                  <li>Hiring requirements & details</li>
+                  <li>Written and oral communications</li>
+                </ul>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-100 p-6 rounded-2xl">
+                <h3 className="font-black text-xs text-black uppercase tracking-wider mb-3">Technical Information</h3>
+                <ul className="space-y-2 text-[13px] text-gray-600 font-medium list-disc list-inside">
+                  <li>IP address & technical details</li>
+                  <li>Browser & device information</li>
+                  <li>Website usage statistics</li>
+                  <li>Cookies & analytics tracking</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          {/* Section 2 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">2.</span> How We Use Information
+            </h2>
+            <p className="text-gray-600">We use personal data to:</p>
+            <ul className="grid md:grid-cols-2 gap-x-8 gap-y-2.5 pl-5 list-disc text-gray-600 font-medium">
+              <li>Provide recruitment and remote staffing services</li>
+              <li>Source, screen, and present candidates</li>
+              <li>Coordinate interviews and placements</li>
+              <li>Communicate with candidates and clients</li>
+              <li>Improve our website and service quality</li>
+              <li>Process invoices and business operations</li>
+              <li>Maintain security and prevent fraud</li>
+              <li>Comply with legal and regulatory obligations</li>
+            </ul>
+          </section>
+
+          {/* Section 3 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">3.</span> Sharing of Information
+            </h2>
+            <p className="text-gray-600">
+              We may share personal data with:
+            </p>
+            <ul className="list-disc pl-5 space-y-1.5 text-gray-600">
+              <li><strong>Client companies</strong> for recruitment and staffing evaluation purposes</li>
+              <li><strong>Service providers</strong> and technology partners who assist our operations</li>
+              <li><strong>Legal or regulatory authorities</strong> where required by applicable laws</li>
+            </ul>
+            <div className="bg-red/5 border border-red/10 rounded-2xl p-4 mt-2">
+              <p className="text-xs text-red font-black uppercase tracking-wider">
+                We do not sell personal data to third parties.
+              </p>
+            </div>
+          </section>
+
+          {/* Section 4 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">4.</span> International Data Transfers
+            </h2>
+            <p className="text-gray-600">
+              As a global remote staffing agency, BYG Hires may process and transfer data internationally, including within the GCC and other countries where our clients, candidates, or service providers operate. We take reasonable measures to ensure personal data remains protected during such transfers.
+            </p>
+          </section>
+
+          {/* Section 5 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">5.</span> Data Retention
+            </h2>
+            <p className="text-gray-600">
+              We retain personal data only for as long as necessary for recruitment, legal, operational, and business purposes, unless a longer retention period is required or permitted by law.
+            </p>
+          </section>
+
+          {/* Section 6 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">6.</span> Data Security
+            </h2>
+            <p className="text-gray-600">
+              We implement reasonable technical and organizational measures to protect personal data against unauthorized access, misuse, disclosure, or loss. However, no electronic system or internet transmission can be guaranteed to be completely secure.
+            </p>
+          </section>
+
+          {/* Section 7 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">7.</span> Cookies
+            </h2>
+            <p className="text-gray-600">
+              Our website may use cookies and similar technologies to improve website functionality, analyze traffic, and enhance user experience. Users may disable cookies through their individual browser settings.
+            </p>
+          </section>
+
+          {/* Section 8 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">8.</span> Third-Party Links
+            </h2>
+            <p className="text-gray-600">
+              Our website may contain links to third-party websites or platforms. BYG Hires is not responsible for the privacy practices or content of third-party services.
+            </p>
+          </section>
+
+          {/* Section 9 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">9.</span> Your Rights
+            </h2>
+            <p className="text-gray-600">Subject to applicable laws, you may have the right to:</p>
+            <ul className="grid md:grid-cols-2 gap-x-8 gap-y-2 pl-5 list-disc text-gray-600">
+              <li>Access your stored personal data</li>
+              <li>Request correction of inaccurate information</li>
+              <li>Request the deletion of your personal data</li>
+              <li>Withdraw consent where processing relies on it</li>
+              <li>Object to certain data processing activities</li>
+            </ul>
+            <p className="text-[13px] text-gray-400 font-bold mt-2">
+              Requests may be submitted through our contact details below.
+            </p>
+          </section>
+
+          {/* Section 10 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">10.</span> Confidentiality
+            </h2>
+            <p className="text-gray-600">
+              All candidate, client, and business information shared with BYG Hires shall be treated confidentially and handled in accordance with applicable privacy obligations.
+            </p>
+          </section>
+
+          {/* Section 11 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">11.</span> Children’s Privacy
+            </h2>
+            <p className="text-gray-600">
+              Our services are not intended for individuals under the age of 18. We do not knowingly collect personal data from minors.
+            </p>
+          </section>
+
+          {/* Section 12 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">12.</span> Changes to This Privacy Policy
+            </h2>
+            <p className="text-gray-600">
+              BYG Hires may update this Privacy Policy from time to time. Updated versions will be posted on this page with a revised effective date.
+            </p>
+          </section>
+
+          {/* Section 13 */}
+          <section className="space-y-4">
+            <h2 className="text-2xl font-black text-black tracking-tight uppercase flex items-center gap-3">
+              <span className="text-red">13.</span> Contact Us
+            </h2>
+            <p className="text-gray-600">
+              For privacy-related questions or requests, please contact:
+            </p>
+            <div className="bg-gray-50 border border-gray-100 p-6 rounded-2xl space-y-2 mt-2">
+              <p className="font-black text-sm text-black uppercase tracking-wider">BYG Hires</p>
+              <p className="text-sm font-semibold">
+                <span className="text-gray-400">Website:</span>{' '}
+                <a href="https://www.bnyahyagroup.com" target="_blank" rel="noopener noreferrer" className="text-red hover:underline font-bold">
+                  BYG Hires Official Website
+                </a>
+              </p>
+              <p className="text-sm font-semibold">
+                <span className="text-gray-400">Email:</span>{' '}
+                <a href="mailto:hr@bnyahyagroup.com" className="text-red hover:underline font-bold">
+                  hr@bnyahyagroup.com
+                </a>
+              </p>
+            </div>
+          </section>
+        </motion.div>
+
+        {/* Footer Acknowledgement */}
+        <div className="mt-16 pt-8 border-t border-gray-100 text-center text-xs font-semibold text-gray-400 uppercase tracking-widest">
+          By using our website or services, you acknowledge and agree to this Privacy Policy.
+        </div>
+
       </div>
-    </LegalSection>
-
-    <LegalSection id="sharing" number={3} title="Sharing of Information" icon={Share2} variant="highlight" delay={0.05}>
-      <p>We may share personal data with:</p>
-      <div className="space-y-3">
-        {[
-          { label: 'Client companies', desc: 'for recruitment and staffing evaluation purposes' },
-          { label: 'Service providers', desc: 'and technology partners who assist our operations' },
-          { label: 'Legal or regulatory authorities', desc: 'where required by applicable laws' },
-        ].map(({ label, desc }) => (
-          <div key={label} className="flex items-start gap-3 bg-white/80 rounded-xl p-4 border border-red/10">
-            <span className="font-black text-red text-sm shrink-0">{label}</span>
-            <span className="text-sm text-gray-500">— {desc}</span>
-          </div>
-        ))}
-      </div>
-      <LegalCallout tone="accent">
-        <p className="text-xs font-black uppercase tracking-wider text-red">
-          We do not sell personal data to third parties.
-        </p>
-      </LegalCallout>
-    </LegalSection>
-
-    <LegalSection id="international" number={4} title="International Data Transfers" icon={Globe}>
-      <p>
-        As a global remote staffing agency, BYG Hires may process and transfer data internationally,
-        including within the GCC and other countries where our clients, candidates, or service providers
-        operate. We take reasonable measures to ensure personal data remains protected during such transfers.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="retention" number={5} title="Data Retention" icon={Clock}>
-      <p>
-        We retain personal data only for as long as necessary for recruitment, legal, operational, and
-        business purposes, unless a longer retention period is required or permitted by law.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="security" number={6} title="Data Security" icon={Shield} variant="highlight">
-      <p>
-        We implement reasonable technical and organizational measures to protect personal data against
-        unauthorized access, misuse, disclosure, or loss. However, no electronic system or internet
-        transmission can be guaranteed to be completely secure.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="cookies" number={7} title="Cookies" icon={Cookie}>
-      <p>
-        Our website may use cookies and similar technologies to improve website functionality, analyze
-        traffic, and enhance user experience. Users may disable cookies through their individual browser settings.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="third-party" number={8} title="Third-Party Links" icon={ExternalLink}>
-      <p>
-        Our website may contain links to third-party websites or platforms. BYG Hires is not responsible
-        for the privacy practices or content of third-party services.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="your-rights" number={9} title="Your Rights" icon={UserCheck} delay={0.05}>
-      <p>Subject to applicable laws, you may have the right to:</p>
-      <div className="grid sm:grid-cols-2 gap-3">
-        {[
-          'Access your stored personal data',
-          'Request correction of inaccurate information',
-          'Request the deletion of your personal data',
-          'Withdraw consent where processing relies on it',
-          'Object to certain data processing activities',
-        ].map((right) => (
-          <div key={right} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 px-4 py-3">
-            <UserCheck size={16} className="text-red shrink-0" />
-            <span className="text-sm font-medium">{right}</span>
-          </div>
-        ))}
-      </div>
-      <p className="text-[13px] text-gray-400 font-bold">
-        Requests may be submitted through our contact details below.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="confidentiality" number={10} title="Confidentiality" icon={Lock}>
-      <p>
-        All candidate, client, and business information shared with BYG Hires shall be treated
-        confidentially and handled in accordance with applicable privacy obligations.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="children" number={11} title="Children's Privacy" icon={Users}>
-      <p>
-        Our services are not intended for individuals under the age of 18. We do not knowingly collect
-        personal data from minors.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="changes" number={12} title="Changes to This Privacy Policy" icon={RefreshCw}>
-      <p>
-        BYG Hires may update this Privacy Policy from time to time. Updated versions will be posted on
-        this page with a revised effective date.
-      </p>
-    </LegalSection>
-
-    <LegalSection id="contact" number={13} title="Contact Us" icon={Mail}>
-      <p>For privacy-related questions or requests, please contact us using the details below.</p>
-      <LegalContactCard />
-    </LegalSection>
-  </LegalPageLayout>
-);
+    </div>
+  );
+};
 
 export default PrivacyPolicyPage;
