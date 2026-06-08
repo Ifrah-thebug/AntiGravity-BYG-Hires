@@ -27,6 +27,7 @@ import AssessmentPage from './pages/AssessmentPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
 
 // Import Supabase-backed Talent Pool Pages
 import TalentSignupPage from './pages/TalentSignupPage';
@@ -122,6 +123,7 @@ const AppContent = () => {
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
           <Route path="/request-intro" element={<RequestIntroPage />} />
           <Route path="/privacy" element={<PrivacyPolicyPage />} />
+          <Route path="/terms" element={<TermsOfServicePage />} />
           {/* Supabase-backed Talent Pool System */}
           <Route path="/talent" element={<TalentDirectoryPage />} />
           <Route path="/talent/signup" element={<TalentSignupPage />} />
