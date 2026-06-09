@@ -6,7 +6,7 @@ import { AlertTriangle, ArrowRight, Sparkles, Mail } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatAuthError } from '../lib/talentAuth';
+import { formatAuthError, notifyAccountProfileUpdated } from '../lib/talentAuth';
 import {
   clearPendingSetup,
   loadPendingSetup,
@@ -224,6 +224,7 @@ const TalentSetupPage = () => {
       }));
 
       clearPendingSetup();
+      notifyAccountProfileUpdated();
       navigate('/portal', {
         state: {
           justCreated: true,

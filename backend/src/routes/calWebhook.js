@@ -5,7 +5,7 @@ const router = express.Router();
 
 /**
  * Cal.com → Settings → Developer → Webhooks
- * - Trigger: Booking Created
+ * - Triggers: Booking Created, Booking Cancelled, Booking Rescheduled
  * - Event type: discovery-call (or scope to that event only)
  * - Subscriber URL: {BACKEND_PUBLIC_URL}/api/cal/webhook
  * - Secret: set CAL_WEBHOOK_SECRET in .env to match

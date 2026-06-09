@@ -146,10 +146,10 @@ export default function ClientDashboardPage() {
             Client Portal
           </p>
           <h1 className="text-3xl md:text-4xl font-black text-black tracking-tight">
-            Your upcoming interviews
+            Your upcoming calls
           </h1>
           <p className="text-gray-500 text-sm font-medium mt-2">
-            Times shown in your local timezone ({timeZoneLabel})
+            Discovery calls and talent intros — times in your local timezone ({timeZoneLabel})
           </p>
         </motion.div>
 
@@ -214,31 +214,44 @@ export default function ClientDashboardPage() {
                   <div className="w-14 h-14 mx-auto rounded-3xl bg-gray-50 border border-gray-100 flex items-center justify-center">
                     <Calendar size={22} className="text-red" />
                   </div>
-                  <p className="mt-4 text-gray-700 font-black">No upcoming interviews</p>
+                  <p className="mt-4 text-gray-700 font-black">No upcoming calls</p>
                   <p className="text-gray-500 text-sm font-medium mt-2">
-                    When you book an intro, it will appear here.
+                    Discovery calls and talent intros will appear here after you book.
                   </p>
                 </div>
               )}
 
               {bookings.map((b) => {
                 const summary = formatIntroSlotSummary(b.start, timeZone);
+                const isDiscovery = b.type === 'discovery';
                 return (
                   <div
-                    key={b.id}
+                    key={`${b.type}-${b.id}`}
                     className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-6 md:p-8"
                   >
                     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                       <div className="flex items-start gap-4">
-                        <div className="w-12 h-12 rounded-3xl bg-black text-white flex items-center justify-center shadow-md shadow-black/10">
-                          <span className="font-black text-sm">INT</span>
+                        <div
+                          className={`w-12 h-12 rounded-3xl flex items-center justify-center shadow-md ${
+                            isDiscovery
+                              ? 'bg-red text-white shadow-red/20'
+                              : 'bg-black text-white shadow-black/10'
+                          }`}
+                        >
+                          <span className="font-black text-[10px]">
+                            {isDiscovery ? 'DISC' : 'INT'}
+                          </span>
                         </div>
                         <div>
                           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">
-                            {b.title || 'Intro Interview'}
+                            {isDiscovery ? 'Discovery call' : b.title || 'Intro Interview'}
                           </p>
                           <p className="text-lg font-black text-black">
-                            {b.talentName ? `With ${b.talentName}` : 'With your talent'}
+                            {isDiscovery
+                              ? 'With BYG Hires'
+                              : b.talentName
+                                ? `With ${b.talentName}`
+                                : 'With your talent'}
                           </p>
                           <p className="text-red font-black text-sm mt-1">{summary.dayLine}</p>
                           <p className="text-gray-600 text-sm font-semibold mt-2">

@@ -59,6 +59,7 @@ import AdminClientsPage from './pages/AdminClientsPage';
 import ClientActivatePage from './pages/ClientActivatePage';
 import ClientLoginPage from './pages/ClientLoginPage';
 import ClientDashboardPage from './pages/ClientDashboardPage';
+import NotFoundPage from './pages/NotFoundPage';
 import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
 
@@ -149,6 +150,7 @@ const AppContent = () => {
           <Route path="/client/activate" element={<ClientActivatePage />} />
           <Route path="/client/login" element={<Navigate to="/login" replace />} />
           <Route path="/client" element={<ClientDashboardPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
       {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && <Footer />}

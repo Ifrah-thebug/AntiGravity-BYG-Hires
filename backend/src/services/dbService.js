@@ -13,7 +13,7 @@ function readDB() {
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(
       DB_PATH,
-      JSON.stringify({ talents: [], assessments: [], decisions: [], calConnections: [], introBookings: [], introSlots: [], clients: [] }, null, 2)
+      JSON.stringify({ talents: [], assessments: [], decisions: [], calConnections: [], introBookings: [], introSlots: [], clients: [], discoveryBookings: [] }, null, 2)
     );
   }
   const parsed = JSON.parse(fs.readFileSync(DB_PATH, 'utf8'));
@@ -21,6 +21,7 @@ function readDB() {
   if (!Array.isArray(parsed.introBookings)) parsed.introBookings = [];
   if (!Array.isArray(parsed.introSlots)) parsed.introSlots = [];
   if (!Array.isArray(parsed.clients)) parsed.clients = [];
+  if (!Array.isArray(parsed.discoveryBookings)) parsed.discoveryBookings = [];
   if (Array.isArray(parsed.nylasConnections) && parsed.nylasConnections.length) {
     parsed.calConnections = parsed.nylasConnections.map((c) => ({
       id: c.id,
@@ -369,6 +370,70 @@ module.exports = {
     const em = String(email || '').trim().toLowerCase();
     if (!em) return null;
     return db.clients.find((c) => (c.email || '').toLowerCase() === em) || null;
+  },
+
+  async upsertDiscoveryBooking(payload) {
+    const db = readDB();
+    const idx = db.discoveryBookings.findIndex((b) => b.cal_uid === payload.cal_uid || b.calUid === payload.cal_uid);
+    const row = {
+      id: idx >= 0 ? db.discoveryBookings[idx].id : uuidv4(),
+      clientId: payload.client_id,
+      calUid: payload.cal_uid,
+      title: payload.title,
+      start_at: payload.start_at,
+      end_at: payload.end_at,
+      meeting_url: payload.meeting_url,
+      guest_name: payload.guest_name,
+      guest_email: payload.guest_email,
+      status: payload.status || 'confirmed',
+      createdAt: idx >= 0 ? db.discoveryBookings[idx].createdAt : payload.updated_at,
+      updatedAt: payload.updated_at,
+    };
+    if (idx >= 0) db.discoveryBookings[idx] = row;
+    else db.discoveryBookings.push(row);
+    writeDB(db);
+    return row;
+  },
+
+  async updateDiscoveryBookingByCalUid(calUid, patch) {
+    const db = readDB();
+    const idx = db.discoveryBookings.findIndex((b) => (b.calUid || b.cal_uid) === calUid);
+    if (idx < 0) return null;
+    const row = db.discoveryBookings[idx];
+    if (patch.status) row.status = patch.status;
+    if (patch.start_at) row.start_at = patch.start_at;
+    if (patch.end_at !== undefined) row.end_at = patch.end_at;
+    if (patch.meeting_url !== undefined) row.meeting_url = patch.meeting_url;
+    if (patch.title) row.title = patch.title;
+    row.updatedAt = patch.updated_at || new Date().toISOString();
+    writeDB(db);
+    return row;
+  },
+
+  async listUpcomingDiscoveryBookingsForClientId(clientId) {
+    const db = readDB();
+    const now = Date.now();
+    const inactive = new Set(['cancelled', 'canceled', 'rejected']);
+
+    return db.discoveryBookings
+      .filter((b) => {
+        if ((b.clientId || b.client_id) !== clientId) return false;
+        if (inactive.has(String(b.status || '').toLowerCase())) return false;
+        return new Date(b.start_at || b.start).getTime() >= now;
+      })
+      .map((b) => ({
+        id: b.id,
+        clientId: b.clientId || b.client_id,
+        calUid: b.calUid || b.cal_uid,
+        title: b.title || 'Discovery Call',
+        start: b.start_at || b.start,
+        end: b.end_at || b.end,
+        meetingUrl: b.meeting_url || b.meetingUrl || null,
+        guestName: b.guest_name || b.guestName || null,
+        guestEmail: b.guest_email || b.guestEmail || null,
+        status: b.status,
+      }))
+      .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
   },
 
   async listUpcomingIntroBookingsForClientUserId(userId) {

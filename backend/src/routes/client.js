@@ -1,6 +1,7 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const clientActivation = require('../services/clientActivationService');
+const discoveryStore = require('../services/discoveryBookingStore');
 const db = require('../services/dbService');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -193,12 +194,35 @@ router.get('/dashboard/overview', async (req, res) => {
         const byId = new Map((profiles || []).map((p) => [p.id, p]));
         bookings = bookings.map((b) => ({
           ...b,
+          type: 'intro',
           talentName: byId.get(b.talentId)?.name || null,
         }));
       }
     } else {
       bookings = await db.listUpcomingIntroBookingsForClientUserId(userId);
     }
+
+    const introBookings = bookings.map((b) => ({ ...b, type: 'intro' }));
+
+    let discoveryBookings = [];
+    try {
+      const rows = await discoveryStore.listUpcomingDiscoveryBookingsForClientId(client.id);
+      discoveryBookings = rows.map((b) => ({
+        id: b.id,
+        type: 'discovery',
+        title: b.title || 'Discovery Call',
+        start: b.start,
+        end: b.end,
+        meetingUrl: b.meetingUrl,
+        status: b.status,
+      }));
+    } catch (discErr) {
+      console.warn('[client/dashboard] discovery bookings:', discErr?.message || discErr);
+    }
+
+    const mergedBookings = [...discoveryBookings, ...introBookings].sort(
+      (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
+    );
 
     return res.json({
       ok: true,
@@ -208,7 +232,9 @@ router.get('/dashboard/overview', async (req, res) => {
         name: client.name || null,
         company: client.company || null,
       },
-      bookings,
+      bookings: mergedBookings,
+      discoveryBookings,
+      introBookings,
     });
   } catch (err) {
     console.error('[client/dashboard/overview]', err?.message || err);

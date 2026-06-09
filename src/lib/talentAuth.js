@@ -3,6 +3,15 @@ import { loadPendingSetup } from './talentStorage';
 import { fetchIsAdmin } from './adminAuth';
 import { fetchIsClient } from './clientAuth';
 
+export const ACCOUNT_PROFILE_UPDATED = 'byg-account-profile-updated';
+
+/** Call after talent profile is saved so navbar account type re-resolves. */
+export function notifyAccountProfileUpdated() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(ACCOUNT_PROFILE_UPDATED));
+  }
+}
+
 /** User-friendly auth / API errors */
 export function formatAuthError(err) {
   if (!err) return 'Something went wrong. Please try again.';

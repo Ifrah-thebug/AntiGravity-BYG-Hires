@@ -1,10 +1,11 @@
 /**
- * Discovery-call bookings (Cal.com public page) → client record + activation email.
+ * Discovery-call bookings (Cal.com public page) → client record + DB row + activation email.
  */
 
 const crypto = require('crypto');
 const introSlots = require('./introSlotsService');
 const clientActivation = require('./clientActivationService');
+const discoveryStore = require('./discoveryBookingStore');
 
 function getDiscoverySlug() {
   return String(process.env.CAL_DISCOVERY_SLUG || 'discovery-call').trim().toLowerCase();
@@ -33,6 +34,26 @@ function extractGuestFromPayload(payload) {
   };
 }
 
+function extractMeetingUrl(payload) {
+  const loc = payload?.meetingUrl || payload?.location;
+  if (typeof loc === 'string' && loc.trim()) return loc.trim();
+  if (loc && typeof loc === 'object') {
+    const v = loc.link || loc.value || loc.joinUrl;
+    if (typeof v === 'string' && v.trim()) return v.trim();
+  }
+  return null;
+}
+
+function extractBookingTimes(payload) {
+  const start = payload?.startTime || payload?.start;
+  const end = payload?.endTime || payload?.end;
+  return { start, end };
+}
+
+function extractCalUid(payload) {
+  return String(payload?.uid || payload?.bookingUid || payload?.bookingId || '').trim() || null;
+}
+
 function isDiscoveryBookingPayload(payload) {
   if (!payload) return false;
 
@@ -49,10 +70,6 @@ function isDiscoveryBookingPayload(payload) {
   return true;
 }
 
-/**
- * Verify Cal.com webhook signature (x-cal-signature-256).
- * Skips verification when CAL_WEBHOOK_SECRET is unset (dev only).
- */
 function verifyCalWebhookSignature(rawBody, signatureHeader) {
   const secret = String(process.env.CAL_WEBHOOK_SECRET || '').trim();
   if (!secret) return true;
@@ -75,6 +92,14 @@ function verifyCalWebhookSignature(rawBody, signatureHeader) {
   }
 }
 
+async function ensureClientForDiscovery(guest) {
+  return introSlots.upsertClientByEmail({
+    email: guest.email,
+    name: guest.name,
+    company: null,
+  });
+}
+
 async function handleDiscoveryBookingCreated(payload) {
   if (!isDiscoveryBookingPayload(payload)) {
     return { handled: false, reason: 'not_discovery_event' };
@@ -90,13 +115,15 @@ async function handleDiscoveryBookingCreated(payload) {
     return { handled: false, reason: 'organizer_is_guest' };
   }
 
+  const calUid = extractCalUid(payload);
+  const { start, end } = extractBookingTimes(payload);
+  if (!calUid || !start) {
+    return { handled: false, reason: 'missing_cal_uid_or_start' };
+  }
+
   let clientId = null;
   try {
-    clientId = await introSlots.upsertClientByEmail({
-      email: guest.email,
-      name: guest.name,
-      company: null,
-    });
+    clientId = await ensureClientForDiscovery(guest);
   } catch (err) {
     console.error('[discovery] clients upsert failed:', err?.message || err);
     return { handled: false, reason: 'client_upsert_failed', error: err?.message };
@@ -106,27 +133,81 @@ async function handleDiscoveryBookingCreated(payload) {
     return { handled: false, reason: 'no_client_id' };
   }
 
+  let booking = null;
   try {
-    const activation = await clientActivation.sendPostBookingActivation({
+    booking = await discoveryStore.upsertDiscoveryBooking({
+      clientId,
+      calUid,
+      title: payload.title || 'Discovery Call',
+      startAt: start,
+      endAt: end,
+      meetingUrl: extractMeetingUrl(payload),
+      guestName: guest.name,
+      guestEmail: guest.email,
+      status: 'confirmed',
+    });
+  } catch (err) {
+    console.error('[discovery] booking save failed:', err?.message || err);
+    return { handled: false, reason: 'booking_save_failed', error: err?.message };
+  }
+
+  let activation = { sent: false, reason: 'skipped' };
+  try {
+    activation = await clientActivation.sendPostBookingActivation({
       clientId,
       clientEmail: guest.email,
       clientName: guest.name,
       bookingContext: 'discovery',
     });
-    return {
-      handled: true,
-      clientId,
-      bookingUid: payload.uid || payload.bookingUid || null,
-      activation,
-    };
   } catch (err) {
-    console.error('[discovery] activation email failed:', err?.message || err);
-    return {
-      handled: true,
-      clientId,
-      activation: { sent: false, reason: 'send_failed', error: err?.message },
-    };
+    console.warn('[discovery] activation email failed:', err?.message || err);
+    activation = { sent: false, reason: 'send_failed', error: err?.message };
   }
+
+  return {
+    handled: true,
+    clientId,
+    bookingId: booking?.id || null,
+    bookingUid: calUid,
+    activation,
+  };
+}
+
+async function handleDiscoveryBookingCancelled(payload) {
+  if (!isDiscoveryBookingPayload(payload)) {
+    return { handled: false, reason: 'not_discovery_event' };
+  }
+
+  const calUid = extractCalUid(payload);
+  if (!calUid) return { handled: false, reason: 'missing_cal_uid' };
+
+  const row = await discoveryStore.updateDiscoveryBookingByCalUid(calUid, {
+    status: 'cancelled',
+  });
+
+  return { handled: true, bookingUid: calUid, updated: Boolean(row) };
+}
+
+async function handleDiscoveryBookingRescheduled(payload) {
+  if (!isDiscoveryBookingPayload(payload)) {
+    return { handled: false, reason: 'not_discovery_event' };
+  }
+
+  const calUid = extractCalUid(payload);
+  const { start, end } = extractBookingTimes(payload);
+  if (!calUid || !start) {
+    return { handled: false, reason: 'missing_cal_uid_or_start' };
+  }
+
+  const row = await discoveryStore.updateDiscoveryBookingByCalUid(calUid, {
+    status: 'confirmed',
+    start_at: new Date(start).toISOString(),
+    end_at: end ? new Date(end).toISOString() : null,
+    meeting_url: extractMeetingUrl(payload),
+    title: payload.title || 'Discovery Call',
+  });
+
+  return { handled: true, bookingUid: calUid, updated: Boolean(row) };
 }
 
 async function processCalWebhookBody(rawBody, signatureHeader) {
@@ -146,13 +227,24 @@ async function processCalWebhookBody(rawBody, signatureHeader) {
   }
 
   const triggerEvent = String(body.triggerEvent || body.event || '').trim().toUpperCase();
-  if (triggerEvent !== 'BOOKING_CREATED') {
-    return { ok: true, handled: false, reason: 'ignored_trigger', triggerEvent };
+  const payload = body.payload || body;
+
+  if (triggerEvent === 'BOOKING_CREATED') {
+    const result = await handleDiscoveryBookingCreated(payload);
+    return { ok: true, ...result };
   }
 
-  const payload = body.payload || body;
-  const result = await handleDiscoveryBookingCreated(payload);
-  return { ok: true, ...result };
+  if (triggerEvent === 'BOOKING_CANCELLED' || triggerEvent === 'BOOKING_CANCELED') {
+    const result = await handleDiscoveryBookingCancelled(payload);
+    return { ok: true, ...result };
+  }
+
+  if (triggerEvent === 'BOOKING_RESCHEDULED') {
+    const result = await handleDiscoveryBookingRescheduled(payload);
+    return { ok: true, ...result };
+  }
+
+  return { ok: true, handled: false, reason: 'ignored_trigger', triggerEvent };
 }
 
 module.exports = {

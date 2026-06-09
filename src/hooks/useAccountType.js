@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { fetchIsAdmin } from '../lib/adminAuth';
 import { fetchIsClient } from '../lib/clientAuth';
-import { fetchUserProfile } from '../lib/talentAuth';
+import { fetchUserProfile, ACCOUNT_PROFILE_UPDATED } from '../lib/talentAuth';
 import { loadPendingSetup } from '../lib/talentStorage';
 
 /**
  * @returns {'admin' | 'client' | 'talent' | 'guest' | 'loading'}
  */
 export function useAccountType(user) {
+  const { pathname } = useLocation();
+  const [refreshNonce, setRefreshNonce] = useState(0);
   const [accountType, setAccountType] = useState(user ? 'loading' : 'guest');
+
+  useEffect(() => {
+    const onProfileUpdated = () => setRefreshNonce((n) => n + 1);
+    window.addEventListener(ACCOUNT_PROFILE_UPDATED, onProfileUpdated);
+    return () => window.removeEventListener(ACCOUNT_PROFILE_UPDATED, onProfileUpdated);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -19,7 +28,9 @@ export function useAccountType(user) {
         return;
       }
 
-      setAccountType('loading');
+      // Avoid flashing "Log In" / hiding My Portal on background re-checks.
+      setAccountType((prev) => (prev === 'guest' || prev === 'loading' ? 'loading' : prev));
+
       try {
         if (await fetchIsAdmin()) {
           if (!cancelled) setAccountType('admin');
@@ -48,7 +59,7 @@ export function useAccountType(user) {
     return () => {
       cancelled = true;
     };
-  }, [user?.id]);
+  }, [user?.id, pathname, refreshNonce]);
 
   return accountType;
 }

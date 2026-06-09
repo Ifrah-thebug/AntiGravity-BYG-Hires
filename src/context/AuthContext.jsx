@@ -33,6 +33,10 @@ export const AuthProvider = ({ children }) => {
       options: { data: metadata },
     });
     if (error) throw error;
+    if (data.session) {
+      setSession(data.session);
+      setUser(data.session.user);
+    }
     return data;
   };
 
