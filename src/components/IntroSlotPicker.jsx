@@ -52,6 +52,7 @@ function ExistingIntroPanel({
   syncNotice,
   clientTimeZone,
   activation,
+  isLoggedInClient = false,
 }) {
   const summary = formatIntroSlotSummary(booking.start, clientTimeZone);
 
@@ -92,18 +93,27 @@ function ExistingIntroPanel({
       <p className="text-[11px] text-gray-400 mt-5">
         Check your email ({booking.guestEmail || 'your inbox'}) for the Cal.com calendar invite.
       </p>
-      {activation?.sent && (
+      {!isLoggedInClient && activation?.sent && (
         <p className="text-[11px] text-gray-700 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mt-4 font-semibold leading-relaxed">
           {isRepeatVisit ? 'We sent another ' : 'We also sent a '}
           <span className="font-black text-black">client portal activation</span> email to{' '}
           {booking.guestEmail || 'your inbox'}. Click the link to set your password.
         </p>
       )}
-      {activation?.reason === 'already_active' && (
+      {!isLoggedInClient && activation?.reason === 'already_active' && (
         <p className="text-[11px] text-gray-500 mt-4">
           Your client account is already active.{' '}
           <a href="/login" className="font-bold text-red hover:underline">
             Log in here
+          </a>
+          .
+        </p>
+      )}
+      {isLoggedInClient && (
+        <p className="text-[11px] text-gray-500 mt-4">
+          This intro is on your{' '}
+          <a href="/client" className="font-bold text-red hover:underline">
+            client dashboard
           </a>
           .
         </p>
@@ -119,6 +129,7 @@ export default function IntroSlotPicker({
   guestEmail: guestEmailProp = '',
   guestCompany = '',
   identityLocked = false,
+  isLoggedInClient = false,
   bookingTitle = 'Intro Interview',
   onBooked,
 }) {
@@ -296,6 +307,7 @@ export default function IntroSlotPicker({
         syncNotice={syncNotice}
         clientTimeZone={clientTimeZone}
         activation={activationInfo}
+        isLoggedInClient={isLoggedInClient}
       />
     );
   }
@@ -308,6 +320,7 @@ export default function IntroSlotPicker({
         isRepeatVisit={false}
         clientTimeZone={clientTimeZone}
         activation={activationInfo}
+        isLoggedInClient={isLoggedInClient}
       />
     );
   }

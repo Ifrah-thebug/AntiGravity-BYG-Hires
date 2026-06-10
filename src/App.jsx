@@ -42,6 +42,8 @@ import TalentDashboardPage from './pages/TalentDashboardPage';
 import AssessmentPage from './pages/AssessmentPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
+import AdminTalentImportPage from './pages/AdminTalentImportPage';
+import TalentActivatePage from './pages/TalentActivatePage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
 // Import Supabase-backed Talent Pool Pages
@@ -83,6 +85,7 @@ const AppContent = () => {
     location.pathname.startsWith('/talent/login') ||
     location.pathname.startsWith('/talent/signup') ||
     location.pathname.startsWith('/talent/setup') ||
+    location.pathname === '/talent/activate' ||
     location.pathname === '/client' ||
     location.pathname.startsWith('/client/');
 
@@ -134,6 +137,14 @@ const AppContent = () => {
               </AdminRoute>
             )}
           />
+          <Route
+            path="/admin/talent/import"
+            element={(
+              <AdminRoute>
+                <AdminTalentImportPage />
+              </AdminRoute>
+            )}
+          />
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
@@ -144,6 +155,7 @@ const AppContent = () => {
           <Route path="/talent/signup" element={<TalentSignupPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/talent/login" element={<Navigate to="/login" replace />} />
+          <Route path="/talent/activate" element={<TalentActivatePage />} />
           <Route path="/talent/setup" element={<TalentSetupPage />} />
           <Route path="/talent/:id" element={<TalentProfilePage />} />
           <Route path="/portal" element={<PortalPage />} />

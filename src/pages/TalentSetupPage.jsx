@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Sparkles, Mail } from 'lucide-react';
+import { AlertTriangle, ArrowRight, Sparkles, Mail, Camera, CheckCircle2, X } from 'lucide-react';
+import { useProfilePhotoUpload } from '../lib/useProfilePhotoUpload';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -22,6 +23,7 @@ import {
   formatProfileValidationErrors,
   validateProfileFields,
 } from '../lib/profileContentPolicy';
+import { fetchInviteSetupStatus, parseInviteCvOnSetup } from '../lib/talentInvite';
 
 const TalentSetupPage = () => {
   const navigate = useNavigate();
@@ -53,14 +55,38 @@ const TalentSetupPage = () => {
   const [cvUrl, setCvUrl] = useState(stateData.cvUrl || pending?.cvUrl || '');
   const [photoUrl, setPhotoUrl] = useState(stateData.photoUrl || pending?.photoUrl || '');
   const [cvFile] = useState(stateData.cvFile || null);
-  const [photoFile] = useState(stateData.photoFile || null);
+  const [legacyPhotoFile] = useState(stateData.photoFile || null);
   const [uploadWarnings, setUploadWarnings] = useState(
     stateData.uploadWarnings || pending?.uploadWarnings || []
   );
   const [newSkill, setNewSkill] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const {
+    photoFile: uploadedPhotoFile,
+    photoPreview,
+    photoProcessing,
+    photoProgress,
+    photoEnhanceDebug,
+    handlePhotoSelect,
+    clearPhoto,
+  } = useProfilePhotoUpload({ onError: setError, showEnhanceDebug: import.meta.env.DEV });
   const [awaitingEmailConfirm, setAwaitingEmailConfirm] = useState(false);
+  const [parsingInvite, setParsingInvite] = useState(false);
+  const [inviteFlow, setInviteFlow] = useState(Boolean(stateData.inviteSetup));
+
+  const applyParsedToForm = (parsed, nameOverride) => {
+    if (!parsed) return;
+    setForm((f) => ({
+      ...f,
+      name: normalizeProfileName(nameOverride || parsed.name || f.name),
+      job_title: parsed.job_title || f.job_title,
+      about: parsed.about || f.about,
+      experience_years: parsed.experience_years ?? f.experience_years,
+      skills: parsed.skills?.length ? parsed.skills : f.skills,
+      best_skill: parsed.best_skill || parsed.skills?.[0] || f.best_skill,
+    }));
+  };
 
   useEffect(() => {
     if (pending && !stateData.parsed) {
@@ -89,7 +115,13 @@ const TalentSetupPage = () => {
   useEffect(() => {
     if (authLoading) return;
 
-    const hasSetupData = Boolean(stateData.parsed || pending?.parsed || initialName);
+    const hasSetupData = Boolean(
+      stateData.parsed ||
+        pending?.parsed ||
+        initialName ||
+        stateData.inviteSetup ||
+        stateData.cvUrl
+    );
 
     if (!session && !hasSetupData) {
       navigate('/talent/signup');
@@ -102,7 +134,46 @@ const TalentSetupPage = () => {
     }
 
     setAwaitingEmailConfirm(false);
-  }, [authLoading, session, stateData.parsed, pending, initialName, navigate]);
+  }, [authLoading, session, stateData.parsed, stateData.inviteSetup, stateData.cvUrl, pending, initialName, navigate]);
+
+  useEffect(() => {
+    if (authLoading || !session) return undefined;
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const status = await fetchInviteSetupStatus();
+        if (cancelled || !status.hasInvite) return;
+
+        setInviteFlow(true);
+        if (status.cvUrl) setCvUrl(status.cvUrl);
+
+        if (status.parseStatus === 'parsed' && status.parsed) {
+          applyParsedToForm(status.parsed, status.name);
+          return;
+        }
+
+        setParsingInvite(true);
+        const result = await parseInviteCvOnSetup();
+        if (cancelled) return;
+        if (result.parsed) {
+          applyParsedToForm(result.parsed, result.name || status.name);
+        }
+        if (result.cvUrl) setCvUrl(result.cvUrl);
+      } catch (err) {
+        if (!cancelled && inviteFlow) {
+          setError(err.message || 'Could not parse your CV. Fill in your profile manually.');
+        }
+      } finally {
+        if (!cancelled) setParsingInvite(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, session]);
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -130,6 +201,13 @@ const TalentSetupPage = () => {
   };
 
 
+  const activePhotoFile = uploadedPhotoFile || legacyPhotoFile;
+  const hasProfilePhoto = Boolean(
+    photoPreview ||
+      activePhotoFile ||
+      (photoUrl && (photoUrl.startsWith('http') || photoUrl.startsWith('data:')))
+  );
+
   const ensureFileUrls = async (userId) => {
     let nextCv = cvUrl;
     let nextPhoto = photoUrl;
@@ -143,16 +221,16 @@ const TalentSetupPage = () => {
       }
     }
 
-    if (photoFile && !nextPhoto?.startsWith('http')) {
+    if (activePhotoFile && !nextPhoto?.startsWith('http')) {
       try {
-        nextPhoto = await uploadTalentFile(userId, photoFile, 'photo');
+        nextPhoto = await uploadTalentFile(userId, activePhotoFile, 'photo');
       } catch (e) {
         warnings.push(`Photo upload: ${e.message}`);
       }
     }
 
-    if (!nextCv?.startsWith('http') && !nextPhoto?.startsWith('http') && cvFile && photoFile) {
-      const result = await uploadSignupFiles(userId, cvFile, photoFile);
+    if (!nextCv?.startsWith('http') && !nextPhoto?.startsWith('http') && cvFile && activePhotoFile) {
+      const result = await uploadSignupFiles(userId, cvFile, activePhotoFile);
       if (result.cvUrl) nextCv = result.cvUrl;
       if (result.photoUrl) nextPhoto = result.photoUrl;
       warnings.push(...result.warnings);
@@ -166,6 +244,10 @@ const TalentSetupPage = () => {
 
   const handleConfirm = async () => {
     setError('');
+    if (!hasProfilePhoto) {
+      setError('Please upload a profile photo before saving.');
+      return;
+    }
     const prepared = prepareProfileForSave(form);
     if (!prepared.ok) {
       setError(formatProfileValidationErrors(prepared.errors));
@@ -238,12 +320,27 @@ const TalentSetupPage = () => {
     }
   };
 
-  const canConfirm = form.name && form.job_title && session && !awaitingEmailConfirm;
+  const canConfirm =
+    form.name &&
+    form.job_title &&
+    session &&
+    !awaitingEmailConfirm &&
+    !parsingInvite &&
+    !photoProcessing &&
+    hasProfilePhoto;
 
-  if (authLoading) {
+  if (authLoading || parsingInvite) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
-        <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
+      <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6 text-center">
+        <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin mb-4" />
+        <p className="font-black text-gray-900 uppercase tracking-wider text-sm">
+          {parsingInvite ? 'Parsing your CV with AI…' : 'Loading…'}
+        </p>
+        {parsingInvite && (
+          <p className="text-gray-500 text-xs font-medium mt-2 max-w-xs">
+            This may take a few seconds. We&apos;ll pre-fill your profile from the resume BYG uploaded.
+          </p>
+        )}
       </div>
     );
   }
@@ -253,7 +350,7 @@ const TalentSetupPage = () => {
       <div className="max-w-2xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 text-[10px] font-black uppercase tracking-wider rounded-full mb-4">
-            <Sparkles size={11} /> AI Parsed Your CV
+            <Sparkles size={11} /> {inviteFlow ? 'CV imported by BYG Hires' : 'AI Parsed Your CV'}
           </div>
           <h1 className="text-3xl md:text-4xl font-black text-black tracking-tight mb-3">
             Review your<br /><span className="text-red">profile.</span>
@@ -301,6 +398,84 @@ const TalentSetupPage = () => {
             )}
 
             <p className="text-[11px] text-gray-500 font-medium leading-relaxed">{PROFILE_CONTENT_HINT}</p>
+
+            <div className="space-y-3">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                Profile Photo <span className="text-red">*</span>
+              </label>
+              {!photoPreview && !photoProcessing && !(photoUrl && !inviteFlow) ? (
+                <label className="flex flex-col items-center justify-center min-h-[180px] border-2 border-dashed border-gray-300 rounded-2xl p-6 text-center hover:border-red hover:bg-gray-50 transition-all cursor-pointer group">
+                  <Camera size={32} className="text-gray-400 mb-2 group-hover:text-red transition-colors" />
+                  <p className="font-black text-xs text-gray-700 mb-1">Upload headshot</p>
+                  <p className="text-[10px] text-gray-400 max-w-[280px]">
+                    Front-facing photo (JPG, PNG, or HEIC). We&apos;ll crop and enhance it for your profile.
+                  </p>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handlePhotoSelect}
+                    disabled={awaitingEmailConfirm}
+                    className="hidden"
+                  />
+                </label>
+              ) : photoProcessing ? (
+                <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
+                  <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
+                  <p className="font-black text-xs text-gray-700 uppercase tracking-wider">
+                    {photoProgress || 'Processing photo…'}
+                  </p>
+                  <p className="text-[10px] text-gray-500 font-medium">Usually takes 15–40 seconds</p>
+                </div>
+              ) : photoPreview ? (
+                <div className="min-h-[180px] border border-green-200 bg-green-50/40 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
+                  <div className="relative">
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      className="w-24 h-28 rounded-2xl object-cover object-top border-2 border-green-500 shadow-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={clearPhoto}
+                      disabled={awaitingEmailConfirm}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-white border border-green-200 rounded-full flex items-center justify-center text-gray-400 hover:text-red transition-colors"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 text-green-700 text-[9px] font-black uppercase tracking-wider border-t border-green-200 pt-3 mt-3 w-full justify-center">
+                    <CheckCircle2 size={11} className="text-green-500" />
+                    Professional photo ready
+                  </div>
+                  {import.meta.env.DEV && photoEnhanceDebug && (
+                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3 w-full font-mono leading-snug text-left">
+                      {photoEnhanceDebug}
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-2xl p-4">
+                  <img
+                    src={photoUrl}
+                    alt="Profile"
+                    className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
+                  />
+                  <div>
+                    <p className="text-xs font-black text-gray-800">Profile photo ready ✓</p>
+                    <label className="text-[10px] font-bold text-red hover:underline cursor-pointer mt-1 inline-block">
+                      Replace photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoSelect}
+                        disabled={awaitingEmailConfirm}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Full Name *</label>
@@ -406,13 +581,6 @@ const TalentSetupPage = () => {
               onAddSkill={addSkill}
               disabled={awaitingEmailConfirm}
             />
-
-            {photoUrl && (
-              <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-2xl p-4">
-                <img src={photoUrl} alt="Profile" className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md" />
-                <p className="text-xs font-black text-gray-800">Profile photo ready ✓</p>
-              </div>
-            )}
 
             <div className="pt-4 border-t border-gray-100 space-y-3">
               <button

@@ -16,6 +16,8 @@ const introRouter = require('./routes/intro');
 const profilePhotoRouter = require('./routes/profilePhoto');
 const clientRouter = require('./routes/client');
 const calWebhookRouter = require('./routes/calWebhook');
+const adminTalentImportRouter = require('./routes/adminTalentImport');
+const talentInviteRouter = require('./routes/talentInvite');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -61,6 +63,8 @@ app.use('/api/cal', calRouter);
 app.use('/api/intro', introRouter);
 app.use('/api/profile', profilePhotoRouter);
 app.use('/api/client', clientRouter);
+app.use('/api/admin/talent-import', adminTalentImportRouter);
+app.use('/api/talent-invite', talentInviteRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));

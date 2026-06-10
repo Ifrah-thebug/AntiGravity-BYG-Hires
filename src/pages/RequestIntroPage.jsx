@@ -288,6 +288,7 @@ const RequestIntroPage = () => {
                       guestEmail={isActivatedClient ? clientIdentity.email : guestPrefillEmail}
                       guestCompany={isActivatedClient ? clientIdentity.company : ''}
                       identityLocked={isActivatedClient}
+                      isLoggedInClient={isActivatedClient}
                       bookingTitle="Intro Interview"
                     />
                   )}

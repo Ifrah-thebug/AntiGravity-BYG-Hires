@@ -14,6 +14,7 @@ const PUBLIC_NAV_LINKS = [
 
 const ADMIN_NAV_LINKS = [
   { name: 'Browse Candidates', href: '/admin/dashboard' },
+  { name: 'Bulk CV Import', href: '/admin/talent/import' },
   { name: 'Browse Clients', href: '/admin/clients' },
   { name: 'Reviews', href: '/admin/reviews' },
 ];
@@ -40,6 +41,9 @@ function isNavLinkActive(pathname, href) {
   }
   if (href === '/admin/reviews') {
     return pathname === '/admin/reviews';
+  }
+  if (href === '/admin/talent/import') {
+    return pathname === '/admin/talent/import';
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
