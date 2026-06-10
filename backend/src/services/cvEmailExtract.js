@@ -61,17 +61,90 @@ async function extractTextFromPdf(buffer) {
   }
 }
 
-function nameFromFilename(filename) {
-  const base = String(filename || '')
-    .replace(/\.[^.]+$/, '')
-    .replace(/[_-]+/g, ' ')
-    .replace(/\b(cv|resume)\b/gi, '')
-    .trim();
-  if (!base || /^\d+$/.test(base)) return '';
-  return base
-    .split(/\s+/)
+function formatNameWords(words) {
+  return words
+    .filter(Boolean)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
     .join(' ');
+}
+
+function normalizeNameKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z]/g, '');
+}
+
+function nameFromFilename(filename) {
+  let base = String(filename || '')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b(cv|resume)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!base || /^\d+$/.test(base)) return '';
+  return formatNameWords(base.split(/\s+/));
+}
+
+function looksLikePersonName(line) {
+  const s = String(line || '').trim().replace(/\s{2,}/g, ' ');
+  if (!s || s.length > 70) return false;
+  if (/@|https?:|www\.|linkedin|github|phone|tel:|\+?\d[\d\s().-]{7,}/i.test(s)) return false;
+  if (/^(curriculum|resume|cv|profile|contact|objective|summary|experience|education)\b/i.test(s)) {
+    return false;
+  }
+  const words = s.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 5) return false;
+  return words.every((w) => /^[A-Za-z][A-Za-z.'-]{0,24}$/.test(w));
+}
+
+function nameFromPdfText(text) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (let i = 0; i < Math.min(lines.length, 20); i++) {
+    if (looksLikePersonName(lines[i])) {
+      return formatNameWords(lines[i].split(/\s+/));
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    if (EMAIL_REGEX.test(lines[i])) {
+      for (let j = Math.max(0, i - 4); j < i; j++) {
+        if (looksLikePersonName(lines[j])) {
+          return formatNameWords(lines[j].split(/\s+/));
+        }
+      }
+    }
+  }
+
+  return '';
+}
+
+function isLikelyBadExtractedName(name, filename) {
+  const trimmed = String(name || '').trim();
+  if (!trimmed) return true;
+
+  const key = normalizeNameKey(trimmed);
+  if (/resume|curriculumvitae/.test(key)) return true;
+  if (!trimmed.includes(' ') && key.length > 18) return true;
+
+  const fileStem = normalizeNameKey(
+    String(filename || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, '')
+  );
+  if (fileStem && key === fileStem) return true;
+  if (fileStem && fileStem.includes(key) && key.length >= 10) return true;
+
+  return false;
+}
+
+function pickBestName({ textName, fileName }) {
+  const fromText = String(textName || '').trim();
+  const fromFile = String(fileName || '').trim();
+
+  if (fromText && !isLikelyBadExtractedName(fromText)) return fromText;
+  if (fromFile && !isLikelyBadExtractedName(fromFile)) return fromFile;
+  return fromText || fromFile || '';
 }
 
 /**
@@ -91,11 +164,14 @@ async function extractEmailFromCv(buffer, mimeType, filename) {
   }
 
   const email = pickBestEmail(text);
-  const name = nameFromFilename(filename);
+  const name = pickBestName({
+    textName: nameFromPdfText(text),
+    fileName: nameFromFilename(filename),
+  });
 
   return {
     email,
-    name,
+    name: name || null,
     emailExtractStatus: email ? 'found' : 'missing',
   };
 }
@@ -104,4 +180,7 @@ module.exports = {
   extractEmailFromCv,
   pickBestEmail,
   nameFromFilename,
+  nameFromPdfText,
+  isLikelyBadExtractedName,
+  pickBestName,
 };

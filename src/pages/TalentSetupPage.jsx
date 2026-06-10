@@ -22,6 +22,7 @@ import {
   prepareProfileForSave,
   formatProfileValidationErrors,
   validateProfileFields,
+  DEFAULT_MONTHLY_FEE_USD,
 } from '../lib/profileContentPolicy';
 import { fetchInviteSetupStatus, parseInviteCvOnSetup } from '../lib/talentInvite';
 
@@ -45,7 +46,7 @@ const TalentSetupPage = () => {
     job_title: initialParsed?.job_title || '',
     about: initialParsed?.about || '',
     experience_years: initialParsed?.experience_years ?? 3,
-    monthly_fee_usd: initialParsed?.monthly_fee_usd ?? 1000,
+    monthly_fee_usd: initialParsed?.monthly_fee_usd ?? DEFAULT_MONTHLY_FEE_USD,
     availability: initialAvailabilityDate ? 'from_month' : (initialParsed?.availability || 'immediate'),
     availability_from_month: initialAvailabilityDate,
     role_type: initialParsed?.role_type || 'flexible',
@@ -99,7 +100,7 @@ const TalentSetupPage = () => {
         job_title: pending.parsed?.job_title || '',
         about: pending.parsed?.about || '',
         experience_years: pending.parsed?.experience_years ?? 3,
-        monthly_fee_usd: pending.parsed?.monthly_fee_usd ?? 1000,
+        monthly_fee_usd: pending.parsed?.monthly_fee_usd ?? DEFAULT_MONTHLY_FEE_USD,
         availability: pendingAvailabilityDate ? 'from_month' : (pending.parsed?.availability || 'immediate'),
         availability_from_month: pendingAvailabilityDate,
         role_type: pending.parsed?.role_type || 'flexible',

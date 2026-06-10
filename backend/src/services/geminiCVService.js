@@ -197,11 +197,74 @@ function normalizeParsed(parsed) {
 function buildGenerationConfig() {
   return {
     temperature: 0.1,
-    maxOutputTokens: 4096,
+    maxOutputTokens: 8192,
     responseMimeType: 'application/json',
     responseSchema: CV_RESPONSE_SCHEMA,
     thinkingConfig: { thinkingBudget: 0 },
   };
+}
+
+function trySalvagePartialJson(text) {
+  const salvaged = {};
+  let found = false;
+
+  const pick = (regex, key, transform = (v) => v) => {
+    const m = text.match(regex);
+    if (m) {
+      salvaged[key] = transform(m[1]);
+      found = true;
+    }
+  };
+
+  pick(/"name"\s*:\s*"([^"]+)"/, 'name');
+  pick(/"job_title"\s*:\s*"([^"]+)"/, 'job_title');
+  pick(/"experience_years"\s*:\s*(\d+(?:\.\d+)?)/, 'experience_years', Number);
+  pick(/"best_skill"\s*:\s*"([^"]+)"/, 'best_skill');
+
+  const skillsMatch = text.match(/"skills"\s*:\s*\[([\s\S]*?)(?:\]|$)/);
+  if (skillsMatch) {
+    const skillStrings = skillsMatch[1].match(/"([^"]+)"/g);
+    if (skillStrings?.length) {
+      salvaged.skills = skillStrings.map((s) => s.replace(/"/g, ''));
+      found = true;
+    }
+  }
+
+  const aboutMatch = text.match(/"about"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  if (aboutMatch) {
+    salvaged.about = aboutMatch[1].replace(/\\"/g, '"');
+    found = true;
+  }
+
+  return found ? salvaged : null;
+}
+
+const MAX_TRANSIENT_RETRIES = 3;
+const TRANSIENT_RETRY_DELAYS_MS = [1500, 3000, 4500];
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientGeminiError(status) {
+  return status === 503 || status === 429;
+}
+
+async function callGeminiWithRetries(base64Data, mimeType, generationConfig) {
+  let result = await callGemini(base64Data, mimeType, generationConfig);
+
+  for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {
+    if (!isTransientGeminiError(result.response.status)) return result;
+
+    const delay = TRANSIENT_RETRY_DELAYS_MS[attempt] ?? 4500;
+    console.warn(
+      `[geminiCVService] ${result.response.status} — retry ${attempt + 1}/${MAX_TRANSIENT_RETRIES} in ${delay}ms`
+    );
+    await sleep(delay);
+    result = await callGemini(base64Data, mimeType, generationConfig);
+  }
+
+  return result;
 }
 
 function extractModelText(resData) {
@@ -231,6 +294,16 @@ async function callGemini(base64Data, mimeType, generationConfig) {
   return { response, responseText };
 }
 
+function parseModelJson(text) {
+  try {
+    return normalizeParsed(JSON.parse(text));
+  } catch (parseErr) {
+    const salvaged = trySalvagePartialJson(text);
+    if (salvaged) return normalizeParsed(salvaged);
+    throw parseErr;
+  }
+}
+
 async function parseCVBuffer(buffer, mimeType) {
   if (!GEMINI_API_KEY) {
     console.warn('[geminiCVService] No API key — mock data.');
@@ -238,11 +311,16 @@ async function parseCVBuffer(buffer, mimeType) {
   }
   const base64Data = buffer.toString('base64');
   try {
-    let { response, responseText } = await callGemini(base64Data, mimeType, buildGenerationConfig());
+    let { response, responseText } = await callGeminiWithRetries(
+      base64Data,
+      mimeType,
+      buildGenerationConfig()
+    );
+
     if (!response.ok && /thinking|responseSchema|schema/i.test(responseText)) {
       ({ response, responseText } = await callGemini(base64Data, mimeType, {
         temperature: 0.1,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 8192,
         responseMimeType: 'application/json',
       }));
     }
@@ -253,7 +331,7 @@ async function parseCVBuffer(buffer, mimeType) {
     const resData = JSON.parse(responseText);
     const text = cleanJsonText(extractModelText(resData));
     if (!text.trim()) return mockData();
-    return normalizeParsed(JSON.parse(text));
+    return parseModelJson(text);
   } catch (err) {
     console.warn('[geminiCVService] Parse failed:', err?.message || err);
     return mockData();

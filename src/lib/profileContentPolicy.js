@@ -1,6 +1,9 @@
 import { normalizeProfileName } from './formatDisplayName';
 import { resolveBestSkill } from './talentSkillsDisplay';
 
+/** Default talent monthly rate (USD) when not set by CV parse or existing profile */
+export const DEFAULT_MONTHLY_FEE_USD = 300;
+
 /** Shown under About / profile fields */
 export const PROFILE_CONTENT_HINT =
   'Do not include phone numbers, email, LinkedIn URLs, or street addresses in your name, title, about, or skills.';

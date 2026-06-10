@@ -12,7 +12,7 @@ import {
 import { talentService } from '../services/talentService';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName } from '../lib/formatDisplayName';
-import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
+import { formatAvailabilityLabel, DEFAULT_MONTHLY_FEE_USD } from '../lib/profileContentPolicy';
 import TalentSkillTags from '../components/TalentSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
@@ -429,7 +429,7 @@ const TalentDirectoryPage = () => {
         experience: p.experience_years ? `${p.experience_years} yrs` : 'Flexible',
         tags: p.skills || [],
         bestSkill: p.best_skill || p.skills?.[0] || '',
-        fee: Number(p.directory_fee_usd) || Math.round((Number(p.monthly_fee_usd) || 1000) * 1.1),
+        fee: Number(p.directory_fee_usd) || Math.round((Number(p.monthly_fee_usd) || DEFAULT_MONTHLY_FEE_USD) * 1.1),
         availability: p.availability || 'immediate',
         department: 'operations', // default dept
         roleType: p.role_type || 'flexible',

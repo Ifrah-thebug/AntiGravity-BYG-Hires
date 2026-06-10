@@ -2,8 +2,8 @@
 -- Run in Supabase SQL Editor.
 
 ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS monthly_fee_usd integer NOT NULL DEFAULT 1000,
-ADD COLUMN IF NOT EXISTS directory_fee_usd integer NOT NULL DEFAULT 1100,
+ADD COLUMN IF NOT EXISTS monthly_fee_usd integer NOT NULL DEFAULT 300,
+ADD COLUMN IF NOT EXISTS directory_fee_usd integer NOT NULL DEFAULT 330,
 ADD COLUMN IF NOT EXISTS availability text NOT NULL DEFAULT 'immediate',
 ADD COLUMN IF NOT EXISTS availability_from_month date,
 ADD COLUMN IF NOT EXISTS role_type text NOT NULL DEFAULT 'flexible';
