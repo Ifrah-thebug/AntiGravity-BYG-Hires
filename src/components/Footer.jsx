@@ -47,9 +47,14 @@ const Footer = () => {
           <p className="text-gray-500 text-sm">
             &copy; {new Date().getFullYear()} BYG Hires (Remote Staffing Agency). All rights reserved.
           </p>
-          <Link to="/privacy" className="text-gray-500 hover:text-white text-sm transition-colors font-semibold">
-            Privacy Policy
-          </Link>
+          <div className="flex flex-wrap items-center justify-center md:justify-end gap-4 sm:gap-6">
+            <Link to="/about" className="text-gray-500 hover:text-white text-sm transition-colors font-semibold">
+              About Us
+            </Link>
+            <Link to="/privacy" className="text-gray-500 hover:text-white text-sm transition-colors font-semibold">
+              Privacy Policy
+            </Link>
+          </div>
         </div>
       </div>
     </footer>

@@ -1,5 +1,6 @@
 import { normalizeProfileName } from './formatDisplayName';
 import { resolveBestSkill } from './talentSkillsDisplay';
+import { normalizeTalentDepartment } from './talentDepartments';
 
 /** Default talent monthly rate (USD) when not set by CV parse or existing profile */
 export const DEFAULT_MONTHLY_FEE_USD = 300;
@@ -161,6 +162,7 @@ export function prepareProfileForSave(fields) {
         ? (availabilityDate || '')
         : (AVAILABILITY_OPTIONS.some((o) => o.value === availability) ? availability : 'immediate'),
     role_type: ROLE_TYPE_OPTIONS.some((o) => o.value === roleType) ? roleType : 'flexible',
+    department: normalizeTalentDepartment(fields.department),
   };
 
   if (!data.name) {

@@ -1,18 +1,23 @@
 // src/pages/TalentDirectoryPage.jsx
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search, SlidersHorizontal, Star, Clock, ChevronDown,
   ChevronUp, ArrowRight, X, Briefcase, Award, Moon, Zap, CheckCircle2
 } from 'lucide-react';
 import {
-  DEPARTMENTS, SORT_OPTIONS, AVAILABILITY_OPTIONS, ROLE_TYPE_OPTIONS
+  DEPARTMENTS,
+  SORT_OPTIONS,
+  AVAILABILITY_OPTIONS,
+  ROLE_TYPE_OPTIONS,
+  parseTalentDirectorySearchParams,
 } from '../data/talentData';
 import { talentService } from '../services/talentService';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName } from '../lib/formatDisplayName';
 import { formatAvailabilityLabel, DEFAULT_MONTHLY_FEE_USD } from '../lib/profileContentPolicy';
+import { normalizeTalentDepartment } from '../lib/talentDepartments';
 import TalentSkillTags from '../components/TalentSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
@@ -400,13 +405,18 @@ const FilterPanel = ({ filters, onChange, onClear }) => {
 const TalentDirectoryPage = () => {
   const { isLoggedInTalent } = useIsLoggedInTalent();
   const canRequestIntro = !isLoggedInTalent;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialFilters = parseTalentDirectorySearchParams(searchParams);
   const [talents, setTalents] = useState([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    window.scrollTo(0, 0);
-    fetchData();
-  }, []);
+  const [roleFilterLabel, setRoleFilterLabel] = useState(initialFilters.roleLabel);
+  const [activedept, setActivedept] = useState(initialFilters.activedept);
+  const [search, setSearch] = useState(initialFilters.search);
+  const [sortBy, setSortBy] = useState('name-asc');
+  const [showSort, setShowSort] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({ availability: [], roleType: [], maxFee: 2000 });
+  const [selectedTalent, setSelectedTalent] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -414,7 +424,7 @@ const TalentDirectoryPage = () => {
     // 1. Fetch Supabase profiles
     const { data, error: err } = await supabase
       .from('profiles')
-      .select('id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type')
+      .select('id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department')
       .order('created_at', { ascending: false });
 
     let supabaseTalents = [];
@@ -431,7 +441,7 @@ const TalentDirectoryPage = () => {
         bestSkill: p.best_skill || p.skills?.[0] || '',
         fee: Number(p.directory_fee_usd) || Math.round((Number(p.monthly_fee_usd) || DEFAULT_MONTHLY_FEE_USD) * 1.1),
         availability: p.availability || 'immediate',
-        department: 'operations', // default dept
+        department: normalizeTalentDepartment(p.department),
         roleType: p.role_type || 'flexible',
         bio: p.about || 'No bio provided.',
         period: '/mo'
@@ -446,13 +456,17 @@ const TalentDirectoryPage = () => {
     setLoading(false);
   };
 
-  const [activedept, setActivedept] = useState('all');
-  const [search, setSearch] = useState('');
-  const [sortBy, setSortBy] = useState('name-asc');
-  const [showSort, setShowSort] = useState(false);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({ availability: [], roleType: [], maxFee: 2000 });
-  const [selectedTalent, setSelectedTalent] = useState(null);
+  useEffect(() => {
+    window.scrollTo(0, 0);
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    const { activedept: dept, search: q, roleLabel } = parseTalentDirectorySearchParams(searchParams);
+    setActivedept(dept);
+    setSearch(q);
+    setRoleFilterLabel(roleLabel);
+  }, [searchParams]);
 
   const updateFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
   const clearFilters = () => setFilters({ availability: [], roleType: [], maxFee: 2000 });
@@ -476,14 +490,22 @@ const TalentDirectoryPage = () => {
     // Department filter
     if (activedept !== 'all') list = list.filter(t => t.department === activedept);
 
-    // Search
+    // Search (name, title, skills, bio)
     if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(t =>
-        t.name.toLowerCase().includes(q) ||
-        t.role.toLowerCase().includes(q) ||
-        (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)))
-      );
+      const terms = search.toLowerCase().split(/\s+/).filter(Boolean);
+      list = list.filter((t) => {
+        const haystack = [
+          t.name,
+          t.role,
+          t.bestSkill,
+          t.bio,
+          ...(t.tags || []),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      });
     }
 
     // Filters
@@ -594,6 +616,29 @@ const TalentDirectoryPage = () => {
           <AnimatePresence>
             {showFilters && <FilterPanel filters={filters} onChange={updateFilter} onClear={clearFilters} />}
           </AnimatePresence>
+
+          {activedept !== 'all' && roleFilterLabel && (
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+              <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red/5 border border-red/20 text-xs font-bold text-gray-800">
+                Department: <span className="text-red">{roleFilterLabel}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const next = new URLSearchParams(searchParams);
+                  next.delete('dept');
+                  next.delete('q');
+                  setSearchParams(next);
+                  setActivedept('all');
+                  setSearch('');
+                  setRoleFilterLabel('');
+                }}
+                className="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-red transition-colors"
+              >
+                Clear department filter
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -607,7 +652,18 @@ const TalentDirectoryPage = () => {
             {DEPARTMENTS.map(dept => (
               <button
                 key={dept.id}
-                onClick={() => setActivedept(dept.id)}
+                onClick={() => {
+                  setActivedept(dept.id);
+                  const next = new URLSearchParams(searchParams);
+                  if (dept.id === 'all') {
+                    next.delete('dept');
+                  } else {
+                    next.set('dept', dept.id);
+                  }
+                  next.delete('q');
+                  setSearchParams(next);
+                  setSearch('');
+                }}
                 className={`px-4 py-2 rounded-full text-xs font-bold transition-all border whitespace-nowrap shrink-0 ${
                   activedept === dept.id
                     ? 'bg-black text-white border-black'

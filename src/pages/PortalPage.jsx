@@ -4,9 +4,9 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
-  LogOut, Save, AlertTriangle, CheckCircle2,
+  Save, AlertTriangle, CheckCircle2,
   ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
-  Sparkles, ArrowRight, Calendar
+  Sparkles, ArrowRight, Calendar, Video, Check,
 } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
@@ -15,7 +15,6 @@ import { supabase } from '../lib/supabase';
 import { isProfileComplete, fetchUserProfile } from '../lib/talentAuth';
 import { fetchIsAdmin } from '../lib/adminAuth';
 import { fetchIsClient } from '../lib/clientAuth';
-import logo from '../assets/BYG Hires Logo.png';
 import { processProfilePhotoWithAI, fileToDataUrl } from '../lib/processProfilePhoto';
 import { normalizeProfileName } from '../lib/formatDisplayName';
 import {
@@ -27,28 +26,62 @@ import {
   formatProfileValidationErrors,
   validateProfileFields,
 } from '../lib/profileContentPolicy';
+import {
+  TALENT_DEPARTMENTS,
+  normalizeTalentDepartment,
+  DEFAULT_TALENT_DEPARTMENT,
+} from '../lib/talentDepartments';
 
-function buildStrengthenActions(connectCalendarUrl) {
-  const actions = [
+function ActionIconWithCheck({ icon: Icon, done }) {
+  return (
+    <div className="relative w-10 h-10 rounded-xl bg-red/10 text-red flex items-center justify-center shrink-0">
+      <Icon size={18} strokeWidth={2.25} />
+      {done && (
+        <span
+          className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black border-2 border-white flex items-center justify-center"
+          aria-label="Completed"
+        >
+          <Check size={11} className="text-white" strokeWidth={3} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function buildStrengthenTiles({ connectCalendarUrl, calendarConnected, introSlotsPublished }) {
+  const tiles = [
     {
       id: 'assessment',
       label: 'Take skills assessment',
       description: 'Prove your skills with a real-world task (~25 min).',
-      href: '/assessment',
-      variant: 'assessment',
+      href: '/assessment/coming-soon',
+      icon: ClipboardCheck,
+      done: false,
     },
   ];
+
   if (connectCalendarUrl) {
-    actions.push({
+    tiles.push({
       id: 'calendar',
       label: 'Connect your calendar',
       description: 'Sync Cal.com so HR can book intro interviews when clients request you.',
       href: connectCalendarUrl,
       external: true,
-      variant: 'calendar',
+      icon: Calendar,
+      done: calendarConnected,
     });
   }
-  return actions;
+
+  tiles.push({
+    id: 'intro',
+    label: 'Client intro scheduling',
+    description: 'Jump to available slots and upcoming intro calls on this page.',
+    onClick: scrollToClientIntroSection,
+    icon: Video,
+    done: introSlotsPublished,
+  });
+
+  return tiles;
 }
 
 function scrollToClientIntroSection() {
@@ -58,123 +91,86 @@ function scrollToClientIntroSection() {
   window.history.replaceState(null, '', '#client-intro-scheduling');
 }
 
-function StrengthenProfilePanel({ connectCalendarUrl }) {
-  const actions = buildStrengthenActions(connectCalendarUrl);
+function StrengthenProfilePanel({
+  connectCalendarUrl,
+  calendarConnected,
+  introSlotsPublished,
+}) {
+  const tiles = buildStrengthenTiles({
+    connectCalendarUrl,
+    calendarConnected,
+    introSlotsPublished,
+  });
+
+  const tileClassName =
+    'block w-full text-left rounded-2xl border-2 border-white p-4 transition-all bg-white hover:bg-gray-50 shadow-md';
+
+  const renderTileInner = (tile) => (
+    <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start gap-3 min-w-0">
+        <ActionIconWithCheck icon={tile.icon} done={tile.done} />
+        <div className="min-w-0">
+          <p className="font-black text-sm text-gray-900">{tile.label}</p>
+          <p className="text-[11px] font-medium text-gray-600 mt-1 leading-snug">
+            {tile.description}
+          </p>
+        </div>
+      </div>
+      <ArrowRight size={16} className="shrink-0 mt-1 text-red" />
+    </div>
+  );
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="bg-red border border-red rounded-[2rem] p-8 shadow-xl shadow-red/20 lg:sticky lg:top-28 space-y-6"
+      className="bg-red border border-red rounded-[2rem] p-8 lg:sticky lg:top-28 space-y-6"
     >
       <div>
-        <p className="text-white/90 font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
+        <p className="text-white font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
           <Sparkles size={11} /> Grow your presence
         </p>
         <h3 className="text-2xl font-black tracking-tight text-white leading-tight">
           Strengthen your profile
         </h3>
-        <p className="text-white/90 text-sm font-semibold mt-3 leading-relaxed">
-          Complete your assessment and connect your calendar. Then use the link below to publish intro
-          availability for clients.
+        <p className="text-white text-sm font-semibold mt-3 leading-relaxed">
+          Complete your assessment and connect your calendar. Then publish intro availability for
+          clients.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {actions.map((action) => {
-          const isAssessment = action.variant === 'assessment';
-          const isCalendar = action.variant === 'calendar';
-          const Icon = isCalendar ? Calendar : ClipboardCheck;
-
-          const inner = (
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-start gap-3 min-w-0">
-                <div
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                    isAssessment
-                      ? 'bg-red text-white'
-                      : 'bg-red/10 text-red'
-                  }`}
-                >
-                  <Icon size={18} />
-                </div>
-                <div className="min-w-0">
-                  <p
-                    className={`font-black text-sm ${
-                      isCalendar ? 'text-gray-900' : 'text-white'
-                    }`}
-                  >
-                    {action.label}
-                  </p>
-                  <p
-                    className={`text-[11px] font-medium mt-1 leading-snug ${
-                      isCalendar ? 'text-gray-600' : 'text-white/75'
-                    }`}
-                  >
-                    {action.description}
-                  </p>
-                </div>
-              </div>
-              <ArrowRight
-                size={16}
-                className={`shrink-0 mt-1 ${isCalendar ? 'text-red' : 'text-white'}`}
-              />
-            </div>
-          );
-
-          if (action.external) {
+      <div className="flex flex-col gap-3">
+        {tiles.map((tile) => {
+          if (tile.external) {
             return (
-              <a
-                key={action.id}
-                href={action.href}
-                className="block w-full text-left rounded-2xl border-2 border-white p-4 transition-all bg-white hover:bg-gray-50 shadow-lg shadow-black/15 hover:shadow-xl"
-              >
-                {inner}
+              <a key={tile.id} href={tile.href} className={tileClassName}>
+                {renderTileInner(tile)}
               </a>
             );
           }
-
+          if (tile.onClick) {
+            return (
+              <button key={tile.id} type="button" onClick={tile.onClick} className={tileClassName}>
+                {renderTileInner(tile)}
+              </button>
+            );
+          }
           return (
-            <Link
-              key={action.id}
-              to={action.href}
-              className="block w-full text-left rounded-2xl border p-4 transition-all bg-black text-white border-black hover:bg-[#1a1a1a] hover:border-[#1a1a1a] shadow-lg shadow-black/20"
-            >
-              {inner}
+            <Link key={tile.id} to={tile.href} className={tileClassName}>
+              {renderTileInner(tile)}
             </Link>
           );
         })}
       </div>
 
-      <button
-        type="button"
-        onClick={scrollToClientIntroSection}
-        className="block w-full text-left rounded-2xl border-2 border-white/90 p-4 transition-all bg-white/95 hover:bg-white shadow-lg shadow-black/15 hover:shadow-xl"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-red/10 text-red flex items-center justify-center shrink-0">
-              <Calendar size={18} />
-            </div>
-            <div className="min-w-0">
-              <p className="font-black text-sm text-gray-900">Client intro scheduling</p>
-              <p className="text-[11px] font-medium text-gray-600 mt-1 leading-snug">
-                Jump to available slots and upcoming intro calls on this page.
-              </p>
-            </div>
-          </div>
-          <ArrowRight size={16} className="shrink-0 mt-1 text-red" />
-        </div>
-      </button>
-
-      <div className="rounded-2xl bg-black/20 border border-white/20 p-5 space-y-3">
+      <div className="rounded-2xl bg-black border border-black p-5 space-y-3">
         <div className="flex items-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-red text-white flex items-center justify-center shrink-0">
             <Award size={18} />
           </div>
           <div>
-            <p className="text-[10px] font-black text-white/70 uppercase tracking-widest">Why it matters</p>
+            <p className="text-[10px] font-black text-white/80 uppercase tracking-widest">Why it matters</p>
             <p className="text-xs font-semibold text-white leading-relaxed mt-1">
               Assessed talent is featured more prominently and stands out in client searches.
             </p>
@@ -192,7 +188,7 @@ function StrengthenProfilePanel({ connectCalendarUrl }) {
 const PortalPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const [profile, setProfile] = useState(null);
   const [form, setForm] = useState({
@@ -204,6 +200,7 @@ const PortalPage = () => {
     availability: 'immediate',
     availability_from_month: '',
     role_type: 'flexible',
+    department: DEFAULT_TALENT_DEPARTMENT,
     skills: [],
     best_skill: '',
   });
@@ -216,6 +213,7 @@ const PortalPage = () => {
   const [photoProcessing, setPhotoProcessing] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saved' | 'error'
   const [error, setError] = useState('');
+  const [introSlotsPublished, setIntroSlotsPublished] = useState(false);
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
 
@@ -296,6 +294,7 @@ const PortalPage = () => {
                 availability: data.availability,
                 availability_from_month: data.availability_from_month,
                 role_type: data.role_type,
+                department: data.department,
               }
             : null,
           photoUrl: data?.photo_url || '',
@@ -308,6 +307,20 @@ const PortalPage = () => {
     }
 
     setProfile(data);
+
+    const talentId = data.id;
+    if (talentId) {
+      const { data: slots } = await supabase
+        .from('talent_intro_slots')
+        .select('id')
+        .eq('talent_id', talentId)
+        .in('status', ['open', 'held'])
+        .limit(1);
+      setIntroSlotsPublished(Boolean(slots?.length));
+    } else {
+      setIntroSlotsPublished(false);
+    }
+
     const availabilityRaw = String(data.availability || '');
     const availabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(availabilityRaw) ? availabilityRaw : '';
     setForm({
@@ -319,6 +332,7 @@ const PortalPage = () => {
       availability: availabilityDate ? 'from_month' : (data.availability || 'immediate'),
       availability_from_month: availabilityDate,
       role_type: data.role_type || 'flexible',
+      department: normalizeTalentDepartment(data.department),
       skills: data.skills || [],
       best_skill: data.best_skill || data.skills?.[0] || '',
     });
@@ -415,6 +429,7 @@ const PortalPage = () => {
           directory_fee_usd: prepared.data.directory_fee_usd,
           availability: prepared.data.availability,
           role_type: prepared.data.role_type,
+          department: prepared.data.department,
           skills: prepared.data.skills,
           best_skill: prepared.data.best_skill,
           photo_url: photoUrl,
@@ -439,6 +454,7 @@ const PortalPage = () => {
             ? prepared.data.availability
             : '',
         role_type: prepared.data.role_type,
+        department: prepared.data.department,
       }));
 
       await fetchProfile();
@@ -450,11 +466,6 @@ const PortalPage = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    navigate('/');
   };
 
   if (authLoading || loadingProfile) {
@@ -475,21 +486,6 @@ const PortalPage = () => {
   return (
     <div className="bg-white min-h-screen pt-24 pb-24 px-4 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
-
-        {/* ── Top Bar ── */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="BYG Hires" className="h-8 w-auto" />
-            <div className="h-6 w-px bg-gray-200" />
-            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">My Portal</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-xs font-black text-gray-400 hover:text-red transition-colors uppercase tracking-widest"
-          >
-            <LogOut size={13} /> Log Out
-          </button>
-        </div>
 
         {/* ── Welcome Banner ── */}
         {portalUploadWarnings?.length > 0 && (
@@ -605,6 +601,20 @@ const PortalPage = () => {
             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Professional Title *</label>
             <input name="job_title" value={form.job_title} onChange={handleInput}
               className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Department</label>
+            <select
+              name="department"
+              value={form.department}
+              onChange={handleInput}
+              className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all"
+            >
+              {TALENT_DEPARTMENTS.map((dept) => (
+                <option key={dept.id} value={dept.id}>{dept.label}</option>
+              ))}
+            </select>
           </div>
 
           {/* About */}
@@ -768,6 +778,8 @@ const PortalPage = () => {
                   ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
                   : ''
               }
+              calendarConnected={Boolean(profile?.cal_username)}
+              introSlotsPublished={introSlotsPublished}
             />
           </div>
         </div>

@@ -6,16 +6,18 @@ const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 export const GEMINI_PHOTO_MODEL = 'gemini-3.1-flash-image';
 
 const STYLE_PROMPT = `
-You are a professional portrait retoucher for a premium remote talent marketplace.
+You are a corporate headshot retoucher for a premium remote hiring platform (LinkedIn / Upwork / recruiter directory standard) — NOT a dating, matrimonial, or glamour portrait service.
 
-Transform the attached selfie into a directory-quality professional headshot matching top marketplace profile cards:
-- Subject faces the camera directly (correct a slight front-camera angle to straight-on)
+Transform the attached photo into a hire-ready professional headshot:
+- Subject faces the camera directly (correct a slight front-camera angle to straight-on), confident business posture
 - Tight consistent headshot framing for a talent directory card: portrait 4:5, same zoom on every candidate — head through upper chest with margin above the head; face ~40% of frame height when visible; for niqab/hijab show full head covering and shoulders (not extreme eyes-only close-up); never show waist or lower body
-- Background: soft blurred professional backdrop with shallow depth of field — e.g. gentle green foliage bokeh, warm beige wall blur, or soft grey studio blur (no clutter, no office props, not a flat solid color)
-- Wardrobe: if reference shows hijab, niqab, abaya, shalwar kameez, or kurta — preserve and professionally refine that modest dress (including hijab color). If Western dress: use smart casual (polo, knit, blouse), simple shalwar kameez/kurta, or formal blazer/suit in navy/charcoal/neutral — clean, well-fitted, not all identical black suits
-- Even, flattering natural or studio lighting; sharp focus on the face
-- Expression: if the face is clearly visible, give a warm natural professional closed-lip smile (friendly, approachable, no visible teeth). If the face is covered (niqab/full veil) or not visible, do not expose or invent facial features — no smile needed
-- Preserve the person's exact identity: same face, skin tone, age, hair, hijab, beard, glasses — do not beautify into a different person
+- Background: clean corporate studio or softly blurred neutral office backdrop — light grey, off-white, or cool grey tones with shallow depth of field (no garden foliage, no romantic golden-hour glow, no decorative props)
+- Wardrobe colors (BYG Hires brand palette only): clothing must use red, black, and/or white — solid or tasteful two-tone (black blazer white shirt, red accent on white collar). No navy, grey, beige, cream, or other colors on clothing
+- Wardrobe style: workplace professional only — blazer, collared shirt, blouse, or modest office shalwar kameez/kurta in brand colors. Not wedding, party, festival, or casual streetwear. If reference shows hijab, niqab, abaya, or modest dress — preserve coverage; refine fabric/fit in red, black, and white only
+- Even corporate studio lighting; natural skin texture; minimal retouching; sharp focus on the face
+- Expression: if the face is clearly visible, calm confident professional demeanor — subtle closed-lip smile or neutral business expression, hire-ready, no visible teeth, not flirtatious or overly posed. If face is covered, do not invent facial features
+- Preserve exact identity: same face, skin tone, age, hair, hijab, beard, glasses — do not glamorize or beautify into a different person
+- Avoid: matrimonial/rishta aesthetic, heavy makeup, airbrushed skin, glamour lighting, bridal jewelry, party wear
 - No text, logos, watermarks, or extra people
 Output ONLY the edited portrait image.
 `.trim();

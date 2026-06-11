@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   availability TEXT DEFAULT 'immediate',
   availability_from_month DATE,
   role_type TEXT DEFAULT 'flexible',
+  department TEXT NOT NULL DEFAULT 'admin-operations',
   photo_url TEXT DEFAULT '',
   cv_url TEXT DEFAULT '',
   created_at TIMESTAMPTZ DEFAULT now(),

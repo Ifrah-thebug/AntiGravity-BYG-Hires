@@ -7,17 +7,11 @@ import haadiahImg from '../assets/Haadiah S.png';
 import nihalImg from '../assets/Nihal S.png';
 import rachelleImg from '../assets/Rachelle R.png';
 
-export const DEPARTMENTS = [
-  { id: 'all', label: 'All Talent' },
-  { id: 'operations', label: 'Operations' },
-  { id: 'marketing', label: 'Marketing' },
-  { id: 'saas', label: 'SaaS & CRM' },
-  { id: 'automation', label: 'Automation' },
-  { id: 'customer-success', label: 'Customer Success' },
-  { id: 'sales', label: 'Sales' },
-  { id: 'finance', label: 'Finance & Admin' },
-  { id: 'hr', label: 'HR & Recruitment' },
-];
+export {
+  DIRECTORY_DEPARTMENTS as DEPARTMENTS,
+  talentDirectoryUrlForRole,
+  parseTalentDirectorySearchParams,
+} from '../lib/talentDepartments';
 
 export const SORT_OPTIONS = [
   { value: 'name-asc', label: 'Name: A → Z' },
@@ -47,7 +41,7 @@ export const TALENTS = [
     role: 'Customer Service Representative',
     expertise: 'Customer Success & CRM',
     industries: ['E-commerce', 'SaaS', 'Healthcare', 'Logistics', 'Retail'],
-    department: 'customer-success',
+    department: 'customer-support',
     score: 0,
     verified: false,
     fee: 550,
@@ -69,7 +63,7 @@ export const TALENTS = [
     role: 'Virtual Administrative Assistant',
     expertise: 'Virtual Administration',
     industries: ['Real Estate', 'SaaS', 'E-commerce', 'Logistics'],
-    department: 'operations',
+    department: 'virtual-assistants',
     score: 0,
     verified: false,
     fee: 500,
@@ -113,7 +107,7 @@ export const TALENTS = [
     role: 'AI & Marketing Automation Specialist',
     expertise: 'AI & Marketing Automation',
     industries: ['Finance', 'E-commerce', 'Real Estate', 'SaaS', 'Logistics'],
-    department: 'automation',
+    department: 'ai-automation',
     score: 0,
     verified: false,
     fee: 750,
@@ -135,7 +129,7 @@ export const TALENTS = [
     role: 'Operations & Process Optimisation Lead',
     expertise: 'Operations & Process Optimisation',
     industries: ['Logistics', 'Healthcare', 'E-commerce', 'SaaS'],
-    department: 'operations',
+    department: 'admin-operations',
     score: 0,
     verified: false,
     fee: 800,

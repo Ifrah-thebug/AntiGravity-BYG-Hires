@@ -25,6 +25,12 @@ import {
   DEFAULT_MONTHLY_FEE_USD,
 } from '../lib/profileContentPolicy';
 import { fetchInviteSetupStatus, parseInviteCvOnSetup } from '../lib/talentInvite';
+import CVShredderLoader from '../components/CVShredderLoader';
+import {
+  TALENT_DEPARTMENTS,
+  normalizeTalentDepartment,
+  DEFAULT_TALENT_DEPARTMENT,
+} from '../lib/talentDepartments';
 
 const TalentSetupPage = () => {
   const navigate = useNavigate();
@@ -50,6 +56,7 @@ const TalentSetupPage = () => {
     availability: initialAvailabilityDate ? 'from_month' : (initialParsed?.availability || 'immediate'),
     availability_from_month: initialAvailabilityDate,
     role_type: initialParsed?.role_type || 'flexible',
+    department: normalizeTalentDepartment(initialParsed?.department || DEFAULT_TALENT_DEPARTMENT),
     skills: initialParsed?.skills || [],
     best_skill: initialParsed?.best_skill || initialParsed?.skills?.[0] || '',
   });
@@ -86,6 +93,7 @@ const TalentSetupPage = () => {
       experience_years: parsed.experience_years ?? f.experience_years,
       skills: parsed.skills?.length ? parsed.skills : f.skills,
       best_skill: parsed.best_skill || parsed.skills?.[0] || f.best_skill,
+      department: normalizeTalentDepartment(parsed.department || f.department),
     }));
   };
 
@@ -104,6 +112,7 @@ const TalentSetupPage = () => {
         availability: pendingAvailabilityDate ? 'from_month' : (pending.parsed?.availability || 'immediate'),
         availability_from_month: pendingAvailabilityDate,
         role_type: pending.parsed?.role_type || 'flexible',
+        department: normalizeTalentDepartment(pending.parsed?.department || DEFAULT_TALENT_DEPARTMENT),
         skills: pending.parsed?.skills || [],
         best_skill: pending.parsed?.best_skill || pending.parsed?.skills?.[0] || '',
       });
@@ -283,6 +292,7 @@ const TalentSetupPage = () => {
         directory_fee_usd: prepared.data.directory_fee_usd,
         availability: prepared.data.availability,
         role_type: prepared.data.role_type,
+        department: prepared.data.department,
         photo_url: finalPhoto || '',
         cv_url: finalCv || '',
       }, { onConflict: 'user_id' });
@@ -304,6 +314,7 @@ const TalentSetupPage = () => {
             ? prepared.data.availability
             : '',
         role_type: prepared.data.role_type,
+        department: prepared.data.department,
       }));
 
       clearPendingSetup();
@@ -333,7 +344,11 @@ const TalentSetupPage = () => {
   if (authLoading || parsingInvite) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6 text-center">
-        <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin mb-4" />
+        {parsingInvite ? (
+          <CVShredderLoader className="mb-6" label="Parsing your CV with AI" />
+        ) : (
+          <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin mb-4" />
+        )}
         <p className="font-black text-gray-900 uppercase tracking-wider text-sm">
           {parsingInvite ? 'Parsing your CV with AI…' : 'Loading…'}
         </p>
@@ -494,6 +509,22 @@ const TalentSetupPage = () => {
                 disabled={awaitingEmailConfirm}
                 className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Department</label>
+              <select
+                name="department"
+                value={form.department}
+                onChange={handleInput}
+                disabled={awaitingEmailConfirm}
+                className="block w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all disabled:opacity-60"
+              >
+                {TALENT_DEPARTMENTS.map((dept) => (
+                  <option key={dept.id} value={dept.id}>{dept.label}</option>
+                ))}
+              </select>
+              <p className="text-[10px] text-gray-400 font-semibold">Suggested from your CV — change if needed.</p>
             </div>
 
             <div className="space-y-1.5">

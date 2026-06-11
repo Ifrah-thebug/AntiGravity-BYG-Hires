@@ -1,6 +1,13 @@
 // src/lib/geminiCV.js
 // Parses a CV file (base64 PDF or image) using Gemini 2.5 Flash
 
+import {
+  geminiDepartmentPromptLines,
+  TALENT_DEPARTMENT_IDS,
+  normalizeTalentDepartment,
+  DEFAULT_TALENT_DEPARTMENT,
+} from './talentDepartments';
+
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 export const GEMINI_CV_MODEL = 'gemini-2.5-flash';
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_CV_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -41,6 +48,7 @@ Return ONLY valid JSON matching this shape (no markdown):
   "skills": ["Skill 1", "Skill 2", "Skill 3", "Skill 4", "Skill 5", "Skill 6", "Skill 7", "Skill 8"],
   "best_skill": "Single strongest skill (must exactly match one item in skills)",
   "experience_years": 5,
+  "department": "admin-operations",
   "about": "2-3 sentence first-person bio (I/my/me only)"
 }
 
@@ -63,7 +71,12 @@ EMPLOYMENT array:
 OTHER rules:
 - job_title: the headline title or most recent role title — not the company name.
 - best_skill: must be copied exactly from the skills array.
-- about: 2-3 sentences, first person, confident, under 80 words, no contact details.`;
+- about: 2-3 sentences, first person, confident, under 80 words, no contact details.
+
+DEPARTMENT rules:
+- department: pick the ONE closest talent department id from this list (primary job function, not every keyword):
+${geminiDepartmentPromptLines()}
+- Return only the id string (e.g. "it-technical"), not the label.`;
 
 const CV_RESPONSE_SCHEMA = {
   type: 'object',
@@ -85,9 +98,10 @@ const CV_RESPONSE_SCHEMA = {
     skills: { type: 'array', items: { type: 'string' } },
     best_skill: { type: 'string' },
     experience_years: { type: 'integer' },
+    department: { type: 'string', enum: TALENT_DEPARTMENT_IDS },
     about: { type: 'string' },
   },
-  required: ['name', 'job_title', 'skills', 'best_skill', 'experience_years', 'about'],
+  required: ['name', 'job_title', 'skills', 'best_skill', 'experience_years', 'department', 'about'],
 };
 
 function mockData() {
@@ -107,6 +121,7 @@ function mockData() {
     best_skill: skills[0],
     skills,
     experience_years: 3,
+    department: DEFAULT_TALENT_DEPARTMENT,
     about:
       'I am a motivated remote professional with a proven track record in operations and client management. I bring strong organisational skills and a results-driven mindset to every engagement, and I am available for immediate remote placement.',
   };
@@ -251,6 +266,7 @@ function normalizeParsed(parsed) {
     best_skill,
     skills: resolvedSkills,
     experience_years,
+    department: normalizeTalentDepartment(parsed.department),
     about:
       String(parsed.about || '').trim() ||
       'I am a dedicated remote professional with a strong track record of delivering results.',
@@ -301,6 +317,7 @@ function trySalvagePartialJson(text) {
   pick(/"experience_years"\s*:\s*(\d+(?:\.\d+)?)/, 'experience_years', Number);
   pick(/"years_experience"\s*:\s*(\d+(?:\.\d+)?)/, 'experience_years', Number);
   pick(/"best_skill"\s*:\s*"([^"]+)"/, 'best_skill');
+  pick(/"department"\s*:\s*"([^"]+)"/, 'department');
 
   const skillsMatch = text.match(/"skills"\s*:\s*\[([\s\S]*?)(?:\]|$)/)
     || text.match(/"key_skills"\s*:\s*\[([\s\S]*?)(?:\]|$)/);

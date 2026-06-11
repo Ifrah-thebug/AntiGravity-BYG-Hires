@@ -17,6 +17,7 @@ import {
   formatProfileValidationErrors,
   validateProfileFields,
 } from '../lib/profileContentPolicy';
+import CVShredderLoader from '../components/CVShredderLoader';
 
 const TalentSignupPage = () => {
   const navigate = useNavigate();
@@ -150,7 +151,11 @@ const TalentSignupPage = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-center p-8"
           >
-            <div className="w-16 h-16 border-4 border-red/20 border-t-red rounded-full animate-spin mb-6" />
+            {step === 'parsing' ? (
+              <CVShredderLoader className="mb-6" label="Parsing your CV with AI" />
+            ) : (
+              <div className="w-16 h-16 border-4 border-red/20 border-t-red rounded-full animate-spin mb-6" />
+            )}
             <h3 className="text-white font-black text-xl uppercase tracking-wider mb-2">
               {step === 'auth'
                 ? 'Creating Your Account…'

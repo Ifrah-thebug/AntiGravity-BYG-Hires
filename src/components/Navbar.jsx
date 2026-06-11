@@ -10,6 +10,7 @@ const PUBLIC_NAV_LINKS = [
   { name: 'Talent Directory', href: '/talent' },
   { name: 'How It Works', href: '/how-it-works' },
   { name: 'Join Talent Pool', href: '/talent/signup' },
+  { name: 'About', href: '/about' },
 ];
 
 const ADMIN_NAV_LINKS = [

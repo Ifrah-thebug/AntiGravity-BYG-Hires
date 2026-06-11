@@ -1,6 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Briefcase } from 'lucide-react';
+import { talentDirectoryUrlForRole } from '../lib/talentDepartments';
 
 const DallahPouring = () => (
   <svg viewBox="0 0 200 120" className="w-24 h-18 md:w-36 md:h-24 inline-block align-middle ml-2">
@@ -112,17 +114,21 @@ const Roles = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {roles.map((role, index) => (
             <motion.div
-              key={index}
+              key={role}
               initial={{ opacity: 0, scale: 0.95 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
               transition={{ delay: index * 0.05 }}
-              className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-all hover:bg-white hover:border-red/30 cursor-default group"
             >
-              <div className="w-10 h-10 bg-red/10 text-red rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-red group-hover:text-white transition-colors">
-                <Briefcase size={18} />
-              </div>
-              <span className="font-bold text-gray-800 group-hover:text-black">{role}</span>
+              <Link
+                to={talentDirectoryUrlForRole(role)}
+                className="bg-gray-50 p-6 rounded-2xl border border-gray-100 flex items-center gap-4 hover:shadow-md transition-all hover:bg-white hover:border-red/30 cursor-pointer group h-full"
+              >
+                <div className="w-10 h-10 bg-red/10 text-red rounded-full flex items-center justify-center flex-shrink-0 group-hover:bg-red group-hover:text-white transition-colors">
+                  <Briefcase size={18} />
+                </div>
+                <span className="font-bold text-gray-800 group-hover:text-black">{role}</span>
+              </Link>
             </motion.div>
           ))}
         </div>

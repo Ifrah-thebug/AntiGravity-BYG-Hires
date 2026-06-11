@@ -390,21 +390,21 @@ export const talentService = {
     
     // Map resolved expertise to lowercase database department key
     const deptMap = {
-      'Operations': 'operations',
-      'Customer Success': 'customer-success',
-      'Marketing': 'marketing',
-      'SaaS': 'saas',
-      'Automation': 'automation',
+      'Operations': 'admin-operations',
+      'Customer Success': 'customer-support',
+      'Marketing': 'marketing-content',
+      'SaaS': 'it-technical',
+      'Automation': 'ai-automation',
       'Sales': 'sales',
       'Finance': 'finance',
-      'HR': 'hr'
+      'HR': 'hr',
     };
 
     // Convert admitted submissions to the format required by the browse page
     const dynamicTalents = subs
       .filter(s => s.status === 'admitted' || s.status === 'invited' || s.status === 'pending_human_review' || s.status === 'pending_ai_review')
       .map(s => {
-        const deptKey = deptMap[s.expertise] || 'operations';
+        const deptKey = deptMap[s.expertise] || 'admin-operations';
 
         return {
           id: s.id,

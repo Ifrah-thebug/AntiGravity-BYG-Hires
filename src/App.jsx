@@ -33,6 +33,7 @@ import HomePage from './pages/HomePage';
 import HowItWorksPage from './pages/HowItWorksPage';
 import CaseStudiesPage from './pages/CaseStudiesPage';
 import WhyUsPage from './pages/WhyUsPage';
+import AboutUsPage from './pages/AboutUsPage';
 import RemoteSalesTeamPage from './pages/RemoteSalesTeamPage';
 import RemoteSupportTeamPage from './pages/RemoteSupportTeamPage';
 import RequestIntroPage from './pages/RequestIntroPage';
@@ -40,6 +41,7 @@ import TalentDashboardPage from './pages/TalentDashboardPage';
 
 // Import New System Pages
 import AssessmentPage from './pages/AssessmentPage';
+import AssessmentComingSoonPage from './pages/AssessmentComingSoonPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
@@ -105,10 +107,12 @@ const AppContent = () => {
           <Route path="/how-it-works" element={<HowItWorksPage />} />
           <Route path="/case-studies" element={<CaseStudiesPage />} />
           <Route path="/why-us" element={<WhyUsPage />} />
+          <Route path="/about" element={<AboutUsPage />} />
           <Route path="/remote-sales-team" element={<RemoteSalesTeamPage />} />
           <Route path="/remote-support-team" element={<RemoteSupportTeamPage />} />
           <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
           <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
+          <Route path="/assessment/coming-soon" element={<AssessmentComingSoonPage />} />
           <Route path="/assessment" element={<AssessmentPage />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
