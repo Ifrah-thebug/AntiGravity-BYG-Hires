@@ -1,6 +1,8 @@
 import React from 'react';
-import { Flame, Plus, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Flame, Plus, X, ClipboardCheck } from 'lucide-react';
 import { resolveBestSkill } from '../lib/talentSkillsDisplay';
+import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 
 /**
  * Skills list + editable "best skill" (AI-suggested, candidate can change).
@@ -14,9 +16,15 @@ export default function ProfileSkillsEditor({
   onNewSkillChange,
   onAddSkill,
   onRemoveSkill,
+  skillScores = {},
+  inProgressSkill = '',
   disabled = false,
   maxSkills = 8,
+  showAssessmentLink = false,
 }) {
+  const isInProgressSkill = (skill) =>
+    inProgressSkill &&
+    String(skill).trim().toLowerCase() === String(inProgressSkill).trim().toLowerCase();
   const resolvedBest = resolveBestSkill(bestSkill, skills);
 
   const setAsBest = (skill) => {
@@ -53,7 +61,7 @@ export default function ProfileSkillsEditor({
           >
             {skills.map((skill) => (
               <option key={skill} value={skill}>
-                {skill}
+                {skill}{skillScores[skill] != null ? ` — ${skillScores[skill]}/100` : ''}
               </option>
             ))}
           </select>
@@ -69,13 +77,17 @@ export default function ProfileSkillsEditor({
         <div className="flex flex-wrap gap-2 min-h-[40px]">
           {skills.map((skill) => {
             const isBest = skill === resolvedBest;
+            const assessedScore = skillScores[skill];
+            const inProgress = isInProgressSkill(skill);
             return (
               <span
                 key={skill}
                 className={`inline-flex items-center gap-1 px-3 py-1.5 text-[10px] font-black uppercase rounded-full ${
-                  isBest
-                    ? 'bg-red text-white ring-2 ring-red/40'
-                    : 'bg-black text-white'
+                  inProgress
+                    ? 'bg-amber-100 text-amber-900 ring-2 ring-amber-300'
+                    : isBest
+                      ? 'bg-red text-white ring-2 ring-red/40'
+                      : 'bg-black text-white'
                 }`}
               >
                 <button
@@ -91,6 +103,16 @@ export default function ProfileSkillsEditor({
                   />
                 </button>
                 {skill}
+                {inProgress && (
+                  <span className="px-1.5 py-0.5 rounded-md border border-amber-400 bg-amber-200/80 text-[8px] ml-0.5">
+                    In progress
+                  </span>
+                )}
+                {assessedScore != null && (
+                  <span className={`px-1.5 py-0.5 rounded-md border text-[8px] ml-0.5 ${scoreBadgeClass(assessedScore)}`}>
+                    {assessedScore}
+                  </span>
+                )}
                 {!disabled && (
                   <button
                     type="button"
@@ -127,6 +149,14 @@ export default function ProfileSkillsEditor({
               <Plus size={12} className="inline" /> Add
             </button>
           </div>
+        )}
+        {showAssessmentLink && (
+          <Link
+            to="/assessment"
+            className="inline-flex items-center gap-2 mt-2 text-[10px] font-black text-red uppercase tracking-widest hover:text-black transition-colors"
+          >
+            <ClipboardCheck size={12} /> Take skills test
+          </Link>
         )}
       </div>
     </div>

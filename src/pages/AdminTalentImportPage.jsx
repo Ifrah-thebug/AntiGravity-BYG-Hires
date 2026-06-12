@@ -9,6 +9,7 @@ import {
   Pencil,
   RefreshCw,
   Send,
+  Loader2,
   Upload,
   UserCheck,
   XCircle,
@@ -88,6 +89,7 @@ export default function AdminTalentImportPage() {
   const [invites, setInvites] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingInviteId, setSendingInviteId] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loadingBatches, setLoadingBatches] = useState(true);
   const [error, setError] = useState('');
@@ -287,6 +289,7 @@ export default function AdminTalentImportPage() {
   const handleSendOne = async (inviteId) => {
     setError('');
     setSuccess('');
+    setSendingInviteId(inviteId);
     try {
       const result = await sendSingleInvite(inviteId);
       setSuccess(result.resent ? 'Activation email resent with a new link.' : 'Activation email sent.');
@@ -294,6 +297,8 @@ export default function AdminTalentImportPage() {
       await loadBatches();
     } catch (err) {
       setError(err.message || 'Could not send invite.');
+    } finally {
+      setSendingInviteId(null);
     }
   };
 
@@ -617,9 +622,17 @@ export default function AdminTalentImportPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleSendOne(invite.id)}
-                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gray-900 text-white hover:bg-red transition-colors"
+                                    disabled={sendingInviteId === invite.id || sending}
+                                    className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-gray-900 text-white hover:bg-red transition-colors disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-1.5 min-w-[4.5rem] justify-center"
                                   >
-                                    {invite.status === 'invited' ? 'Resend' : 'Send'}
+                                    {sendingInviteId === invite.id ? (
+                                      <>
+                                        <Loader2 size={12} className="animate-spin" />
+                                        Sending…
+                                      </>
+                                    ) : (
+                                      invite.status === 'invited' ? 'Resend' : 'Send'
+                                    )}
                                   </button>
                                 )}
                               </div>

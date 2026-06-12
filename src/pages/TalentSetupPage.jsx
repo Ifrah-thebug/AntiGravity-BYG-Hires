@@ -24,8 +24,9 @@ import {
   validateProfileFields,
   DEFAULT_MONTHLY_FEE_USD,
 } from '../lib/profileContentPolicy';
-import { fetchInviteSetupStatus, parseInviteCvOnSetup } from '../lib/talentInvite';
-import CVShredderLoader from '../components/CVShredderLoader';
+import { fetchInviteSetupStatus, parseInviteCvOnSetup, reuploadInviteCvOnSetup } from '../lib/talentInvite';
+import ProfilePhotoGeneratingLoader from '../components/ProfilePhotoGeneratingLoader';
+import CvParseRetryScreen from '../components/CvParseRetryScreen';
 import {
   TALENT_DEPARTMENTS,
   normalizeTalentDepartment,
@@ -75,13 +76,16 @@ const TalentSetupPage = () => {
     photoPreview,
     photoProcessing,
     photoProgress,
-    photoEnhanceDebug,
     handlePhotoSelect,
     clearPhoto,
-  } = useProfilePhotoUpload({ onError: setError, showEnhanceDebug: import.meta.env.DEV });
+  } = useProfilePhotoUpload({ onError: setError });
   const [awaitingEmailConfirm, setAwaitingEmailConfirm] = useState(false);
   const [parsingInvite, setParsingInvite] = useState(false);
   const [inviteFlow, setInviteFlow] = useState(Boolean(stateData.inviteSetup));
+  const [cvParseFailed, setCvParseFailed] = useState(false);
+  const [cvParseError, setCvParseError] = useState('');
+  const [reuploadingCv, setReuploadingCv] = useState(false);
+  const [inviteCvFileName, setInviteCvFileName] = useState('');
 
   const applyParsedToForm = (parsed, nameOverride) => {
     if (!parsed) return;
@@ -158,9 +162,16 @@ const TalentSetupPage = () => {
 
         setInviteFlow(true);
         if (status.cvUrl) setCvUrl(status.cvUrl);
+        if (status.originalFilename) setInviteCvFileName(status.originalFilename);
 
         if (status.parseStatus === 'parsed' && status.parsed) {
           applyParsedToForm(status.parsed, status.name);
+          return;
+        }
+
+        if (status.parseStatus === 'failed') {
+          setCvParseFailed(true);
+          setCvParseError(status.parseError || 'Could not parse your CV. Please re-upload a clear PDF.');
           return;
         }
 
@@ -172,8 +183,10 @@ const TalentSetupPage = () => {
         }
         if (result.cvUrl) setCvUrl(result.cvUrl);
       } catch (err) {
-        if (!cancelled && inviteFlow) {
-          setError(err.message || 'Could not parse your CV. Fill in your profile manually.');
+        if (!cancelled) {
+          setInviteFlow(true);
+          setCvParseFailed(true);
+          setCvParseError(err.message || 'Could not parse your CV. Please re-upload a clear PDF.');
         }
       } finally {
         if (!cancelled) setParsingInvite(false);
@@ -332,31 +345,60 @@ const TalentSetupPage = () => {
     }
   };
 
+  const handleInviteCvReupload = async (file) => {
+    setReuploadingCv(true);
+    setCvParseError('');
+    setError('');
+    setInviteCvFileName(file.name);
+    try {
+      const result = await reuploadInviteCvOnSetup(file);
+      if (result.parsed) {
+        applyParsedToForm(result.parsed, result.name);
+      }
+      if (result.cvUrl) setCvUrl(result.cvUrl);
+      setCvParseFailed(false);
+    } catch (err) {
+      setCvParseError(err.message || 'Could not parse your CV. Please try another file.');
+    } finally {
+      setReuploadingCv(false);
+    }
+  };
+
   const canConfirm =
     form.name &&
     form.job_title &&
     session &&
     !awaitingEmailConfirm &&
     !parsingInvite &&
+    !cvParseFailed &&
     !photoProcessing &&
     hasProfilePhoto;
 
-  if (authLoading || parsingInvite) {
+  if (inviteFlow && (parsingInvite || cvParseFailed || reuploadingCv)) {
+    return (
+      <CvParseRetryScreen
+        parsing={parsingInvite || reuploadingCv}
+        message={cvParseError}
+        fileName={inviteCvFileName}
+        context="invite"
+        onReupload={cvParseFailed || reuploadingCv ? handleInviteCvReupload : undefined}
+        onContinueManually={
+          cvParseFailed && !parsingInvite && !reuploadingCv
+            ? () => {
+                setCvParseFailed(false);
+                setError('');
+              }
+            : undefined
+        }
+      />
+    );
+  }
+
+  if (authLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white px-6 text-center">
-        {parsingInvite ? (
-          <CVShredderLoader className="mb-6" label="Parsing your CV with AI" />
-        ) : (
-          <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin mb-4" />
-        )}
-        <p className="font-black text-gray-900 uppercase tracking-wider text-sm">
-          {parsingInvite ? 'Parsing your CV with AI…' : 'Loading…'}
-        </p>
-        {parsingInvite && (
-          <p className="text-gray-500 text-xs font-medium mt-2 max-w-xs">
-            This may take a few seconds. We&apos;ll pre-fill your profile from the resume BYG uploaded.
-          </p>
-        )}
+        <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin mb-4" />
+        <p className="font-black text-gray-900 uppercase tracking-wider text-sm">Loading…</p>
       </div>
     );
   }
@@ -435,13 +477,9 @@ const TalentSetupPage = () => {
                   />
                 </label>
               ) : photoProcessing ? (
-                <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
-                  <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
-                  <p className="font-black text-xs text-gray-700 uppercase tracking-wider">
-                    {photoProgress || 'Processing photo…'}
-                  </p>
-                  <p className="text-[10px] text-gray-500 font-medium">Usually takes 15–40 seconds</p>
-                </div>
+                <ProfilePhotoGeneratingLoader
+                  message={photoProgress || 'Creating professional studio photo…'}
+                />
               ) : photoPreview ? (
                 <div className="min-h-[180px] border border-green-200 bg-green-50/40 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
                   <div className="relative">
@@ -463,11 +501,6 @@ const TalentSetupPage = () => {
                     <CheckCircle2 size={11} className="text-green-500" />
                     Professional photo ready
                   </div>
-                  {import.meta.env.DEV && photoEnhanceDebug && (
-                    <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3 w-full font-mono leading-snug text-left">
-                      {photoEnhanceDebug}
-                    </p>
-                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-4 bg-gray-50 border border-gray-200 rounded-2xl p-4">

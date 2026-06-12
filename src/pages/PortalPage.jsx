@@ -31,6 +31,7 @@ import {
   normalizeTalentDepartment,
   DEFAULT_TALENT_DEPARTMENT,
 } from '../lib/talentDepartments';
+import { fetchAssessmentStatus } from '../services/assessmentService';
 
 function ActionIconWithCheck({ icon: Icon, done }) {
   return (
@@ -48,15 +49,15 @@ function ActionIconWithCheck({ icon: Icon, done }) {
   );
 }
 
-function buildStrengthenTiles({ connectCalendarUrl, calendarConnected, introSlotsPublished }) {
+function buildStrengthenTiles({ connectCalendarUrl, calendarConnected, introSlotsPublished, assessmentDone }) {
   const tiles = [
     {
       id: 'assessment',
-      label: 'Take skills assessment',
-      description: 'Prove your skills with a real-world task (~25 min).',
-      href: '/assessment/coming-soon',
+      label: 'Take skills test',
+      description: 'Prove your skills with a focused test per skill (~25 min).',
+      href: '/assessment',
       icon: ClipboardCheck,
-      done: false,
+      done: assessmentDone,
     },
   ];
 
@@ -95,11 +96,13 @@ function StrengthenProfilePanel({
   connectCalendarUrl,
   calendarConnected,
   introSlotsPublished,
+  assessmentDone,
 }) {
   const tiles = buildStrengthenTiles({
     connectCalendarUrl,
     calendarConnected,
     introSlotsPublished,
+    assessmentDone,
   });
 
   const tileClassName =
@@ -135,7 +138,7 @@ function StrengthenProfilePanel({
           Strengthen your profile
         </h3>
         <p className="text-white text-sm font-semibold mt-3 leading-relaxed">
-          Complete your assessment and connect your calendar. Then publish intro availability for
+          Complete your skills test and connect your calendar. Then publish intro availability for
           clients.
         </p>
       </div>
@@ -178,7 +181,7 @@ function StrengthenProfilePanel({
         </div>
         <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-wider">
           <TrendingUp size={12} className="text-white" />
-          Complete assessment (Phase 2) → stronger visibility
+          Complete skills tests → stronger visibility in client searches
         </div>
       </div>
     </motion.div>
@@ -214,6 +217,9 @@ const PortalPage = () => {
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saved' | 'error'
   const [error, setError] = useState('');
   const [introSlotsPublished, setIntroSlotsPublished] = useState(false);
+  const [skillScores, setSkillScores] = useState({});
+  const [assessmentDone, setAssessmentDone] = useState(false);
+  const [inProgressSkill, setInProgressSkill] = useState('');
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
 
@@ -307,6 +313,17 @@ const PortalPage = () => {
     }
 
     setProfile(data);
+
+    try {
+      const assessment = await fetchAssessmentStatus();
+      setSkillScores(assessment.skillScores || {});
+      setAssessmentDone((assessment.assessedCount || 0) > 0);
+      setInProgressSkill(assessment.activeSession?.skill || '');
+    } catch {
+      setSkillScores({});
+      setAssessmentDone(false);
+      setInProgressSkill('');
+    }
 
     const talentId = data.id;
     if (talentId) {
@@ -688,9 +705,31 @@ const PortalPage = () => {
             </select>
           </div>
 
+          {inProgressSkill && (
+            <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-900 font-medium space-y-2">
+              <p className="font-bold">
+                Unfinished skills test for{' '}
+                <span className="text-red">{inProgressSkill}</span>
+              </p>
+              <p className="text-xs text-amber-800/90 leading-relaxed">
+                Only one unfinished test is tracked at a time. Finish or restart this skill,
+                or start another — any new test discards the previous attempt (new questions, no resume).
+              </p>
+              <Link
+                to="/assessment"
+                className="inline-flex items-center gap-1.5 text-[10px] font-black text-red uppercase tracking-widest hover:text-black transition-colors"
+              >
+                <ClipboardCheck size={12} /> Pick a skill to assess
+              </Link>
+            </div>
+          )}
+
           <ProfileSkillsEditor
             skills={form.skills}
             bestSkill={form.best_skill}
+            skillScores={skillScores}
+            inProgressSkill={inProgressSkill}
+            showAssessmentLink
             onSkillsChange={(skills) => setForm((f) => ({ ...f, skills }))}
             onBestSkillChange={(best_skill) => setForm((f) => ({ ...f, best_skill }))}
             newSkill={newSkill}
@@ -780,6 +819,7 @@ const PortalPage = () => {
               }
               calendarConnected={Boolean(profile?.cal_username)}
               introSlotsPublished={introSlotsPublished}
+              assessmentDone={assessmentDone}
             />
           </div>
         </div>

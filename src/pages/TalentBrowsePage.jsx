@@ -141,7 +141,7 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           <p className="text-gray-500 text-[11px] font-normal mt-1 line-clamp-2 leading-snug" title={talent.role || talent.expertise}>{talent.role || talent.expertise}</p>
         </div>
 
-        <TalentSkillTags tags={talent.tags} bestSkill={talent.bestSkill} className="h-[24px]" />
+        <TalentSkillTags tags={talent.tags} bestSkill={talent.bestSkill} />
 
         {/* Experience & Role Type */}
         <div className="h-[24px] flex flex-wrap gap-1.5 items-start overflow-hidden">

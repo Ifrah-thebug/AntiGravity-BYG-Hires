@@ -15,8 +15,7 @@ const STORY = {
   label: 'Our Story',
   title: 'The gap we set out to close',
   paragraphs: [
-    'We started with a simple realization: local businesses were struggling to scale under the weight of high overheads and talent instability. Founders and senior teams were burning out on administrative tasks instead of focusing on strategic priorities.',
-    'We knew there was a better way. By tapping into curated global talent, we wanted to close that gap — giving businesses the freedom to focus on generating revenue while skilled remote staff handled the support.',
+    'Local businesses were stuck between rising overheads and talent gaps — founders buried in admin instead of growth. We connect them with curated global talent so revenue stays the focus.',
   ],
   highlights: ['High overheads', 'Talent instability', 'Founder burnout'],
 };
@@ -25,18 +24,18 @@ const GCC_PILLARS = [
   {
     icon: Building2,
     title: 'Regional Expertise',
-    body: 'Expert business consultancy backed by over 50 years of family business legacy in the region.',
+    body: '50+ years of family business legacy across the GCC.',
   },
   {
     icon: CreditCard,
     title: 'Localized Flexibility',
-    body: 'Settle invoices directly in Qatari Riyal, Saudi Riyal, or UAE Dirham — no cross-border friction.',
+    body: 'Invoice in QAR, SAR, or AED — no cross-border friction.',
     currencies: ['QAR', 'SAR', 'AED'],
   },
   {
     icon: Layers,
     title: 'Beyond Staffing',
-    body: 'Social media marketing, company formation, and a 360° business growth system across Qatar, Saudi Arabia, and the UAE.',
+    body: 'Social, company formation, and 360° growth across Qatar, KSA, and the UAE.',
   },
 ];
 
@@ -228,8 +227,7 @@ const AboutUs = () => {
                 </h2>
               </div>
               <p className="text-black/75 font-medium leading-relaxed mb-8 text-[17px] text-right">
-                We believe that when you hire right, &ldquo;remote&rdquo; doesn&apos;t mean disconnected
-                — it means <span className="text-black font-bold">driven</span>.
+                Hire right and &ldquo;remote&rdquo; means <span className="text-black font-bold">driven</span> — not disconnected.
               </p>
 
               <div className="space-y-4">
@@ -239,9 +237,7 @@ const AboutUs = () => {
                     Daily performance
                   </div>
                   <p className="text-black/70 leading-relaxed text-[15px]">
-                    A remote career is like an engaging TV show; we don&apos;t evaluate our team solely by
-                    their pilot episode, but by their{' '}
-                    <span className="text-black font-semibold">consistent daily performance</span>.
+                    We measure <span className="text-black font-semibold">consistent daily performance</span> — not just day one.
                   </p>
                 </AnimatedCard>
 
@@ -251,10 +247,7 @@ const AboutUs = () => {
                     Talent &amp; clients
                   </div>
                   <p className="text-black/70 leading-relaxed text-[15px]">
-                    Our role isn&apos;t just to find talent; it&apos;s to provide the environment for our
-                    &ldquo;diamonds&rdquo; to truly find their shine. When talent feels supported,
-                    performance improves — which is why we care for our hires just as much as we care for
-                    your business.
+                    We help our &ldquo;diamonds&rdquo; shine — supporting talent as seriously as we support your business.
                   </p>
                 </AnimatedCard>
               </div>
@@ -272,8 +265,7 @@ const AboutUs = () => {
               Regional roots. <span className="text-red">Global reach.</span>
             </motion.h2>
             <motion.p {...reveal(0.1, -12)} className="text-black/70 text-lg leading-relaxed mb-10 max-w-xl">
-              While our talent pool is global, our roots are deeply regional. We aren&apos;t just a staffing
-              agency — we are your partners in operational excellence with a distinct GCC advantage.
+              Global talent, regional roots — your partner in operational excellence across the GCC.
             </motion.p>
 
             <div className="space-y-4">
@@ -327,11 +319,6 @@ const AboutUs = () => {
                 <br />
                 <span className="text-red">Scale with less stress.</span>
               </h2>
-              <p className="text-black/70 leading-relaxed mb-6">
-                Whether you are in E-Commerce, Real Estate, Hospitality, or Healthcare, we are here to
-                help you build the right team and scale with less stress.
-              </p>
-
               <motion.div
                 {...reveal(0.2, 12)}
                 className="flex flex-wrap gap-2 justify-end mb-8"

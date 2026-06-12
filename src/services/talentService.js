@@ -1,5 +1,4 @@
 // src/services/talentService.js
-import { TALENTS } from '../data/talentData';
 
 // A database and simulation service that manages localStorage,
 // mock Google Drive structures, Gemini and Claude API integrations, and mock transactional emails.
@@ -433,56 +432,13 @@ export const talentService = {
         };
       });
 
-    // Merge static talents with our dynamic talents, ensuring no duplicates by ID
-    const staticTalents = (TALENTS || []).map((t) => ({
-      ...t,
-      bestSkill: t.bestSkill || t.tags?.[0] || '',
-      verified: false,
-    }));
-    const merged = [...dynamicTalents, ...staticTalents];
-    
-    // Remove duplicates just in case, and hide profiles that don't have a photo
     const seenIds = new Set();
-    return merged.filter(t => {
+    return dynamicTalents.filter((t) => {
       if (!t.photo) return false;
       if (seenIds.has(t.id)) return false;
       seenIds.add(t.id);
       return true;
     });
-  },
-
-  /** Homepage + directory featured row (static seed IDs + admitted local submissions) */
-  getFeaturedTalents: ({ industry, department, limit = 5 } = {}) => {
-    const all = talentService.getAllBrowseTalents();
-    const featuredIds = ['t013', 't015', 't016', 't017', 't014'];
-
-    const staticFeatured = featuredIds
-      .map((id) => {
-        const t = all.find((talent) => talent.id === id);
-        if (!t) return null;
-        return { ...t, match: t.score ?? t.match ?? 0 };
-      })
-      .filter(Boolean);
-
-    const dynamicFeatured = all
-      .filter((t) => t.isDynamic)
-      .map((t) => ({ ...t, match: t.score ?? t.match ?? 0 }));
-
-    const seen = new Set();
-    let combined = [...dynamicFeatured, ...staticFeatured].filter((t) => {
-      if (seen.has(t.id)) return false;
-      seen.add(t.id);
-      return true;
-    });
-
-    if (industry && industry !== 'All') {
-      combined = combined.filter((t) => t.industries?.includes(industry));
-    }
-    if (department && department !== 'all') {
-      combined = combined.filter((t) => t.department === department);
-    }
-
-    return combined.slice(0, limit);
   },
 
   // Save draft answers

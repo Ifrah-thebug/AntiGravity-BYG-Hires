@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { formatDisplayName } from '../lib/formatDisplayName';
 import TalentSkillTags from './TalentSkillTags';
 import ProfileVerificationBadge from './ProfileVerificationBadge';
-import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
+import { SHOW_ASSESSMENT_SCORE } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Star, ArrowRight, ArrowDown, X, Briefcase } from 'lucide-react';
-import { talentService } from '../services/talentService';
+import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
+import { fetchLiveDirectoryTalents, pickFeaturedTalents } from '../lib/liveDirectoryTalents';
+import { sanitizeTalentList } from '../lib/talentVerification';
 
 const EXPLORE_STEPS = [
   { label: 'Filter industry', short: 'Filter' },
@@ -342,10 +344,30 @@ const TalentMatchmaking = () => {
   const canRequestIntro = !isLoggedInTalent;
   const [selected, setSelected] = useState('All');
   const [selectedTalent, setSelectedTalent] = useState(null);
+  const [talents, setTalents] = useState([]);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const displayed = sanitizeTalentList(
-    talentService.getFeaturedTalents({ industry: selected })
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const live = await fetchLiveDirectoryTalents();
+        if (!cancelled) setTalents(sanitizeTalentList(live));
+      } catch (err) {
+        console.warn('[TalentMatchmaking] fetch failed:', err?.message || err);
+        if (!cancelled) setTalents([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const displayed = useMemo(
+    () => pickFeaturedTalents(talents, { industry: selected }),
+    [talents, selected]
   );
 
   return (
@@ -409,6 +431,36 @@ const TalentMatchmaking = () => {
         </div>
 
         {/* Profile Tiles */}
+        {loading ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-14">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="bg-gray-50 border border-gray-100 rounded-3xl overflow-hidden animate-pulse">
+                <div className="w-full aspect-[4/5] bg-gray-200" />
+                <div className="p-5 space-y-3">
+                  <div className="h-3 bg-gray-200 rounded-full w-3/4" />
+                  <div className="h-2 bg-gray-100 rounded-full w-1/2" />
+                  <div className="h-10 bg-gray-100 rounded-xl w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : displayed.length === 0 ? (
+          <div className="text-center py-16 mb-14 border border-dashed border-gray-200 rounded-3xl">
+            <p className="font-black text-gray-400 uppercase tracking-widest text-sm">No talent profiles yet</p>
+            <p className="text-gray-400 text-xs font-medium mt-2">
+              {selected === 'All'
+                ? 'Live profiles will appear here as talent joins the directory.'
+                : `No profiles matched “${selected}”. Try another industry or browse all talent.`}
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/talent')}
+              className="mt-6 px-6 py-3 bg-black text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red transition-colors"
+            >
+              Browse directory
+            </button>
+          </div>
+        ) : (
         <AnimatePresence mode="wait">
           <motion.div
             key={selected}
@@ -418,7 +470,7 @@ const TalentMatchmaking = () => {
             transition={{ duration: 0.3 }}
             className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 mb-14"
           >
-            {displayed.slice(0, 5).map((talent, i) => {
+            {displayed.map((talent, i) => {
               const showMatchBadge =
                 SHOW_ASSESSMENT_SCORE && Boolean(talent.verified) && Number(talent.match) > 0;
               return (
@@ -432,15 +484,26 @@ const TalentMatchmaking = () => {
               >
                 {/* Photo */}
                 <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-50">
-                  <img
-                    src={talent.photo}
-                    alt={talent.name}
-                    className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
-                  />
+                  {talent.photo ? (
+                    <img
+                      src={talent.photo}
+                      alt={talent.name}
+                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-white font-black text-3xl"
+                      style={{
+                        background: `linear-gradient(135deg, hsl(${(talent.name.charCodeAt(0) * 37) % 360},55%,42%), hsl(${((talent.name.charCodeAt(0) * 37) + 40) % 360},60%,32%))`,
+                      }}
+                    >
+                      {talent.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                  )}
                   {/* Availability Badge */}
                   <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm z-10">
-                    <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'july' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
-                    <span>{talent.availability === 'immediate' ? 'Available Now' : talent.availability === '2weeks' ? 'In 2 Weeks' : talent.availability === 'july' ? 'From July' : 'In 1 Month'}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                    <span>{formatAvailabilityLabel(talent.availability)}</span>
                   </div>
 
                   {/* Match Score Badge */}
@@ -463,7 +526,7 @@ const TalentMatchmaking = () => {
                   <TalentSkillTags
                     tags={talent.tags}
                     bestSkill={talent.bestSkill}
-                    className="h-[24px]"
+                    skillScores={talent.skillScores}
                   />
 
                   {/* Experience & Role Type */}
@@ -512,6 +575,7 @@ const TalentMatchmaking = () => {
             })}
           </motion.div>
         </AnimatePresence>
+        )}
 
         <MatchmakingExploreBanner onExplore={() => navigate('/talent')} />
       </div>

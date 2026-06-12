@@ -264,6 +264,7 @@ async function getSetupStatusForUser(userId) {
     name: invite.name,
     email: invite.email,
     cvUrl,
+    originalFilename: invite.originalFilename,
     parseStatus: invite.parseStatus,
     parsed: invite.parsedJson,
     parseError: invite.parseError,
@@ -295,33 +296,89 @@ async function parseInviteCvForUser(userId) {
     if (dlErr) throw dlErr;
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
-    const { parseCVBuffer } = require('./geminiCVService');
-    const parsed = await parseCVBuffer(buffer, invite.cvMimeType || 'application/pdf');
-
-    if (parsed.name && !invite.name) {
-      await store.updateInvite(invite.id, { name: parsed.name });
-    }
-
-    await store.updateInvite(invite.id, {
-      parsed_json: parsed,
-      parse_status: 'parsed',
-      parse_error: null,
-    });
-
-    return {
-      ok: true,
-      parsed,
-      cvUrl: getPublicCvUrl(invite.cvStoragePath),
-      name: invite.name || parsed.name,
-      cached: false,
-    };
+    return parseInviteCvBuffer(invite, buffer, invite.cvMimeType || 'application/pdf');
   } catch (err) {
     await store.updateInvite(invite.id, {
       parse_status: 'failed',
       parse_error: err?.message || 'Parse failed',
     });
-    return { ok: false, error: err?.message || 'Could not parse CV.' };
+    return {
+      ok: false,
+      error: err?.message || 'Could not parse CV.',
+      retryable: true,
+      code: 'CV_PARSE_EXCEPTION',
+      status: 503,
+    };
   }
+}
+
+async function parseInviteCvBuffer(invite, buffer, mimeType) {
+  const { parseCVBuffer } = require('./geminiCVService');
+  const parseResult = await parseCVBuffer(buffer, mimeType);
+
+  if (!parseResult.ok) {
+    await store.updateInvite(invite.id, {
+      parse_status: 'failed',
+      parse_error: parseResult.message || parseResult.error,
+    });
+    return {
+      ok: false,
+      error: parseResult.message || parseResult.error || 'Could not parse CV.',
+      retryable: parseResult.retryable !== false,
+      code: parseResult.code || 'CV_PARSE_FAILED',
+      status: parseResult.status || 503,
+    };
+  }
+
+  const parsed = parseResult.parsed;
+
+  if (parsed.name && !invite.name) {
+    await store.updateInvite(invite.id, { name: parsed.name });
+  }
+
+  await store.updateInvite(invite.id, {
+    parsed_json: parsed,
+    parse_status: 'parsed',
+    parse_error: null,
+  });
+
+  return {
+    ok: true,
+    parsed,
+    cvUrl: getPublicCvUrl(invite.cvStoragePath),
+    name: invite.name || parsed.name,
+    cached: false,
+    source: parseResult.source,
+  };
+}
+
+async function reuploadInviteCvForUser(userId, buffer, mimeType, originalFilename) {
+  const invite = await store.getInviteByUserId(userId);
+  if (!invite) {
+    return { ok: false, error: 'No invite found for this account.', retryable: false };
+  }
+
+  const ext = String(originalFilename || invite.originalFilename || 'cv.pdf')
+    .split('.')
+    .pop()
+    ?.toLowerCase() || 'pdf';
+  const storagePath = invite.cvStoragePath || `invites/${invite.id}/cv.${ext}`;
+
+  await uploadCvToStorage(storagePath, buffer, mimeType || 'application/pdf');
+  await store.updateInvite(invite.id, {
+    cv_storage_path: storagePath,
+    cv_mime_type: mimeType || 'application/pdf',
+    original_filename: originalFilename || invite.originalFilename,
+    parsed_json: null,
+    parse_status: 'parsing',
+    parse_error: null,
+  });
+
+  return parseInviteCvBuffer(
+    { ...invite, cvStoragePath: storagePath, cvMimeType: mimeType },
+    buffer,
+    mimeType || 'application/pdf'
+  );
 }
 
 module.exports = {
@@ -331,6 +388,7 @@ module.exports = {
   sendInviteEmail,
   getSetupStatusForUser,
   parseInviteCvForUser,
+  reuploadInviteCvForUser,
   getPublicCvUrl,
   issueInviteToken,
 };

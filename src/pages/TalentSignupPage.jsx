@@ -7,7 +7,8 @@ import {
   CheckCircle2, ChevronRight, Mail, Lock, User, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { parseCV, GEMINI_CV_MODEL } from '../lib/geminiCV';
+import { parseCV, readFileAsBase64 } from '../lib/geminiCV';
+import { DEFAULT_TALENT_DEPARTMENT } from '../lib/talentDepartments';
 import { supabase } from '../lib/supabase';
 import { formatAuthError } from '../lib/talentAuth';
 import { savePendingSetup, uploadSignupFiles } from '../lib/talentStorage';
@@ -17,7 +18,8 @@ import {
   formatProfileValidationErrors,
   validateProfileFields,
 } from '../lib/profileContentPolicy';
-import CVShredderLoader from '../components/CVShredderLoader';
+import ProfilePhotoGeneratingLoader from '../components/ProfilePhotoGeneratingLoader';
+import CvParseRetryScreen from '../components/CvParseRetryScreen';
 
 const TalentSignupPage = () => {
   const navigate = useNavigate();
@@ -36,13 +38,13 @@ const TalentSignupPage = () => {
     handlePhotoSelect,
     clearPhoto,
     getPhotoDataUrl,
-    photoEnhanceDebug,
   } = useProfilePhotoUpload({
     onError: setError,
-    showEnhanceDebug: import.meta.env.DEV,
   });
-  const [step, setStep] = useState('idle'); // idle | auth | parsing | uploading | done
+  const [step, setStep] = useState('idle'); // idle | auth | parsing | uploading | done | cv-retry
   const [emailConfirmPending, setEmailConfirmPending] = useState(false);
+  const [cvParseError, setCvParseError] = useState('');
+  const [cvRetryParsing, setCvRetryParsing] = useState(false);
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
@@ -51,9 +53,98 @@ const TalentSignupPage = () => {
     if (f) { setCvFile(f); setError(''); }
   };
 
+  const continueAfterParse = async (cvParsed, activeCvFile = cvFile) => {
+    const photoBase64 = await getPhotoDataUrl();
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const setupBase = {
+      name: normalizeProfileName(form.name || cvParsed.name || ''),
+      email: form.email,
+      parsed: cvParsed,
+      photoUrl: photoBase64,
+      cvUrl: '',
+      uploadWarnings: [],
+    };
+
+    if (!session) {
+      savePendingSetup(setupBase);
+      setEmailConfirmPending(true);
+      setStep('done');
+      return;
+    }
+
+    setStep('uploading');
+    const { cvUrl, photoUrl, warnings } = await uploadSignupFiles(
+      session.user.id,
+      activeCvFile,
+      photoFile
+    );
+
+    setStep('done');
+    navigate('/talent/setup', {
+      state: {
+        userId: session.user.id,
+        email: form.email,
+        name: setupBase.name,
+        parsed: cvParsed,
+        cvUrl: cvUrl || '',
+        photoUrl: photoUrl || photoBase64,
+        cvFile: activeCvFile,
+        photoFile,
+        uploadWarnings: warnings,
+      },
+    });
+  };
+
+  const parseCvFile = async (file) => {
+    const base64 = await readFileAsBase64(file);
+    return parseCV(base64, file.type || 'application/pdf');
+  };
+
+  const handleCvReupload = async (file) => {
+    setCvFile(file);
+    setError('');
+    setCvParseError('');
+    setCvRetryParsing(true);
+    try {
+      const result = await parseCvFile(file);
+      if (!result.ok) {
+        setCvParseError(result.message);
+        setStep('cv-retry');
+        return;
+      }
+      await continueAfterParse(result.parsed, file);
+    } catch (err) {
+      setCvParseError(err.message || 'Could not parse your CV.');
+      setStep('cv-retry');
+    } finally {
+      setCvRetryParsing(false);
+    }
+  };
+
+  const handleContinueManually = async () => {
+    setError('');
+    setCvParseError('');
+    try {
+      await continueAfterParse({
+        name: form.name,
+        job_title: '',
+        skills: [],
+        best_skill: '',
+        experience_years: 3,
+        department: DEFAULT_TALENT_DEPARTMENT,
+        about: '',
+      });
+    } catch (err) {
+      setStep('idle');
+      setError(formatAuthError(err));
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setCvParseError('');
 
     if (!form.name || !form.email || !form.password || !cvFile || !photoFile) {
       setError('Please fill all fields and upload both your CV and photo.');
@@ -80,59 +171,16 @@ const TalentSignupPage = () => {
       setStep('auth');
       await signUp(form.email, form.password, { full_name: normalizedName });
 
-      const { data: { session } } = await supabase.auth.getSession();
-
       setStep('parsing');
-      const cvBase64 = await new Promise((res, rej) => {
-        const r = new FileReader();
-        r.onloadend = () => res(r.result);
-        r.onerror = rej;
-        r.readAsDataURL(cvFile);
-      });
-      const cvParsed = await parseCV(
-        cvBase64.split(',')[1],
-        cvFile.type || 'application/pdf'
-      );
-
-      const photoBase64 = await getPhotoDataUrl();
-
-      const setupBase = {
-        name: normalizeProfileName(form.name || cvParsed.name || ''),
-        email: form.email,
-        parsed: cvParsed,
-        photoUrl: photoBase64,
-        cvUrl: '',
-        uploadWarnings: [],
-      };
-
-      if (!session) {
-        savePendingSetup(setupBase);
-        setEmailConfirmPending(true);
-        setStep('done');
+      setCvParseError('');
+      const parseResult = await parseCvFile(cvFile);
+      if (!parseResult.ok) {
+        setCvParseError(parseResult.message);
+        setStep('cv-retry');
         return;
       }
 
-      setStep('uploading');
-      const { cvUrl, photoUrl, warnings } = await uploadSignupFiles(
-        session.user.id,
-        cvFile,
-        photoFile
-      );
-
-      setStep('done');
-      navigate('/talent/setup', {
-        state: {
-          userId: session.user.id,
-          email: form.email,
-          name: setupBase.name,
-          parsed: cvParsed,
-          cvUrl: cvUrl || '',
-          photoUrl: photoUrl || photoBase64,
-          cvFile,
-          photoFile,
-          uploadWarnings: warnings,
-        },
-      });
+      await continueAfterParse(parseResult.parsed, cvFile);
     } catch (err) {
       setStep('idle');
       setEmailConfirmPending(false);
@@ -140,7 +188,13 @@ const TalentSignupPage = () => {
     }
   };
 
-  const isLoading = step !== 'idle' && step !== 'done' && !emailConfirmPending;
+  const showCvParseScreen = step === 'parsing' || step === 'cv-retry';
+  const isLoading =
+    step !== 'idle' &&
+    step !== 'done' &&
+    step !== 'parsing' &&
+    step !== 'cv-retry' &&
+    !emailConfirmPending;
 
   return (
     <div className="bg-white min-h-screen font-sans pb-24 pt-20">
@@ -151,26 +205,29 @@ const TalentSignupPage = () => {
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 bg-black/95 z-[100] flex flex-col items-center justify-center text-center p-8"
           >
-            {step === 'parsing' ? (
-              <CVShredderLoader className="mb-6" label="Parsing your CV with AI" />
-            ) : (
-              <div className="w-16 h-16 border-4 border-red/20 border-t-red rounded-full animate-spin mb-6" />
-            )}
+            <div className="w-16 h-16 border-4 border-red/20 border-t-red rounded-full animate-spin mb-6" />
             <h3 className="text-white font-black text-xl uppercase tracking-wider mb-2">
-              {step === 'auth'
-                ? 'Creating Your Account…'
-                : step === 'uploading'
-                  ? 'Uploading Your Files…'
-                  : 'Parsing Your CV with AI…'}
+              {step === 'auth' ? 'Creating Your Account…' : 'Uploading Your Files…'}
             </h3>
-            <p className="text-gray-400 text-xs font-mono max-w-xs">
+            <p className="text-gray-400 text-sm font-medium max-w-xs">
               {step === 'auth'
                 ? 'Registering you with BYG Hires.'
-                : step === 'uploading'
-                  ? 'Saving your CV and photo to secure storage.'
-                  : `Calling ${GEMINI_CV_MODEL} — extracting your profile…`}
+                : 'Saving your CV and photo to secure storage.'}
             </p>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showCvParseScreen && (
+          <CvParseRetryScreen
+            parsing={step === 'parsing' || cvRetryParsing}
+            message={cvParseError}
+            fileName={cvFile?.name}
+            context="signup"
+            onReupload={handleCvReupload}
+            onContinueManually={handleContinueManually}
+          />
         )}
       </AnimatePresence>
 
@@ -309,13 +366,9 @@ const TalentSignupPage = () => {
                       <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" />
                     </label>
                   ) : photoProcessing ? (
-                    <div className="min-h-[180px] border border-gray-200 bg-gray-50 rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
-                      <div className="w-10 h-10 border-4 border-red/20 border-t-red rounded-full animate-spin" />
-                      <p className="font-black text-xs text-gray-700 uppercase tracking-wider">
-                        {photoProgress || 'Processing photo…'}
-                      </p>
-                      <p className="text-[10px] text-gray-500 font-medium">Usually takes 15–40 seconds</p>
-                    </div>
+                    <ProfilePhotoGeneratingLoader
+                      message={photoProgress || 'Creating professional studio photo…'}
+                    />
                   ) : (
                     <div className="min-h-[180px] border border-green-200 bg-green-50/40 rounded-2xl p-5 flex flex-col justify-between items-center text-center">
                       <div className="relative">
@@ -329,11 +382,6 @@ const TalentSignupPage = () => {
                         <CheckCircle2 size={11} className="text-green-500" />
                         Professional photo ready
                       </div>
-                      {import.meta.env.DEV && photoEnhanceDebug && (
-                        <p className="text-[10px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 mt-3 w-full font-mono leading-snug text-left">
-                          {photoEnhanceDebug}
-                        </p>
-                      )}
                     </div>
                   )}
                 </div>

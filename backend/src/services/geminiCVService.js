@@ -256,26 +256,37 @@ function trySalvagePartialJson(text) {
   return found ? salvaged : null;
 }
 
-const MAX_TRANSIENT_RETRIES = 3;
-const TRANSIENT_RETRY_DELAYS_MS = [1500, 3000, 4500];
+const MAX_PARSE_ATTEMPTS = 3;
+const PARSE_RETRY_DELAYS_MS = [1500, 3000, 4500];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function isTransientGeminiError(status) {
-  return status === 503 || status === 429;
+function isTransientHttpStatus(status) {
+  return status === 503 || status === 429 || status === 504;
 }
 
-async function callGeminiWithRetries(base64Data, mimeType, generationConfig) {
+function parseFailure(message, { status, code = 'CV_PARSE_FAILED' } = {}) {
+  return {
+    ok: false,
+    code,
+    message,
+    error: message,
+    retryable: true,
+    status: status || 503,
+  };
+}
+
+async function callGeminiWithHttpRetries(base64Data, mimeType, generationConfig) {
   let result = await callGemini(base64Data, mimeType, generationConfig);
 
-  for (let attempt = 0; attempt < MAX_TRANSIENT_RETRIES; attempt++) {
-    if (!isTransientGeminiError(result.response.status)) return result;
+  for (let attempt = 0; attempt < MAX_PARSE_ATTEMPTS; attempt++) {
+    if (!isTransientHttpStatus(result.response.status)) return result;
 
-    const delay = TRANSIENT_RETRY_DELAYS_MS[attempt] ?? 4500;
+    const delay = PARSE_RETRY_DELAYS_MS[attempt] ?? 4500;
     console.warn(
-      `[geminiCVService] ${result.response.status} — retry ${attempt + 1}/${MAX_TRANSIENT_RETRIES} in ${delay}ms`
+      `[geminiCVService] ${result.response.status} — retry ${attempt + 1}/${MAX_PARSE_ATTEMPTS} in ${delay}ms`
     );
     await sleep(delay);
     result = await callGemini(base64Data, mimeType, generationConfig);
@@ -321,38 +332,87 @@ function parseModelJson(text) {
   }
 }
 
+async function parseCVOnce(base64Data, mimeType) {
+  let { response, responseText } = await callGeminiWithHttpRetries(
+    base64Data,
+    mimeType,
+    buildGenerationConfig()
+  );
+
+  if (!response.ok && /thinking|responseSchema|schema/i.test(responseText)) {
+    ({ response, responseText } = await callGeminiWithHttpRetries(base64Data, mimeType, {
+      temperature: 0.1,
+      maxOutputTokens: 8192,
+      responseMimeType: 'application/json',
+    }));
+  }
+
+  if (!response.ok) {
+    console.warn('[geminiCVService] API error:', response.status, responseText.slice(0, 200));
+    return parseFailure(
+      isTransientHttpStatus(response.status)
+        ? 'CV parsing is temporarily unavailable. Please re-upload your CV in a moment.'
+        : 'We could not read your CV. Please re-upload a clear PDF and try again.',
+      { status: response.status, code: 'GEMINI_API_ERROR' }
+    );
+  }
+
+  let resData;
+  try {
+    resData = JSON.parse(responseText);
+  } catch {
+    return parseFailure('Invalid response from CV parser. Please re-upload your CV.', {
+      code: 'GEMINI_RESPONSE_INVALID',
+    });
+  }
+
+  const text = cleanJsonText(extractModelText(resData));
+  if (!text.trim()) {
+    return parseFailure('CV parser returned an empty result. Please re-upload your CV.', {
+      code: 'GEMINI_EMPTY_RESPONSE',
+    });
+  }
+
+  try {
+    return { ok: true, parsed: parseModelJson(text), source: 'gemini' };
+  } catch (err) {
+    console.warn('[geminiCVService] JSON parse failed:', err?.message || err);
+    return parseFailure('We could not understand the CV parser output. Please re-upload your CV.', {
+      code: 'CV_JSON_PARSE_FAILED',
+    });
+  }
+}
+
 async function parseCVBuffer(buffer, mimeType) {
   if (!GEMINI_API_KEY) {
     console.warn('[geminiCVService] No API key — mock data.');
-    return mockData();
+    return { ok: true, parsed: mockData(), source: 'mock' };
   }
-  const base64Data = buffer.toString('base64');
-  try {
-    let { response, responseText } = await callGeminiWithRetries(
-      base64Data,
-      mimeType,
-      buildGenerationConfig()
-    );
 
-    if (!response.ok && /thinking|responseSchema|schema/i.test(responseText)) {
-      ({ response, responseText } = await callGemini(base64Data, mimeType, {
-        temperature: 0.1,
-        maxOutputTokens: 8192,
-        responseMimeType: 'application/json',
-      }));
+  const base64Data = buffer.toString('base64');
+  const mime = mimeType || 'application/pdf';
+  let lastFailure = parseFailure('Could not parse CV.');
+
+  for (let attempt = 0; attempt < MAX_PARSE_ATTEMPTS; attempt++) {
+    try {
+      const result = await parseCVOnce(base64Data, mime);
+      if (result.ok) return result;
+      lastFailure = result;
+      console.warn(
+        `[geminiCVService] attempt ${attempt + 1}/${MAX_PARSE_ATTEMPTS} failed:`,
+        result.message
+      );
+    } catch (err) {
+      lastFailure = parseFailure(err.message || 'Could not parse CV.', { code: 'CV_PARSE_EXCEPTION' });
+      console.warn(`[geminiCVService] attempt ${attempt + 1}/${MAX_PARSE_ATTEMPTS} error:`, err);
     }
-    if (!response.ok) {
-      console.warn('[geminiCVService] API error:', response.status, responseText);
-      return mockData();
+
+    if (attempt < MAX_PARSE_ATTEMPTS - 1) {
+      await sleep(PARSE_RETRY_DELAYS_MS[attempt] ?? 4500);
     }
-    const resData = JSON.parse(responseText);
-    const text = cleanJsonText(extractModelText(resData));
-    if (!text.trim()) return mockData();
-    return parseModelJson(text);
-  } catch (err) {
-    console.warn('[geminiCVService] Parse failed:', err?.message || err);
-    return mockData();
   }
+
+  return lastFailure;
 }
 
 module.exports = { parseCVBuffer, normalizeParsed };

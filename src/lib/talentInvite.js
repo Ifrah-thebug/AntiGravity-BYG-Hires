@@ -48,6 +48,14 @@ export async function fetchInviteSetupStatus() {
   return data;
 }
 
+function cvApiError(data, resp) {
+  const err = new Error(data.error || 'Could not parse CV.');
+  err.retryable = data.retryable !== false;
+  err.code = data.code;
+  err.status = resp.status;
+  return err;
+}
+
 export async function parseInviteCvOnSetup() {
   const headers = await authHeaders();
   const resp = await fetch(`${API_BASE}/api/talent-invite/setup/parse-cv`, {
@@ -55,6 +63,21 @@ export async function parseInviteCvOnSetup() {
     headers,
   });
   const data = await parseJson(resp);
-  if (!resp.ok) throw new Error(data.error || 'Could not parse CV.');
+  if (!resp.ok) throw cvApiError(data, resp);
+  return data;
+}
+
+export async function reuploadInviteCvOnSetup(file) {
+  const tokenHeaders = await authHeaders();
+  const formData = new FormData();
+  formData.append('cv', file);
+
+  const resp = await fetch(`${API_BASE}/api/talent-invite/setup/reupload-cv`, {
+    method: 'POST',
+    headers: { Authorization: tokenHeaders.Authorization },
+    body: formData,
+  });
+  const data = await parseJson(resp);
+  if (!resp.ok) throw cvApiError(data, resp);
   return data;
 }

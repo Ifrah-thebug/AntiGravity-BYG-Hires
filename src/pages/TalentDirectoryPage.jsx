@@ -13,15 +13,14 @@ import {
   ROLE_TYPE_OPTIONS,
   parseTalentDirectorySearchParams,
 } from '../data/talentData';
-import { talentService } from '../services/talentService';
-import { supabase } from '../lib/supabase';
 import { formatDisplayName } from '../lib/formatDisplayName';
-import { formatAvailabilityLabel, DEFAULT_MONTHLY_FEE_USD } from '../lib/profileContentPolicy';
-import { normalizeTalentDepartment } from '../lib/talentDepartments';
+import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
+import { fetchLiveDirectoryTalents, pickFeaturedTalents } from '../lib/liveDirectoryTalents';
 import TalentSkillTags from '../components/TalentSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
+import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -153,7 +152,7 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
         <TalentSkillTags
           tags={talent.tags}
           bestSkill={talent.bestSkill}
-          className="h-[24px]"
+          skillScores={talent.skillScores || {}}
         />
 
         {/* Experience & Role Type */}
@@ -269,11 +268,22 @@ const TalentModal = ({ talent, onClose, canRequestIntro = true }) => {
             <div>
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Skills & Expertise</p>
               <div className="flex flex-wrap gap-2">
-                {talent.tags.map(tag => (
-                  <span key={tag} className="px-3 py-1.5 bg-red/5 border border-red/10 text-red font-bold text-[10px] uppercase tracking-wide rounded-xl">
-                    {tag}
-                  </span>
-                ))}
+                {talent.tags.map(tag => {
+                  const skillScore = talent.skillScores?.[tag];
+                  return (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-red/5 border border-red/10 text-red font-bold text-[10px] uppercase tracking-wide rounded-xl"
+                    >
+                      {tag}
+                      {SHOW_ASSESSMENT_SCORE && skillScore != null && (
+                        <span className={`px-1.5 py-0.5 rounded-md border text-[9px] ${scoreBadgeClass(skillScore)}`}>
+                          {skillScore}
+                        </span>
+                      )}
+                    </span>
+                  );
+                })}
               </div>
             </div>
 
@@ -420,40 +430,15 @@ const TalentDirectoryPage = () => {
 
   const fetchData = async () => {
     setLoading(true);
-    
-    // 1. Fetch Supabase profiles
-    const { data, error: err } = await supabase
-      .from('profiles')
-      .select('id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department')
-      .order('created_at', { ascending: false });
-
-    let supabaseTalents = [];
-    if (!err && data) {
-      supabaseTalents = data.map(p => ({
-        id: p.id,
-        name: formatDisplayName(p.name) || 'Anonymous',
-        photo: p.photo_url || null,
-        score: 0,
-        verified: false,
-        role: p.job_title || 'Professional',
-        experience: p.experience_years ? `${p.experience_years} yrs` : 'Flexible',
-        tags: p.skills || [],
-        bestSkill: p.best_skill || p.skills?.[0] || '',
-        fee: Number(p.directory_fee_usd) || Math.round((Number(p.monthly_fee_usd) || DEFAULT_MONTHLY_FEE_USD) * 1.1),
-        availability: p.availability || 'immediate',
-        department: normalizeTalentDepartment(p.department),
-        roleType: p.role_type || 'flexible',
-        bio: p.about || 'No bio provided.',
-        period: '/mo'
-      }));
+    try {
+      const liveTalents = await fetchLiveDirectoryTalents();
+      setTalents(sanitizeTalentList(liveTalents));
+    } catch (err) {
+      console.warn('[TalentDirectory] fetch failed:', err?.message || err);
+      setTalents([]);
+    } finally {
+      setLoading(false);
     }
-
-    // 2. Fetch mock profiles
-    const mockTalents = talentService.getAllBrowseTalents();
-
-    // 3. Combine them
-    setTalents(sanitizeTalentList([...supabaseTalents, ...mockTalents]));
-    setLoading(false);
   };
 
   useEffect(() => {
@@ -475,8 +460,8 @@ const TalentDirectoryPage = () => {
     filters.availability.length + filters.roleType.length + (filters.maxFee < 2000 ? 1 : 0);
 
   const featuredTalents = useMemo(
-    () => talentService.getFeaturedTalents({ department: activedept }),
-    [activedept]
+    () => pickFeaturedTalents(talents, { department: activedept }),
+    [talents, activedept]
   );
 
   const featuredIdSet = useMemo(
@@ -539,7 +524,7 @@ const TalentDirectoryPage = () => {
             Meet the<br /><span className="text-red">talent pool.</span>
           </h1>
           <p className="text-gray-500 text-lg font-medium max-w-xl mx-auto leading-relaxed">
-            Browse vetted talent profiles. Assessment scores will appear in a future release.
+            Browse vetted talent profiles. Skill assessment scores reflect verified expertise.
           </p>
         </motion.div>
 

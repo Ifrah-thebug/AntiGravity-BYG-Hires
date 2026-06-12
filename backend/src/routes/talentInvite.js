@@ -1,7 +1,13 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const { createClient } = require('@supabase/supabase-js');
 const talentActivation = require('../services/talentActivationService');
+
+const cvUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+});
 
 const router = express.Router();
 
@@ -97,16 +103,53 @@ router.get('/setup/status', requireAuthUser, async (req, res) => {
   }
 });
 
+function cvParseErrorStatus(result) {
+  if (result.status) return result.status;
+  return result.retryable === false ? 422 : 503;
+}
+
 router.post('/setup/parse-cv', requireAuthUser, async (req, res) => {
   try {
     const result = await talentActivation.parseInviteCvForUser(req.authUser.id);
     if (!result.ok) {
-      return res.status(400).json({ error: result.error || 'Parse failed.' });
+      return res.status(cvParseErrorStatus(result)).json({
+        error: result.error || 'Parse failed.',
+        retryable: result.retryable !== false,
+        code: result.code,
+      });
     }
     return res.json(result);
   } catch (err) {
     console.error('[talent-invite/setup/parse-cv]', err?.message || err);
-    return res.status(500).json({ error: 'Could not parse CV.' });
+    return res.status(500).json({ error: 'Could not parse CV.', retryable: true });
+  }
+});
+
+router.post('/setup/reupload-cv', requireAuthUser, cvUpload.single('cv'), async (req, res) => {
+  try {
+    if (!req.file?.buffer) {
+      return res.status(400).json({ error: 'CV file is required.', retryable: false });
+    }
+
+    const result = await talentActivation.reuploadInviteCvForUser(
+      req.authUser.id,
+      req.file.buffer,
+      req.file.mimetype || 'application/pdf',
+      req.file.originalname
+    );
+
+    if (!result.ok) {
+      return res.status(cvParseErrorStatus(result)).json({
+        error: result.error || 'Parse failed.',
+        retryable: result.retryable !== false,
+        code: result.code,
+      });
+    }
+
+    return res.json(result);
+  } catch (err) {
+    console.error('[talent-invite/setup/reupload-cv]', err?.message || err);
+    return res.status(500).json({ error: 'Could not re-upload CV.', retryable: true });
   }
 });
 

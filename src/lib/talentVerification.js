@@ -1,23 +1,22 @@
-/**
- * Phase 1: public talent UI shows no assessment scores; all profiles unverified.
- * Set SHOW_ASSESSMENT_SCORE true when assessment integration ships.
- */
-export const SHOW_ASSESSMENT_SCORE = false;
+import { getBestSkillScore, isTalentVerifiedByAssessment } from './skillAssessmentDisplay';
 
-export function isTalentVerified(_talent) {
+/** Show assessment scores and verified badges on public talent UI. */
+export const SHOW_ASSESSMENT_SCORE = true;
+
+export function isTalentVerified(talent) {
   if (!SHOW_ASSESSMENT_SCORE) return false;
-  const t = _talent || {};
-  return Boolean(t.verified) && Number(t.score) > 0;
+  return isTalentVerifiedByAssessment(talent);
 }
 
-/** Strip score/verified for directory, browse, request intro (demo + Supabase). */
+/** Keep per-skill scores; normalize headline score from best assessed skill. */
 export function sanitizeTalentForPublicDisplay(talent) {
   if (!talent) return talent;
+  const bestScore = getBestSkillScore(talent);
   return {
     ...talent,
-    score: 0,
-    match: 0,
-    verified: false,
+    score: bestScore,
+    match: bestScore,
+    verified: isTalentVerifiedByAssessment(talent),
   };
 }
 

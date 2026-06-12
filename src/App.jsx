@@ -41,7 +41,7 @@ import TalentDashboardPage from './pages/TalentDashboardPage';
 
 // Import New System Pages
 import AssessmentPage from './pages/AssessmentPage';
-import AssessmentComingSoonPage from './pages/AssessmentComingSoonPage';
+import TalentAssessmentPage from './pages/TalentAssessmentPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
@@ -76,7 +76,9 @@ const AppContent = () => {
   const location = useLocation();
   const isTalentPool = location.pathname === '/talent-pool' || location.pathname === '/talent-pool/apply';
   const debug = new URLSearchParams(location.search).get('debug') === 'true';
-  const isAssessment = location.pathname === '/assessment';
+  const isAssessment =
+    location.pathname === '/assessment' ||
+    location.pathname.startsWith('/assessment/');
   const isAdmin = location.pathname.startsWith('/admin');
   const isSuperAdminShell =
     location.pathname === '/admin/login' ||
@@ -112,8 +114,9 @@ const AppContent = () => {
           <Route path="/remote-support-team" element={<RemoteSupportTeamPage />} />
           <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
           <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
-          <Route path="/assessment/coming-soon" element={<AssessmentComingSoonPage />} />
-          <Route path="/assessment" element={<AssessmentPage />} />
+          <Route path="/assessment" element={<TalentAssessmentPage />} />
+          <Route path="/assessment/legacy" element={<AssessmentPage />} />
+          <Route path="/assessment/coming-soon" element={<Navigate to="/assessment" replace />} />
           <Route path="/status" element={<StatusPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin/signup" element={<AdminSignupPage />} />

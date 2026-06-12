@@ -7,6 +7,10 @@ import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star } from 'lucide-rea
 import { supabase } from '../lib/supabase';
 import { formatDisplayName, formatFirstName } from '../lib/formatDisplayName';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
+import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
+import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
+import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
+import { SHOW_ASSESSMENT_SCORE, sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
 
 const TalentProfilePage = () => {
   const { id } = useParams();
@@ -14,6 +18,7 @@ const TalentProfilePage = () => {
   const { isLoggedInTalent } = useIsLoggedInTalent();
   const canRequestIntro = !isLoggedInTalent;
   const [profile, setProfile] = useState(null);
+  const [skillScores, setSkillScores] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -34,6 +39,8 @@ const TalentProfilePage = () => {
       setError('Profile not found.');
     } else {
       setProfile(data);
+      const scoreMap = await fetchPublicSkillScores([data.id].filter(Boolean));
+      setSkillScores(buildTalentSkillScores(scoreMap, data.id, data.skills || []));
     }
     setLoading(false);
   };
@@ -57,7 +64,12 @@ const TalentProfilePage = () => {
     );
   }
 
-  const { id: profileId, name, job_title, about, skills, experience_years, photo_url } = profile;
+  const { id: profileId, name, job_title, about, skills, experience_years, photo_url, best_skill } = profile;
+  const displayTalent = sanitizeTalentForPublicDisplay({
+    bestSkill: best_skill || skills?.[0],
+    tags: skills || [],
+    skillScores,
+  });
   const displayName = formatDisplayName(name);
   const firstName = formatFirstName(name);
   const initials = name ? name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
@@ -105,9 +117,7 @@ const TalentProfilePage = () => {
 
               {/* Info */}
               <div className="flex-1 space-y-4">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-500/10 border border-gray-500/20 text-gray-400 text-[9px] font-black uppercase tracking-widest rounded-full">
-                  Unverified profile
-                </div>
+                <ProfileVerificationBadge talent={displayTalent} variant="dark" />
                 <div>
                   <h1 className="text-3xl md:text-4xl font-black tracking-tight" title={name}>{displayName}</h1>
                   <p className="text-red font-bold text-base uppercase tracking-wider mt-1">{job_title}</p>
@@ -170,11 +180,22 @@ const TalentProfilePage = () => {
           >
             <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Skills & Expertise</p>
             <div className="flex flex-wrap gap-2">
-              {skills.map(skill => (
-                <span key={skill} className="px-4 py-2 bg-red/5 border border-red/10 text-red font-bold text-[11px] uppercase tracking-wide rounded-xl">
-                  {skill}
-                </span>
-              ))}
+              {skills.map(skill => {
+                const score = skillScores[skill];
+                return (
+                  <span
+                    key={skill}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-red/5 border border-red/10 text-red font-bold text-[11px] uppercase tracking-wide rounded-xl"
+                  >
+                    {skill}
+                    {SHOW_ASSESSMENT_SCORE && score != null && (
+                      <span className={`px-2 py-0.5 rounded-lg border text-[10px] ${scoreBadgeClass(score)}`}>
+                        {score}/100
+                      </span>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           </motion.div>
         )}

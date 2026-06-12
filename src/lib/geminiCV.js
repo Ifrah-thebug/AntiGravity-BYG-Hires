@@ -338,6 +338,28 @@ function trySalvagePartialJson(text) {
   return found ? salvaged : null;
 }
 
+const MAX_PARSE_ATTEMPTS = 3;
+const PARSE_RETRY_DELAYS_MS = [1500, 3000, 4500];
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientHttpStatus(status) {
+  return status === 503 || status === 429 || status === 504;
+}
+
+function parseFailure(message, { status, code = 'CV_PARSE_FAILED' } = {}) {
+  return {
+    ok: false,
+    code,
+    message,
+    error: message,
+    retryable: true,
+    status: status || 503,
+  };
+}
+
 async function callGemini(base64Data, mimeType, generationConfig) {
   const response = await fetch(GEMINI_ENDPOINT, {
     method: 'POST',
@@ -359,49 +381,119 @@ async function callGemini(base64Data, mimeType, generationConfig) {
   return { response, responseText };
 }
 
-export async function parseCV(base64Data, mimeType) {
-  if (!GEMINI_API_KEY) {
-    console.warn('[Gemini CV] No API key — returning mock data.');
-    return mockData();
+async function callGeminiWithHttpRetries(base64Data, mimeType, generationConfig) {
+  let result = await callGemini(base64Data, mimeType, generationConfig);
+
+  for (let attempt = 0; attempt < MAX_PARSE_ATTEMPTS; attempt++) {
+    if (!isTransientHttpStatus(result.response.status)) return result;
+    const delay = PARSE_RETRY_DELAYS_MS[attempt] ?? 4500;
+    console.warn(
+      `[Gemini CV] ${result.response.status} — retry ${attempt + 1}/${MAX_PARSE_ATTEMPTS} in ${delay}ms`
+    );
+    await sleep(delay);
+    result = await callGemini(base64Data, mimeType, generationConfig);
+  }
+
+  return result;
+}
+
+async function parseCVOnce(base64Data, mimeType) {
+  let { response, responseText } = await callGeminiWithHttpRetries(
+    base64Data,
+    mimeType,
+    buildGenerationConfig()
+  );
+
+  if (!response.ok && /thinking|responseSchema|schema/i.test(responseText)) {
+    const fallbackConfig = {
+      temperature: 0.1,
+      maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+    };
+    ({ response, responseText } = await callGeminiWithHttpRetries(
+      base64Data,
+      mimeType,
+      fallbackConfig
+    ));
+  }
+
+  if (!response.ok) {
+    console.warn('[Gemini CV] API error:', response.status, responseText.slice(0, 200));
+    return parseFailure(
+      isTransientHttpStatus(response.status)
+        ? 'CV parsing is temporarily unavailable. Please re-upload your CV in a moment.'
+        : 'We could not read your CV. Please re-upload a clear PDF and try again.',
+      { status: response.status, code: 'GEMINI_API_ERROR' }
+    );
+  }
+
+  let resData;
+  try {
+    resData = JSON.parse(responseText);
+  } catch {
+    return parseFailure('Invalid response from CV parser. Please re-upload your CV.', {
+      code: 'GEMINI_RESPONSE_INVALID',
+    });
+  }
+
+  const text = cleanJsonText(extractModelText(resData));
+  if (!text.trim()) {
+    return parseFailure('CV parser returned an empty result. Please re-upload your CV.', {
+      code: 'GEMINI_EMPTY_RESPONSE',
+    });
   }
 
   try {
-    let { response, responseText } = await callGemini(base64Data, mimeType, buildGenerationConfig());
-
-    if (!response.ok && /thinking|responseSchema|schema/i.test(responseText)) {
-      const fallbackConfig = {
-        temperature: 0.1,
-        maxOutputTokens: 4096,
-        responseMimeType: 'application/json',
-      };
-      ({ response, responseText } = await callGemini(base64Data, mimeType, fallbackConfig));
+    return { ok: true, parsed: normalizeParsed(JSON.parse(text)), source: 'gemini' };
+  } catch (parseErr) {
+    const salvaged = trySalvagePartialJson(text);
+    if (salvaged) {
+      return { ok: true, parsed: normalizeParsed(salvaged), source: 'gemini-salvaged' };
     }
-
-    if (!response.ok) {
-      console.warn('[Gemini CV] API error:', response.status, responseText);
-      return mockData();
-    }
-
-    const resData = JSON.parse(responseText);
-    let text = cleanJsonText(extractModelText(resData));
-
-    if (!text.trim()) {
-      console.warn('[Gemini CV] Empty response from model.');
-      return mockData();
-    }
-
-    try {
-      return normalizeParsed(JSON.parse(text));
-    } catch (parseErr) {
-      const salvaged = trySalvagePartialJson(text);
-      if (salvaged) {
-        return normalizeParsed(salvaged);
-      }
-      console.warn('[Gemini CV] Invalid JSON:', parseErr.message);
-      return mockData();
-    }
-  } catch (err) {
-    console.warn('[Gemini CV] Parse failed, using mock data.', err);
-    return mockData();
+    console.warn('[Gemini CV] Invalid JSON:', parseErr.message);
+    return parseFailure('We could not understand the CV parser output. Please re-upload your CV.', {
+      code: 'CV_JSON_PARSE_FAILED',
+    });
   }
+}
+
+/**
+ * Parse CV with up to MAX_PARSE_ATTEMPTS full attempts.
+ * @returns {{ ok: true, parsed: object, source: string } | { ok: false, message: string, retryable: boolean, ... }}
+ */
+export async function parseCV(base64Data, mimeType) {
+  if (!GEMINI_API_KEY) {
+    console.warn('[Gemini CV] No API key — returning mock data.');
+    return { ok: true, parsed: mockData(), source: 'mock' };
+  }
+
+  let lastFailure = parseFailure('Could not parse CV.');
+
+  for (let attempt = 0; attempt < MAX_PARSE_ATTEMPTS; attempt++) {
+    try {
+      const result = await parseCVOnce(base64Data, mimeType);
+      if (result.ok) return result;
+      lastFailure = result;
+      console.warn(`[Gemini CV] attempt ${attempt + 1}/${MAX_PARSE_ATTEMPTS} failed:`, result.message);
+    } catch (err) {
+      lastFailure = parseFailure(err.message || 'Could not parse CV.', { code: 'CV_PARSE_EXCEPTION' });
+      console.warn(`[Gemini CV] attempt ${attempt + 1}/${MAX_PARSE_ATTEMPTS} error:`, err);
+    }
+
+    if (attempt < MAX_PARSE_ATTEMPTS - 1) {
+      await sleep(PARSE_RETRY_DELAYS_MS[attempt] ?? 4500);
+    }
+  }
+
+  return lastFailure;
+}
+
+export async function readFileAsBase64(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  return String(dataUrl).split(',')[1];
 }
