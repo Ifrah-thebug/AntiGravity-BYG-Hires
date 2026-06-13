@@ -18,6 +18,7 @@ const clientRouter = require('./routes/client');
 const calWebhookRouter = require('./routes/calWebhook');
 const adminTalentImportRouter = require('./routes/adminTalentImport');
 const talentInviteRouter = require('./routes/talentInvite');
+const cronRouter = require('./routes/cron');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -65,6 +66,7 @@ app.use('/api/profile', profilePhotoRouter);
 app.use('/api/client', clientRouter);
 app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/talent-invite', talentInviteRouter);
+app.use('/api/internal/cron', cronRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -96,5 +98,10 @@ app.listen(PORT, () => {
   console.log(`[cal] Discovery webhook: POST ${webhookBase}/api/cal/webhook`);
   if (!process.env.CAL_WEBHOOK_SECRET) {
     console.log('[cal] CAL_WEBHOOK_SECRET not set — webhook signatures not verified (set in production)');
+  }
+  if (process.env.CRON_SECRET) {
+    console.log('[cron] Talent reminder endpoint: POST /api/internal/cron/talent-reminders');
+  } else {
+    console.log('[cron] CRON_SECRET not set — scheduled talent reminders disabled');
   }
 });

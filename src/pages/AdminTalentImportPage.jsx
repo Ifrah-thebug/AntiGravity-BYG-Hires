@@ -13,6 +13,8 @@ import {
   Upload,
   UserCheck,
   XCircle,
+  UserCircle,
+  Award,
 } from 'lucide-react';
 import AdminPageShell from '../components/AdminPageShell';
 import {
@@ -37,6 +39,14 @@ function formatWhen(iso) {
 }
 
 function statusMeta(invite) {
+  const lc = invite.lifecycle || {};
+  if (lc.assessmentDone) {
+    return { label: 'Test done', className: 'bg-violet-50 text-violet-800 border-violet-200' };
+  }
+  if (lc.profileComplete && (invite.status === 'activated' || invite.activatedAt)) {
+    return { label: 'Profile done', className: 'bg-teal-50 text-teal-800 border-teal-200' };
+  }
+
   const map = {
     uploaded: { label: 'Needs email', className: 'bg-amber-50 text-amber-800 border-amber-200' },
     ready: { label: 'Ready to send', className: 'bg-sky-50 text-sky-800 border-sky-200' },
@@ -46,6 +56,15 @@ function statusMeta(invite) {
     expired: { label: 'Expired', className: 'bg-red-50 text-red-700 border-red-200' },
   };
   return map[invite.status] || { label: invite.status, className: 'bg-gray-50 text-gray-700 border-gray-200' };
+}
+
+function assessmentDetail(invite) {
+  const lc = invite.lifecycle || {};
+  if (!lc.assessmentDone) return null;
+  const parts = [`${lc.assessedSkillCount} skill${lc.assessedSkillCount !== 1 ? 's' : ''}`];
+  if (lc.bestAssessmentScore != null) parts.push(`best ${lc.bestAssessmentScore}/100`);
+  if (lc.latestAssessmentAt) parts.push(formatWhen(lc.latestAssessmentAt));
+  return parts.join(' · ');
 }
 
 function StatCard({ icon: Icon, label, value, accent }) {
@@ -97,13 +116,16 @@ export default function AdminTalentImportPage() {
   const [editingId, setEditingId] = useState(null);
   const [editEmail, setEditEmail] = useState('');
   const [editName, setEditName] = useState('');
+  const [savingEditId, setSavingEditId] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
   const batchStats = useMemo(() => {
     const sent = invites.filter((i) => i.invitedAt || ['invited', 'activated'].includes(i.status)).length;
     const clicked = invites.filter((i) => i.activationLinkClickedAt).length;
     const activated = invites.filter((i) => i.status === 'activated' || i.activatedAt).length;
-    return { total: invites.length, sent, clicked, activated };
+    const profileComplete = invites.filter((i) => i.lifecycle?.profileComplete).length;
+    const assessmentDone = invites.filter((i) => i.lifecycle?.assessmentDone).length;
+    return { total: invites.length, sent, clicked, activated, profileComplete, assessmentDone };
   }, [invites]);
 
   const sendableInvites = invites.filter(
@@ -239,20 +261,53 @@ export default function AdminTalentImportPage() {
     setEditName(invite.name || '');
   };
 
-  const saveEdit = async (inviteId) => {
+  const persistInviteEdit = async (inviteId, { email, name }) => {
+    const updated = await updateInviteEmail(inviteId, { email, name });
+    setInvites((prev) => prev.map((inv) => (inv.id === inviteId ? { ...inv, ...updated } : inv)));
+    return updated;
+  };
+
+  const flushPendingEdit = async (inviteId) => {
+    if (editingId !== inviteId) return true;
+    setSavingEditId(inviteId);
     try {
-      await updateInviteEmail(inviteId, { email: editEmail, name: editName });
+      await persistInviteEdit(inviteId, { email: editEmail, name: editName });
       setEditingId(null);
-      await refreshBatch(batchId);
-      await loadBatches();
+      return true;
+    } catch (err) {
+      setError(err.message || 'Save name and email before sending.');
+      return false;
+    } finally {
+      setSavingEditId(null);
+    }
+  };
+
+  const saveEdit = async (inviteId) => {
+    setSavingEditId(inviteId);
+    setError('');
+    try {
+      await persistInviteEdit(inviteId, { email: editEmail, name: editName });
+      setEditingId(null);
       setSuccess('Candidate details updated.');
+      try {
+        await refreshBatch(batchId);
+        await loadBatches();
+      } catch (refreshErr) {
+        console.warn('[admin import] refresh after save failed:', refreshErr);
+      }
     } catch (err) {
       setError(err.message || 'Could not update.');
+    } finally {
+      setSavingEditId(null);
     }
   };
 
   const handleSendAll = async () => {
     if (!batchId) return;
+    if (editingId) {
+      const ok = await flushPendingEdit(editingId);
+      if (!ok) return;
+    }
     setSending(true);
     setError('');
     setSuccess('');
@@ -289,6 +344,8 @@ export default function AdminTalentImportPage() {
   const handleSendOne = async (inviteId) => {
     setError('');
     setSuccess('');
+    const ok = await flushPendingEdit(inviteId);
+    if (!ok) return;
     setSendingInviteId(inviteId);
     try {
       const result = await sendSingleInvite(inviteId);
@@ -443,6 +500,12 @@ export default function AdminTalentImportPage() {
                       </p>
                       <p className="text-[10px] text-gray-400 font-medium mt-1">
                         {batch.stats.sent} sent · {batch.stats.clicked} clicked · {batch.stats.activated} activated
+                        {(batch.stats.profileComplete > 0 || batch.stats.assessmentDone > 0) && (
+                          <>
+                            {' '}
+                            · {batch.stats.profileComplete || 0} profile · {batch.stats.assessmentDone || 0} tested
+                          </>
+                        )}
                       </p>
                     </button>
                   ))}
@@ -453,11 +516,13 @@ export default function AdminTalentImportPage() {
 
           <div className="xl:col-span-2 space-y-6">
             {batchId && invites.length > 0 && (
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                 <StatCard icon={FileText} label="CVs" value={batchStats.total} accent="bg-gray-100 text-gray-600" />
                 <StatCard icon={Mail} label="Emails sent" value={batchStats.sent} accent="bg-indigo-50 text-indigo-600" />
                 <StatCard icon={MousePointerClick} label="Link clicked" value={batchStats.clicked} accent="bg-sky-50 text-sky-600" />
                 <StatCard icon={UserCheck} label="Activated" value={batchStats.activated} accent="bg-emerald-50 text-emerald-600" />
+                <StatCard icon={UserCircle} label="Profile done" value={batchStats.profileComplete} accent="bg-teal-50 text-teal-600" />
+                <StatCard icon={Award} label="Skills test" value={batchStats.assessmentDone} accent="bg-violet-50 text-violet-600" />
               </div>
             )}
 
@@ -510,7 +575,7 @@ export default function AdminTalentImportPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm min-w-[880px]">
+                  <table className="w-full text-left text-sm min-w-[960px]">
                     <thead>
                       <tr className="bg-gray-50/80 text-[10px] font-black uppercase tracking-widest text-gray-400">
                         <th className="px-5 py-3">Candidate</th>
@@ -526,6 +591,8 @@ export default function AdminTalentImportPage() {
                         const sent = Boolean(invite.invitedAt || ['invited', 'activated'].includes(invite.status));
                         const clicked = Boolean(invite.activationLinkClickedAt);
                         const activated = Boolean(invite.status === 'activated' || invite.activatedAt);
+                        const profileDone = Boolean(invite.lifecycle?.profileComplete);
+                        const testDone = Boolean(invite.lifecycle?.assessmentDone);
 
                         return (
                           <tr key={invite.id} className="border-t border-gray-100 hover:bg-gray-50/40">
@@ -569,7 +636,7 @@ export default function AdminTalentImportPage() {
                               </span>
                             </td>
                             <td className="px-5 py-4">
-                              <div className="space-y-2 min-w-[200px]">
+                              <div className="space-y-2 min-w-[220px]">
                                 <EngagementStep
                                   done={sent}
                                   label="Email sent"
@@ -596,6 +663,18 @@ export default function AdminTalentImportPage() {
                                   detail={formatWhen(invite.activatedAt)}
                                   icon={UserCheck}
                                 />
+                                <EngagementStep
+                                  done={profileDone}
+                                  label="Profile saved"
+                                  detail={formatWhen(invite.lifecycle?.profileCompletedAt)}
+                                  icon={UserCircle}
+                                />
+                                <EngagementStep
+                                  done={testDone}
+                                  label="Skills test"
+                                  detail={assessmentDetail(invite)}
+                                  icon={Award}
+                                />
                               </div>
                             </td>
                             <td className="px-5 py-4">
@@ -604,9 +683,10 @@ export default function AdminTalentImportPage() {
                                   <button
                                     type="button"
                                     onClick={() => saveEdit(invite.id)}
-                                    className="text-xs font-black text-red hover:underline"
+                                    disabled={savingEditId === invite.id}
+                                    className="text-xs font-black text-red hover:underline disabled:opacity-50"
                                   >
-                                    Save
+                                    {savingEditId === invite.id ? 'Saving…' : 'Save'}
                                   </button>
                                 ) : (
                                   <button

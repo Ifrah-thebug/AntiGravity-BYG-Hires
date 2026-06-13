@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
 
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();

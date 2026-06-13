@@ -125,7 +125,7 @@ router.get('/batches', async (req, res) => {
 /** GET /api/admin/talent-import/batches/:batchId */
 router.get('/batches/:batchId', async (req, res) => {
   try {
-    const invites = await store.listInvitesByBatch(req.params.batchId);
+    const invites = await store.listInvitesByBatchWithLifecycle(req.params.batchId);
     return res.json({ invites });
   } catch (err) {
     console.error('[admin/talent-import/batches]', err?.message || err);
@@ -136,6 +136,11 @@ router.get('/batches/:batchId', async (req, res) => {
 /** PATCH /api/admin/talent-import/invites/:id */
 router.patch('/invites/:id', async (req, res) => {
   try {
+    const existing = await store.getInviteById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ error: 'Invite not found.' });
+    }
+
     const { email, name } = req.body || {};
     const patch = {};
 
@@ -146,11 +151,18 @@ router.patch('/invites/:id', async (req, res) => {
       }
       patch.email = normalized || null;
       patch.email_extract_status = normalized ? 'manual' : 'missing';
-      patch.status = normalized ? 'ready' : 'uploaded';
+      // Only move pre-send rows between uploaded/ready — never downgrade invited/activated.
+      if (!['invited', 'activated', 'skipped', 'expired'].includes(existing.status)) {
+        patch.status = normalized ? 'ready' : 'uploaded';
+      }
     }
 
     if (name !== undefined) {
       patch.name = String(name || '').trim() || null;
+    }
+
+    if (!Object.keys(patch).length) {
+      return res.status(400).json({ error: 'No changes provided.' });
     }
 
     const invite = await store.updateInvite(req.params.id, patch);

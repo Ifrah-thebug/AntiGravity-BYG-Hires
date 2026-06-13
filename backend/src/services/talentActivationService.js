@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { supabaseAdmin } = require('../middleware/requireAdmin');
 const store = require('./talentInviteStore');
-const { sendTalentActivationEmail } = require('./resendEmailService');
+const { sendTalentActivationEmail, sendTalentActivationReminderEmail } = require('./resendEmailService');
 const {
   extractEmailFromCv,
   isLikelyBadExtractedName,
@@ -45,17 +45,22 @@ async function copyCvToUserFolder(invite, userId) {
   return userPath;
 }
 
-async function issueInviteToken(inviteId) {
+async function issueInviteToken(inviteId, { setFirstInvitedAt = false } = {}) {
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + getTokenTtlHours() * 3600000).toISOString();
-  await store.updateInvite(inviteId, {
+  const now = new Date().toISOString();
+  const patch = {
     invite_token: token,
     token_expires_at: expiresAt,
     status: 'invited',
-    invited_at: new Date().toISOString(),
+    invited_at: now,
     activation_link_clicked_at: null,
     activation_link_click_count: 0,
-  });
+  };
+  if (setFirstInvitedAt) {
+    patch.first_invited_at = now;
+  }
+  await store.updateInvite(inviteId, patch);
   return token;
 }
 
@@ -238,11 +243,100 @@ async function sendInviteEmail(invite) {
   }
 
   const displayName = await resolveInviteNameForEmail(invite);
-  const token = await issueInviteToken(invite.id);
+  const token = await issueInviteToken(invite.id, { setFirstInvitedAt: !invite.firstInvitedAt });
+  const tokenHours = getTokenTtlHours();
   const mailResult = await sendTalentActivationEmail({
     to: invite.email,
     name: displayName,
     token,
+    tokenHours,
+  });
+
+  return {
+    sent: true,
+    emailId: mailResult.id,
+    devActivationUrl:
+      process.env.NODE_ENV !== 'production' ? mailResult.activationUrl : undefined,
+  };
+}
+
+async function sendActivationReminderEmail(invite) {
+  if (!invite?.email) {
+    return { sent: false, reason: 'no_email' };
+  }
+
+  if (isActivated(invite)) {
+    return { sent: false, reason: 'already_activated' };
+  }
+
+  if (invite.status !== 'invited') {
+    return { sent: false, reason: 'not_invited' };
+  }
+
+  const existingProfile = await store.findProfileByEmail(invite.email);
+  if (existingProfile) {
+    await store.updateInvite(invite.id, { status: 'skipped' });
+    return { sent: false, reason: 'already_registered' };
+  }
+
+  const displayName = await resolveInviteNameForEmail(invite);
+  const token = await issueInviteToken(invite.id);
+  const tokenHours = getTokenTtlHours();
+  const mailResult = await sendTalentActivationReminderEmail({
+    to: invite.email,
+    name: displayName,
+    token,
+    tokenHours,
+    secondReminder: (invite.activationReminderCount || 0) >= 1,
+  });
+
+  const now = new Date().toISOString();
+  await store.updateInvite(invite.id, {
+    activation_reminder_sent_at: now,
+    activation_reminder_count: (invite.activationReminderCount || 0) + 1,
+  });
+
+  return {
+    sent: true,
+    emailId: mailResult.id,
+    devActivationUrl:
+      process.env.NODE_ENV !== 'production' ? mailResult.activationUrl : undefined,
+  };
+}
+
+async function sendActivationFullResendEmail(invite) {
+  if (!invite?.email) {
+    return { sent: false, reason: 'no_email' };
+  }
+
+  if (isActivated(invite)) {
+    return { sent: false, reason: 'already_activated' };
+  }
+
+  if (invite.status !== 'invited') {
+    return { sent: false, reason: 'not_invited' };
+  }
+
+  const existingProfile = await store.findProfileByEmail(invite.email);
+  if (existingProfile) {
+    await store.updateInvite(invite.id, { status: 'skipped' });
+    return { sent: false, reason: 'already_registered' };
+  }
+
+  const displayName = await resolveInviteNameForEmail(invite);
+  const token = await issueInviteToken(invite.id);
+  const tokenHours = getTokenTtlHours();
+  const mailResult = await sendTalentActivationEmail({
+    to: invite.email,
+    name: displayName,
+    token,
+    tokenHours,
+  });
+
+  const now = new Date().toISOString();
+  await store.updateInvite(invite.id, {
+    activation_reminder_sent_at: now,
+    activation_reminder_count: (invite.activationReminderCount || 0) + 1,
   });
 
   return {
@@ -386,6 +480,9 @@ module.exports = {
   verifyActivationToken,
   completeTalentActivation,
   sendInviteEmail,
+  sendActivationReminderEmail,
+  sendActivationFullResendEmail,
+  getTokenTtlHours,
   getSetupStatusForUser,
   parseInviteCvForUser,
   reuploadInviteCvForUser,

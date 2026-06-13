@@ -178,7 +178,40 @@ async function sendClientActivationEmail({ to, name, talentName, token, bookingC
   };
 }
 
-function buildTalentActivationEmailHtml({ name, activationUrl }) {
+function buildTalentActivationEmailHtml({
+  name,
+  activationUrl,
+  reminder = false,
+  tokenHours = 72,
+  secondReminder = false,
+}) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  let intro;
+  if (secondReminder) {
+    intro = `<p style="margin: 0 0 12px;">We still haven't seen your BYG Hires talent profile activation. Please set your password to join the <strong>BYG Hires Talent Pool</strong> and complete your profile.</p>`;
+  } else if (reminder) {
+    intro = `<p style="margin: 0 0 12px;">This is a friendly reminder — you were invited to join the <strong>BYG Hires Talent Pool</strong> but haven't activated your account yet. Set your password to continue.</p>`;
+  } else {
+    intro = `<p style="margin: 0 0 12px;">You've been invited to join the <strong>BYG Hires Talent Pool</strong>. Activate your account to set up your profile and get started.</p>`;
+  }
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  ${intro}
+  <p style="margin: 24px 0;">
+    <a href="${activationUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Activate account</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${activationUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">This link expires in ${tokenHours} hours. If you were not expecting this invite, you can ignore this email.</p>
+</body>
+</html>`.trim();
+}
+
+function buildTalentAssessmentReminderEmailHtml({ name, assessmentUrl }) {
   const greeting = name ? `Hi ${name},` : 'Hi,';
   return `
 <!DOCTYPE html>
@@ -186,34 +219,29 @@ function buildTalentActivationEmailHtml({ name, activationUrl }) {
 <body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
   ${buildEmailLogoHtml()}
   <p style="margin: 0 0 12px;">${greeting}</p>
-  <p style="margin: 0 0 12px;">You've been invited to join the <strong>BYG Hires Talent Pool</strong>. Activate your account to set up your profile and get started.</p>
+  <p style="margin: 0 0 12px;">Your BYG Hires profile is set up — great work. Complete at least one <strong>skills assessment</strong> so clients can see your verified expertise.</p>
   <p style="margin: 24px 0;">
-    <a href="${activationUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Activate account</a>
+    <a href="${assessmentUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Take skills test</a>
   </p>
   <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
-  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${activationUrl}</p>
-  <p style="margin: 0; font-size: 12px; color: #888;">This link expires in 72 hours. If you were not expecting this invite, you can ignore this email.</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${assessmentUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">Log in with the email and password you created when you activated your account.</p>
 </body>
 </html>`.trim();
 }
 
-async function sendTalentActivationEmail({ to, name, token }) {
+async function sendTransactionalEmail({ to, subject, html, logLabel }) {
   const intended = String(to || '').trim().toLowerCase();
   if (!intended) throw new Error('Recipient email is required');
 
   const recipient = resolveRecipient(intended);
-  const activationUrl = `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
-  const subject = 'Activate your BYG Hires talent profile';
-  const html = buildTalentActivationEmailHtml({ name, activationUrl });
 
   if (useConsoleProvider()) {
-    console.log('\n[email:console] Talent activation');
+    console.log(`\n[email:console] ${logLabel}`);
     console.log(`  To: ${recipient}${recipient !== intended ? ` (requested: ${intended})` : ''}`);
-    console.log(`  Subject: ${subject}`);
-    console.log(`  Link: ${activationUrl}\n`);
+    console.log(`  Subject: ${subject}\n`);
     return {
       id: 'console',
-      activationUrl,
       redirectedTo: recipient !== intended ? recipient : undefined,
     };
   }
@@ -233,17 +261,97 @@ async function sendTalentActivationEmail({ to, name, token }) {
     throw new Error(error.message || 'Resend send failed');
   }
 
-  console.log(`[email] Talent activation sent to ${recipient} (id: ${data?.id || 'unknown'})`);
+  console.log(`[email] ${logLabel} sent to ${recipient} (id: ${data?.id || 'unknown'})`);
   return {
     id: data?.id || 'sent',
-    activationUrl,
     redirectedTo: recipient !== intended ? recipient : undefined,
   };
+}
+
+async function sendTalentActivationEmail({ to, name, token, tokenHours = 72 }) {
+  const activationUrl = `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
+  const subject = 'Activate your BYG Hires talent profile';
+  const html = buildTalentActivationEmailHtml({ name, activationUrl, reminder: false, tokenHours });
+  const result = await sendTransactionalEmail({ to, subject, html, logLabel: 'Talent activation' });
+  return { ...result, activationUrl };
+}
+
+async function sendTalentActivationReminderEmail({
+  to,
+  name,
+  token,
+  tokenHours = 72,
+  secondReminder = false,
+}) {
+  const activationUrl = `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
+  const subject = secondReminder
+    ? 'Second reminder: activate your BYG Hires talent profile'
+    : 'Reminder: activate your BYG Hires talent profile';
+  const html = buildTalentActivationEmailHtml({
+    name,
+    activationUrl,
+    reminder: true,
+    tokenHours,
+    secondReminder,
+  });
+  const result = await sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: secondReminder ? 'Talent activation reminder (2nd)' : 'Talent activation reminder',
+  });
+  return { ...result, activationUrl };
+}
+
+function buildTalentProfileReminderEmailHtml({ name, setupUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">Thanks for activating your BYG Hires account. Please finish your <strong>talent profile</strong> (name and job title at minimum) so clients can find you in the directory.</p>
+  <p style="margin: 24px 0;">
+    <a href="${setupUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Complete profile</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${setupUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">Log in with the email and password you created when you activated your account.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendTalentProfileReminderEmail({ to, name }) {
+  const setupUrl = `${getAppPublicUrl()}/talent/setup`;
+  const subject = 'Complete your BYG Hires talent profile';
+  const html = buildTalentProfileReminderEmailHtml({ name, setupUrl });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Talent profile reminder',
+  });
+}
+
+async function sendTalentAssessmentReminderEmail({ to, name }) {
+  const assessmentUrl = `${getAppPublicUrl()}/assessment`;
+  const subject = 'Complete your BYG Hires skills assessment';
+  const html = buildTalentAssessmentReminderEmailHtml({ name, assessmentUrl });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Talent assessment reminder',
+  });
 }
 
 module.exports = {
   sendClientActivationEmail,
   sendTalentActivationEmail,
+  sendTalentActivationReminderEmail,
+  sendTalentProfileReminderEmail,
+  sendTalentAssessmentReminderEmail,
   getAppPublicUrl,
   useConsoleProvider,
 };

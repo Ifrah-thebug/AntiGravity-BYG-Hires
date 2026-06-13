@@ -1,4 +1,5 @@
 const { supabaseAdmin } = require('../middleware/requireAdmin');
+const { enrichInvitesWithLifecycle } = require('./inviteLifecycle');
 
 function mapInviteRow(row) {
   if (!row) return null;
@@ -17,9 +18,14 @@ function mapInviteRow(row) {
     inviteToken: row.invite_token || null,
     tokenExpiresAt: row.token_expires_at || null,
     invitedAt: row.invited_at || null,
+    firstInvitedAt: row.first_invited_at || null,
     activationLinkClickedAt: row.activation_link_clicked_at || null,
     activationLinkClickCount: row.activation_link_click_count ?? 0,
     activatedAt: row.activated_at || null,
+    activationReminderSentAt: row.activation_reminder_sent_at || null,
+    activationReminderCount: row.activation_reminder_count ?? 0,
+    assessmentReminderSentAt: row.assessment_reminder_sent_at || null,
+    profileReminderSentAt: row.profile_reminder_sent_at || null,
     userId: row.user_id || null,
     invitedBy: row.invited_by || null,
     status: row.status,
@@ -97,34 +103,48 @@ async function listRecentBatches(limit = 20) {
   if (!batches?.length) return [];
 
   const batchIds = batches.map((b) => b.id);
-  const { data: invites, error: invErr } = await supabaseAdmin
+  const { data: inviteRows, error: invErr } = await supabaseAdmin
     .from('talent_invites')
-    .select('batch_id, status, invited_at, activation_link_clicked_at, activated_at')
+    .select('*')
     .in('batch_id', batchIds);
   if (invErr) throw invErr;
 
+  const mapped = (inviteRows || []).map(mapInviteRow);
+  const enriched = await enrichInvitesWithLifecycle(mapped);
+
   const statsByBatch = {};
-  for (const inv of invites || []) {
-    if (!statsByBatch[inv.batch_id]) {
-      statsByBatch[inv.batch_id] = {
+  for (const inv of enriched) {
+    if (!statsByBatch[inv.batchId]) {
+      statsByBatch[inv.batchId] = {
         total: 0,
         sent: 0,
         clicked: 0,
         activated: 0,
+        profileComplete: 0,
+        assessmentDone: 0,
       };
     }
-    const s = statsByBatch[inv.batch_id];
+    const s = statsByBatch[inv.batchId];
     s.total += 1;
-    if (inv.invited_at || inv.status === 'invited' || inv.status === 'activated') s.sent += 1;
-    if (inv.activation_link_clicked_at) s.clicked += 1;
-    if (inv.status === 'activated' || inv.activated_at) s.activated += 1;
+    if (inv.invitedAt || inv.status === 'invited' || inv.status === 'activated') s.sent += 1;
+    if (inv.activationLinkClickedAt) s.clicked += 1;
+    if (inv.status === 'activated' || inv.activatedAt) s.activated += 1;
+    if (inv.lifecycle?.profileComplete) s.profileComplete += 1;
+    if (inv.lifecycle?.assessmentDone) s.assessmentDone += 1;
   }
 
   return batches.map((b) => ({
     id: b.id,
     label: b.label,
     createdAt: b.created_at,
-    stats: statsByBatch[b.id] || { total: 0, sent: 0, clicked: 0, activated: 0 },
+    stats: statsByBatch[b.id] || {
+      total: 0,
+      sent: 0,
+      clicked: 0,
+      activated: 0,
+      profileComplete: 0,
+      assessmentDone: 0,
+    },
   }));
 }
 
@@ -147,6 +167,11 @@ async function listInvitesByBatch(batchId) {
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data || []).map(mapInviteRow);
+}
+
+async function listInvitesByBatchWithLifecycle(batchId) {
+  const invites = await listInvitesByBatch(batchId);
+  return enrichInvitesWithLifecycle(invites);
 }
 
 async function updateInvite(id, patch) {
@@ -195,6 +220,7 @@ module.exports = {
   getInviteByUserId,
   listRecentBatches,
   listInvitesByBatch,
+  listInvitesByBatchWithLifecycle,
   recordActivationLinkClick,
   updateInvite,
   findProfileByEmail,
