@@ -23,6 +23,9 @@ const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
 
+// Trust the Nginx reverse proxy (req.ip, secure cookies, rate-limit X-Forwarded-For)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet());
 const corsOrigins = [
