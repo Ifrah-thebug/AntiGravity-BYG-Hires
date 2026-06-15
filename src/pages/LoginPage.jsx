@@ -6,7 +6,6 @@ import { useAuth } from '../context/AuthContext';
 import { formatAuthError, routeAfterAuth } from '../lib/talentAuth';
 import { fetchLoginRoleHint, loginHintMessage } from '../lib/clientAuth';
 import { adminSignupConfigured } from '../lib/adminAuth';
-import logo from '../assets/BYG Hires Logo.png';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -60,10 +59,6 @@ export default function LoginPage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-10"
         >
-          <img src={logo} alt="BYG Hires" className="h-10 w-auto mx-auto mb-6" />
-          <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">
-            BYG Hires
-          </p>
           <h1 className="text-3xl md:text-4xl font-black text-black tracking-tight mb-3">
             Log in
           </h1>

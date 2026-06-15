@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/BYG Hires Logo.png';
 import { verifyTalentActivationToken, completeTalentActivation } from '../lib/talentInvite';
 
 export default function TalentActivatePage() {
@@ -102,7 +101,6 @@ export default function TalentActivatePage() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center mb-10"
         >
-          <img src={logo} alt="BYG Hires" className="h-10 w-auto mx-auto mb-6" />
           <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">
             Talent Pool
           </p>

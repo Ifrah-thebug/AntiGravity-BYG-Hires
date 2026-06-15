@@ -5,8 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClientSchedulingTimezone } from '../hooks/useClientSchedulingTimezone';
 import { formatIntroSlotSummary } from '../lib/clientSchedulingTimezone';
-import logo from '../assets/BYG Hires Logo.png';
-
 const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 
 async function parseApiJson(resp) {
@@ -114,7 +112,6 @@ export default function ClientDashboardPage() {
     return (
       <div className="bg-white min-h-screen pt-20 pb-24 px-4 font-sans flex items-center justify-center">
         <div className="w-full max-w-md text-center">
-          <img src={logo} alt="BYG Hires" className="h-10 w-auto mx-auto mb-6" />
           <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3">
             Client Portal
           </p>

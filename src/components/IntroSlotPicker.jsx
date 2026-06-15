@@ -57,7 +57,7 @@ function ExistingIntroPanel({
   const summary = formatIntroSlotSummary(booking.start, clientTimeZone);
 
   return (
-    <div className="py-16 px-8 text-center max-w-md mx-auto">
+    <div className="py-10 sm:py-16 px-4 sm:px-8 text-center max-w-md mx-auto">
       <CheckCircle2 size={40} className="text-amber-500 mx-auto mb-4" />
       {syncNotice?.type === 'rescheduled' && (
         <p className="text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4 font-medium">
@@ -333,8 +333,42 @@ export default function IntroSlotPicker({
     !emailPendingCheck &&
     normalizedGuestEmail === checkedEmail;
 
+  const confirmBar = checkedEmail && !slotsLoading && slots.length > 0 && (
+    <div className="fixed bottom-0 left-0 right-0 z-40 sm:static sm:z-auto bg-white border-t border-gray-200 shadow-[0_-8px_30px_rgba(0,0,0,0.08)] sm:shadow-none sm:border-0 px-4 py-3 sm:px-0 sm:py-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-0">
+      {selectedSlot && (
+        <p className="text-[11px] text-gray-600 font-medium mb-2 sm:mb-4 sm:bg-gray-50 sm:border sm:border-gray-100 sm:rounded-xl sm:px-4 sm:py-3 leading-snug">
+          <span className="sm:hidden font-black text-gray-900 block mb-0.5">Selected time</span>
+          <span className="font-bold text-gray-900">
+            {formatIntroWeekday(selectedSlot.start, clientTimeZone)},{' '}
+            {formatIntroDate(selectedSlot.start, clientTimeZone)} ·{' '}
+            {formatIntroTime(selectedSlot.start, clientTimeZone)}
+          </span>
+          <span className="hidden sm:inline"> ({timeZoneLabel})</span>
+        </p>
+      )}
+      {error && (
+        <p className="text-xs text-red-600 font-medium mb-2 sm:mb-4">{error}</p>
+      )}
+      <button
+        type="button"
+        disabled={!canConfirm}
+        onClick={confirmBooking}
+        className="w-full min-h-[44px] px-8 py-3.5 sm:py-4 bg-black hover:bg-red disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2"
+      >
+        {booking ? (
+          <>
+            <Loader2 size={16} className="animate-spin" />
+            Booking…
+          </>
+        ) : (
+          'Confirm intro call'
+        )}
+      </button>
+    </div>
+  );
+
   return (
-    <div className="p-6 md:p-8">
+    <div className={`p-4 sm:p-6 md:p-8 ${confirmBar ? 'pb-36 sm:pb-8' : ''}`}>
       <p className="text-[11px] text-gray-500 font-semibold mb-4">
         {identityLocked ? (
           <>
@@ -379,7 +413,7 @@ export default function IntroSlotPicker({
             <input
               value={guestName}
               onChange={(e) => setGuestName(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base sm:text-sm font-bold"
               placeholder="Full name"
             />
           </div>
@@ -399,7 +433,7 @@ export default function IntroSlotPicker({
                 setSlots([]);
                 setSyncNotice(null);
               }}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm font-bold"
+              className="w-full px-4 py-3 border border-gray-200 rounded-xl text-base sm:text-sm font-bold"
               placeholder="you@company.com"
             />
           </div>
@@ -430,7 +464,7 @@ export default function IntroSlotPicker({
       )}
 
       {checkedEmail && slotsLoading && (
-        <div className="flex items-center gap-2 py-8 justify-center mb-4">
+        <div className="flex items-center gap-2 py-10 sm:py-8 justify-center mb-4 min-h-[120px]">
           <Loader2 size={18} className="text-red animate-spin" />
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
             Checking times with HR and talent…
@@ -453,7 +487,7 @@ export default function IntroSlotPicker({
       )}
 
       {checkedEmail && !slotsLoading && slots.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
           {slots.map((slot) => {
             const active = selectedSlotId === slot.id;
             return (
@@ -461,7 +495,7 @@ export default function IntroSlotPicker({
                 key={slot.id}
                 type="button"
                 onClick={() => selectSlot(slot)}
-                className={`text-left border-2 rounded-2xl p-4 transition-all ${
+                className={`text-left border-2 rounded-xl sm:rounded-2xl p-3.5 sm:p-4 transition-all min-h-[44px] ${
                   active
                     ? 'border-red bg-red/5 shadow-md'
                     : 'border-gray-100 hover:border-gray-300 bg-white'
@@ -485,39 +519,7 @@ export default function IntroSlotPicker({
         </div>
       )}
 
-      {checkedEmail && selectedSlot && !slotsLoading && slots.length > 0 && (
-        <p className="text-xs text-gray-600 font-medium mb-4 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-          You selected{' '}
-          <span className="font-bold text-gray-900">
-            {formatIntroWeekday(selectedSlot.start, clientTimeZone)},{ ' '}
-            {formatIntroDate(selectedSlot.start, clientTimeZone)} at{' '}
-            {formatIntroTime(selectedSlot.start, clientTimeZone)} ({timeZoneLabel})
-          </span>
-          . The calendar invite will use this same moment in your timezone.
-        </p>
-      )}
-
-      {checkedEmail && !slotsLoading && slots.length > 0 && error && (
-        <p className="text-xs text-red-600 font-medium mb-4">{error}</p>
-      )}
-
-      {checkedEmail && !slotsLoading && slots.length > 0 && (
-        <button
-          type="button"
-          disabled={!canConfirm}
-          onClick={confirmBooking}
-          className="w-full sm:w-auto px-8 py-4 bg-black hover:bg-red disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest rounded-xl transition-colors flex items-center justify-center gap-2"
-        >
-          {booking ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Booking…
-            </>
-          ) : (
-            'Confirm intro call'
-          )}
-        </button>
-      )}
+      {confirmBar}
     </div>
   );
 }

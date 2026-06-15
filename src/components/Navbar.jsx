@@ -1,6 +1,6 @@
 // src/components/Navbar.jsx
 import React, { useState, useEffect } from 'react';
-import { Menu, X, ChevronDown, LogOut, LayoutDashboard } from 'lucide-react';
+import { Menu, X, ChevronDown, LogOut, LayoutDashboard, Sparkles } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
 import { useAuth } from '../context/AuthContext';
@@ -62,9 +62,10 @@ const Navbar = () => {
   const [isScaleOpen, setIsScaleOpen] = useState(false);
 
   const baseNavLinks = isAdminUser ? ADMIN_NAV_LINKS : PUBLIC_NAV_LINKS;
-  const navLinks = isClientUser
-    ? baseNavLinks.filter((link) => link.href !== '/talent/signup')
-    : baseNavLinks;
+  const navLinks = baseNavLinks.filter(
+    (link) =>
+      link.href !== '/talent/signup' || (!isClientUser && !isTalentUser)
+  );
   const homeHref = isAdminUser ? '/admin/dashboard' : isClientUser ? '/client' : '/';
 
   const isScaleSectionActive = (dropdown) =>
@@ -196,16 +197,28 @@ const Navbar = () => {
                   </Link>
                 )}
                 {isTalentUser && (
-                  <Link
-                    to="/portal"
-                    className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
-                      pathname === '/portal' || pathname.startsWith('/portal/')
-                        ? 'text-red border-red'
-                        : 'text-black border-transparent hover:text-red'
-                    }`}
-                  >
-                    <LayoutDashboard size={15} /> My Portal
-                  </Link>
+                  <>
+                    <Link
+                      to="/portal?guide=1"
+                      className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                        pathname === '/portal' && location.search.includes('guide=1')
+                          ? 'text-red border-red'
+                          : 'text-black border-transparent hover:text-red'
+                      }`}
+                    >
+                      <Sparkles size={15} /> Talent guide
+                    </Link>
+                    <Link
+                      to="/portal"
+                      className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                        pathname === '/portal' || pathname.startsWith('/portal/')
+                          ? 'text-red border-red'
+                          : 'text-black border-transparent hover:text-red'
+                      }`}
+                    >
+                      <LayoutDashboard size={15} /> My Portal
+                    </Link>
+                  </>
                 )}
                 <button
                   type="button"
@@ -298,9 +311,14 @@ const Navbar = () => {
                     </Link>
                   )}
                   {isTalentUser && (
-                    <Link to="/portal" onClick={closeMobile} className={mobileLinkClass('/portal')}>
-                      My Portal
-                    </Link>
+                    <>
+                      <Link to="/portal?guide=1" onClick={closeMobile} className={mobileLinkClass('/portal')}>
+                        Talent guide
+                      </Link>
+                      <Link to="/portal" onClick={closeMobile} className={mobileLinkClass('/portal')}>
+                        My Portal
+                      </Link>
+                    </>
                   )}
                   <button
                     type="button"

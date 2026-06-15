@@ -10,12 +10,14 @@ import {
 } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
+import TalentGuideModal, { TALENT_GUIDE_STORAGE_KEY } from '../components/TalentGuideModal';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 import { isProfileComplete, fetchUserProfile } from '../lib/talentAuth';
 import { fetchIsAdmin } from '../lib/adminAuth';
 import { fetchIsClient } from '../lib/clientAuth';
-import { processProfilePhotoWithAI, fileToDataUrl } from '../lib/processProfilePhoto';
+import { useProfilePhotoUpload } from '../lib/useProfilePhotoUpload';
+import ProfilePhotoGeneratingLoader from '../components/ProfilePhotoGeneratingLoader';
 import { normalizeProfileName } from '../lib/formatDisplayName';
 import {
   PROFILE_CONTENT_HINT,
@@ -32,6 +34,20 @@ import {
   DEFAULT_TALENT_DEPARTMENT,
 } from '../lib/talentDepartments';
 import { fetchAssessmentStatus } from '../services/assessmentService';
+
+const INTRO_API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
+
+async function fetchIntroSlotsPublished(talentId) {
+  if (!talentId) return false;
+  try {
+    const resp = await fetch(`${INTRO_API_BASE}/api/intro/my-slots/${encodeURIComponent(talentId)}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) return false;
+    return (data.slots || []).some((s) => s.status === 'open' || s.status === 'held');
+  } catch {
+    return false;
+  }
+}
 
 function ActionIconWithCheck({ icon: Icon, done }) {
   return (
@@ -97,6 +113,7 @@ function StrengthenProfilePanel({
   calendarConnected,
   introSlotsPublished,
   assessmentDone,
+  onOpenGuide,
 }) {
   const tiles = buildStrengthenTiles({
     connectCalendarUrl,
@@ -106,7 +123,7 @@ function StrengthenProfilePanel({
   });
 
   const tileClassName =
-    'block w-full text-left rounded-2xl border-2 border-white p-4 transition-all bg-white hover:bg-gray-50 shadow-md';
+    'block w-full text-left rounded-2xl border-2 border-white p-3.5 sm:p-4 transition-all bg-white hover:bg-gray-50 shadow-md';
 
   const renderTileInner = (tile) => (
     <div className="flex items-start justify-between gap-3">
@@ -128,19 +145,28 @@ function StrengthenProfilePanel({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.15 }}
-      className="bg-red border border-red rounded-[2rem] p-8 lg:sticky lg:top-28 space-y-6"
+      className="bg-red border border-red rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-8 lg:sticky lg:top-28 space-y-5 sm:space-y-6"
     >
       <div>
         <p className="text-white font-black text-[10px] uppercase tracking-[0.2em] mb-2 flex items-center gap-1.5">
           <Sparkles size={11} /> Grow your presence
         </p>
-        <h3 className="text-2xl font-black tracking-tight text-white leading-tight">
+        <h3 className="text-xl sm:text-2xl font-black tracking-tight text-white leading-tight">
           Strengthen your profile
         </h3>
-        <p className="text-white text-sm font-semibold mt-3 leading-relaxed">
+        <p className="text-white text-sm font-semibold mt-2 sm:mt-3 leading-relaxed">
           Complete your skills test and connect your calendar. Then publish intro availability for
           clients.
         </p>
+        {onOpenGuide && (
+          <button
+            type="button"
+            onClick={onOpenGuide}
+            className="mt-4 text-[10px] font-black uppercase tracking-widest text-white/90 hover:text-white underline underline-offset-4 decoration-white/40 hover:decoration-white transition-colors"
+          >
+            How it works — quick guide
+          </button>
+        )}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -179,9 +205,9 @@ function StrengthenProfilePanel({
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-[10px] font-bold text-white uppercase tracking-wider">
-          <TrendingUp size={12} className="text-white" />
-          Complete skills tests → stronger visibility in client searches
+        <div className="flex flex-wrap items-start gap-2 text-[10px] font-bold text-white uppercase tracking-wider leading-snug">
+          <TrendingUp size={12} className="text-white shrink-0 mt-0.5" />
+          <span>Complete skills tests → stronger visibility in client searches</span>
         </div>
       </div>
     </motion.div>
@@ -208,20 +234,41 @@ const PortalPage = () => {
     best_skill: '',
   });
   const [newSkill, setNewSkill] = useState('');
-  const [photoFile, setPhotoFile] = useState(null);
-  const [photoPreview, setPhotoPreview] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  const [photoProcessing, setPhotoProcessing] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saved' | 'error'
   const [error, setError] = useState('');
+  const {
+    photoFile: uploadedPhotoFile,
+    photoPreview,
+    photoProcessing,
+    photoProgress,
+    handlePhotoSelect,
+    clearPhoto,
+  } = useProfilePhotoUpload({ onError: setError });
   const [introSlotsPublished, setIntroSlotsPublished] = useState(false);
   const [skillScores, setSkillScores] = useState({});
   const [assessmentDone, setAssessmentDone] = useState(false);
   const [inProgressSkill, setInProgressSkill] = useState('');
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
+  const [showGuideModal, setShowGuideModal] = useState(false);
+
+  const connectCalendarUrl = user?.id
+    ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
+    : '';
+
+  const closeGuide = () => {
+    setShowGuideModal(false);
+    try {
+      localStorage.setItem(TALENT_GUIDE_STORAGE_KEY, '1');
+    } catch {
+      // ignore private mode
+    }
+  };
+
+  const openGuide = () => setShowGuideModal(true);
 
   // Guard: clients → client dashboard; admins → admin; guests → login
   useEffect(() => {
@@ -251,6 +298,18 @@ const PortalPage = () => {
     if (user) fetchProfile();
   }, [user]);
 
+  // Intro slots status — fetch early so ticks match calendar/skills (no wait for publish-grid)
+  useEffect(() => {
+    if (!user?.id) return;
+    let alive = true;
+    fetchIntroSlotsPublished(user.id).then((published) => {
+      if (alive) setIntroSlotsPublished(published);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
+
   // Refresh profile after Cal.com OAuth redirect (?cal=connected)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -259,6 +318,14 @@ const PortalPage = () => {
     }
   }, [location.search, user]);
 
+  // Open guide from navbar link (?guide=1)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get('guide') !== '1' || !user || loadingProfile) return;
+    setShowGuideModal(true);
+    navigate({ pathname: '/portal', search: '' }, { replace: true });
+  }, [location.search, user, loadingProfile, navigate]);
+
   // Deep link: /portal#client-intro-scheduling
   useEffect(() => {
     if (loadingProfile) return;
@@ -266,6 +333,17 @@ const PortalPage = () => {
       requestAnimationFrame(() => scrollToClientIntroSection());
     }
   }, [loadingProfile, location.hash]);
+
+  useEffect(() => {
+    if (loadingProfile || !user) return;
+    try {
+      if (!localStorage.getItem(TALENT_GUIDE_STORAGE_KEY)) {
+        setShowGuideModal(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, [loadingProfile, user]);
 
   const fetchProfile = async () => {
     setLoadingProfile(true);
@@ -314,29 +392,23 @@ const PortalPage = () => {
 
     setProfile(data);
 
-    try {
-      const assessment = await fetchAssessmentStatus();
+    const talentId = data.id;
+    const assessmentPromise = fetchAssessmentStatus().catch(() => null);
+    const introPromise = talentId ? fetchIntroSlotsPublished(talentId) : Promise.resolve(false);
+
+    const [assessment, introPublished] = await Promise.all([assessmentPromise, introPromise]);
+
+    if (assessment) {
       setSkillScores(assessment.skillScores || {});
       setAssessmentDone((assessment.assessedCount || 0) > 0);
       setInProgressSkill(assessment.activeSession?.skill || '');
-    } catch {
+    } else {
       setSkillScores({});
       setAssessmentDone(false);
       setInProgressSkill('');
     }
 
-    const talentId = data.id;
-    if (talentId) {
-      const { data: slots } = await supabase
-        .from('talent_intro_slots')
-        .select('id')
-        .eq('talent_id', talentId)
-        .in('status', ['open', 'held'])
-        .limit(1);
-      setIntroSlotsPublished(Boolean(slots?.length));
-    } else {
-      setIntroSlotsPublished(false);
-    }
+    setIntroSlotsPublished(introPublished);
 
     const availabilityRaw = String(data.availability || '');
     const availabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(availabilityRaw) ? availabilityRaw : '';
@@ -353,7 +425,6 @@ const PortalPage = () => {
       skills: data.skills || [],
       best_skill: data.best_skill || data.skills?.[0] || '',
     });
-    setPhotoPreview(data.photo_url || '');
     setLoadingProfile(false);
   };
 
@@ -382,30 +453,11 @@ const PortalPage = () => {
     }
   };
 
-  const handlePhotoChange = async (e) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    setPhotoProcessing(true);
-    setError('');
-    try {
-      const processed = await processProfilePhoto(file);
-      setPhotoFile(processed);
-      const dataUrl = await fileToDataUrl(processed);
-      setPhotoPreview(dataUrl);
-    } catch (err) {
-      setError(err.message || 'Could not process photo.');
-    } finally {
-      setPhotoProcessing(false);
-    }
-  };
-
   const uploadPhoto = async () => {
-    if (!photoFile || !user) return null;
+    if (!uploadedPhotoFile || !user) return null;
     setUploadingPhoto(true);
     const path = `${user.id}/photo.jpg`;
-    const { error: upErr } = await supabase.storage.from('talent-files').upload(path, photoFile, {
+    const { error: upErr } = await supabase.storage.from('talent-files').upload(path, uploadedPhotoFile, {
       upsert: true,
       contentType: 'image/jpeg',
     });
@@ -428,7 +480,7 @@ const PortalPage = () => {
     setSaving(true);
     try {
       let photoUrl = profile?.photo_url || '';
-      if (photoFile) {
+      if (uploadedPhotoFile) {
         const uploaded = await uploadPhoto();
         if (uploaded) photoUrl = uploaded;
       }
@@ -474,6 +526,7 @@ const PortalPage = () => {
         department: prepared.data.department,
       }));
 
+      clearPhoto();
       await fetchProfile();
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(''), 3000);
@@ -499,10 +552,11 @@ const PortalPage = () => {
     ? form.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
   const hue = form.name ? (form.name.charCodeAt(0) * 37 + (form.name.charCodeAt(1) || 0) * 17) % 360 : 200;
+  const displayPhoto = photoPreview || profile?.photo_url || '';
 
   return (
-    <div className="bg-white min-h-screen pt-24 pb-24 px-4 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <div className="bg-white min-h-screen pt-20 sm:pt-24 pb-16 sm:pb-24 px-3 sm:px-4 font-sans">
+      <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
 
         {/* ── Welcome Banner ── */}
         {portalUploadWarnings?.length > 0 && (
@@ -532,23 +586,21 @@ const PortalPage = () => {
           </motion.div>
         )}
 
-        <div className="grid lg:grid-cols-5 gap-8 items-start">
-          {/* ── Left: profile summary + edit ── */}
-          <div className="lg:col-span-3 space-y-8">
-        {/* ── Header Card ── */}
+        {/* ── Header Card (full width) ── */}
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-          className="bg-black text-white rounded-[2rem] p-8 relative overflow-hidden"
+          className="bg-black text-white rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-8 relative overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-red rounded-full blur-[120px] opacity-20 -mr-20 -mt-20 pointer-events-none" />
-          <div className="relative z-10 flex items-center gap-6">
+          <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-red rounded-full blur-[120px] opacity-20 -mr-16 sm:-mr-20 -mt-16 sm:-mt-20 pointer-events-none" />
+          <div className="relative z-10 flex flex-col gap-4 sm:gap-6">
+            <div className="flex items-center gap-4 min-w-0">
             {/* Photo */}
             <div className="relative shrink-0">
-              {photoPreview ? (
-                <img src={photoPreview} alt={form.name} className="w-20 h-20 rounded-2xl object-cover border-2 border-white/20 shadow-xl" />
+              {displayPhoto ? (
+                <img src={displayPhoto} alt={form.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover object-top border-2 border-white/20 shadow-xl" />
               ) : (
                 <div
-                  className="w-20 h-20 rounded-2xl flex items-center justify-center text-white font-black text-2xl border-2 border-white/20"
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-white font-black text-xl sm:text-2xl border-2 border-white/20"
                   style={{ background: `linear-gradient(135deg, hsl(${hue},55%,42%), hsl(${hue + 40},60%,32%))` }}
                 >
                   {initials}
@@ -556,7 +608,7 @@ const PortalPage = () => {
               )}
               <label className={`absolute -bottom-2 -right-2 w-7 h-7 bg-white rounded-full flex items-center justify-center shadow-md border border-gray-200 transition-colors ${photoProcessing ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-gray-100'}`}>
                 <Camera size={12} className="text-black" />
-                <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" disabled={photoProcessing} />
+                <input type="file" accept="image/*" onChange={handlePhotoSelect} className="hidden" disabled={photoProcessing} />
               </label>
               {photoProcessing && (
                 <p className="absolute -bottom-8 left-0 right-0 text-center text-[9px] font-bold text-gray-400 uppercase tracking-wider whitespace-nowrap">
@@ -567,27 +619,50 @@ const PortalPage = () => {
 
             <div className="flex-1 min-w-0">
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Logged in as</p>
-              <h2 className="text-xl font-black text-white truncate">{form.name || user.email}</h2>
-              <p className="text-red font-bold text-sm mt-0.5">{form.job_title || 'No title set yet'}</p>
+              <h2 className="text-lg sm:text-xl font-black text-white truncate">{form.name || user.email}</h2>
+              <p className="text-red font-bold text-sm mt-0.5 truncate">{form.job_title || 'No title set yet'}</p>
+            </div>
             </div>
 
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full">
             {profile?.id && (
               <Link
                 to={`/talent/${profile.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="shrink-0 flex items-center gap-1.5 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors"
+                className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
               >
                 View Public Profile <ExternalLink size={10} />
               </Link>
             )}
+            <button
+              type="button"
+              onClick={openGuide}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-[10px] font-black text-white uppercase tracking-widest transition-colors border border-white/15 flex-1 sm:flex-none min-h-[44px] sm:min-h-0"
+            >
+              <Sparkles size={11} /> Talent guide
+            </button>
+            </div>
           </div>
         </motion.div>
 
-        {/* ── Edit Form ── */}
+        <div className="grid lg:grid-cols-5 gap-6 sm:gap-8 items-start">
+          {/* ── Strengthen profile — first on phone, sidebar on desktop ── */}
+          <div className="lg:col-span-2 lg:col-start-4 lg:row-start-1 order-1 lg:order-2">
+            <StrengthenProfilePanel
+              connectCalendarUrl={connectCalendarUrl}
+              calendarConnected={Boolean(profile?.cal_username)}
+              introSlotsPublished={introSlotsPublished}
+              assessmentDone={assessmentDone}
+              onOpenGuide={openGuide}
+            />
+          </div>
+
+          {/* ── Main column: edit + intro ── */}
+          <div className="lg:col-span-3 lg:col-start-1 lg:row-start-1 order-2 lg:order-1 space-y-6 sm:space-y-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="bg-white border border-gray-200 rounded-[2rem] p-8 space-y-7"
+          className="bg-white border border-gray-200 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-6 sm:space-y-7"
         >
           <h3 className="font-black text-sm uppercase tracking-widest text-gray-800">Edit Profile</h3>
 
@@ -737,18 +812,16 @@ const PortalPage = () => {
             onAddSkill={addSkill}
           />
 
-          {/* Photo upload hint */}
           {photoProcessing && (
-            <div className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm text-gray-600 font-bold">
-              <div className="w-5 h-5 border-2 border-red/20 border-t-red rounded-full animate-spin shrink-0" />
-              Creating your professional photo…
-            </div>
+            <ProfilePhotoGeneratingLoader
+              message={photoProgress || 'Creating professional studio photo…'}
+            />
           )}
 
-          {photoFile && !photoProcessing && (
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-2xl p-4 text-sm text-blue-700 font-bold">
-              <Camera size={16} className="shrink-0" />
-              New passport photo will upload when you save.
+          {uploadedPhotoFile && !photoProcessing && (
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800 font-bold">
+              <CheckCircle2 size={16} className="shrink-0 text-green-600" />
+              Professional photo ready — save to update your profile.
             </div>
           )}
 
@@ -773,26 +846,22 @@ const PortalPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
-          className="scroll-mt-28 bg-white border border-gray-200 rounded-[2rem] p-8 space-y-2"
+          className="scroll-mt-24 sm:scroll-mt-28 bg-white border border-gray-200 rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-8 space-y-2"
         >
-          <div className="mb-6">
+          <div className="mb-4 sm:mb-6">
             <p className="text-[10px] font-black text-red uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
               <Calendar size={11} /> Client intros
             </p>
             <h3 className="font-black text-lg text-gray-900 tracking-tight">Intro scheduling</h3>
-            <p className="text-xs text-gray-500 font-medium mt-2 leading-relaxed max-w-xl">
-              Publish when you are free for intro calls, and see confirmed bookings in one place — separate
-              from profile setup on the right.
+            <p className="text-xs text-gray-500 font-medium mt-2 leading-relaxed">
+              Publish when you are free for intro calls, and see confirmed bookings in one place.
             </p>
           </div>
           <TalentIntroAvailability
             talentId={profile?.id || user?.id}
             calConnected={Boolean(profile?.cal_username)}
-            connectCalendarUrl={
-              user?.id
-                ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
-                : ''
-            }
+            connectCalendarUrl={connectCalendarUrl}
+            onPublishedChange={setIntroSlotsPublished}
           />
         </motion.div>
 
@@ -808,22 +877,18 @@ const PortalPage = () => {
           </Link>
         </div>
           </div>
-
-          {/* ── Right: strengthen profile ── */}
-          <div className="lg:col-span-2">
-            <StrengthenProfilePanel
-              connectCalendarUrl={
-                user?.id
-                  ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
-                  : ''
-              }
-              calendarConnected={Boolean(profile?.cal_username)}
-              introSlotsPublished={introSlotsPublished}
-              assessmentDone={assessmentDone}
-            />
-          </div>
         </div>
       </div>
+
+      <TalentGuideModal
+        open={showGuideModal}
+        onClose={closeGuide}
+        connectCalendarUrl={connectCalendarUrl}
+        calendarConnected={Boolean(profile?.cal_username)}
+        assessmentDone={assessmentDone}
+        introSlotsPublished={introSlotsPublished}
+        onScrollToTimings={scrollToClientIntroSection}
+      />
     </div>
   );
 };

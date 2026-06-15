@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Mail, Sparkles } from 'lucide-react';
-import logo from '../assets/BYG Hires Logo.png';
 import { requestPasswordReset } from '../lib/passwordReset';
 
 const fadeUp = {
@@ -51,14 +50,6 @@ export default function ForgotPasswordPage() {
           transition={{ duration: 0.45 }}
           className="text-center mb-10"
         >
-          <motion.img
-            src={logo}
-            alt="BYG Hires"
-            className="h-10 w-auto mx-auto mb-6"
-            initial={{ opacity: 0, scale: 0.92 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', stiffness: 260, damping: 20 }}
-          />
           <motion.p
             initial={{ opacity: 0, letterSpacing: '0.1em' }}
             animate={{ opacity: 1, letterSpacing: '0.2em' }}

@@ -88,7 +88,12 @@ function selectionFromPublished(publishedList) {
  * Talent intro scheduling — booked calls + available slot publishing.
  * Rendered in the main portal column (not inside the red strengthen panel).
  */
-export default function TalentIntroAvailability({ talentId, calConnected, connectCalendarUrl }) {
+export default function TalentIntroAvailability({
+  talentId,
+  calConnected,
+  connectCalendarUrl,
+  onPublishedChange,
+}) {
   const { timeZone: talentTimeZone, timeZoneLabel } = useTalentSchedulingTimezone();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -160,6 +165,12 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
     loadGrid();
   }, [loadGrid]);
 
+  useEffect(() => {
+    if (!onPublishedChange || loading) return;
+    if (!calConnected) return;
+    onPublishedChange(publishedOpen.length > 0);
+  }, [publishedOpen, onPublishedChange, loading, calConnected]);
+
   function pickSlot(dayKey, start) {
     if (bookedDayKeys.has(dayKey)) return;
     const norm = normalizeInstant(start);
@@ -189,6 +200,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
       const data = await parseJson(resp);
       if (!resp.ok) throw new Error(data.error || 'Could not save');
       setSuccess(`Saved ${data.count} intro slot(s). Clients can now request intros.`);
+      onPublishedChange?.(true);
       await loadGrid();
     } catch (e) {
       setError(e.message || 'Save failed');
@@ -199,7 +211,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
 
   if (!calConnected) {
     return (
-      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center">
+      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-4 sm:p-6 text-center">
         <Calendar size={28} className="text-gray-300 mx-auto mb-3" />
         <p className="text-sm font-bold text-gray-800">Connect Cal.com to manage intro slots</p>
         <p className="text-xs text-gray-500 font-medium mt-2 max-w-sm mx-auto leading-relaxed">
@@ -231,7 +243,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
     <div className="space-y-6">
       {/* Upcoming booked intros — separate from publish UI */}
       {publishedBooked.length > 0 && (
-        <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-5">
+        <section className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4 sm:p-5">
           <div className="flex items-start gap-3 mb-4">
             <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0">
               <Video size={18} />
@@ -248,14 +260,16 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
             {publishedBooked.map((p) => (
               <li
                 key={p.id || p.start}
-                className="flex items-center gap-3 rounded-xl bg-white border border-emerald-100 px-4 py-3"
+                className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 rounded-xl bg-white border border-emerald-100 px-3 sm:px-4 py-3"
               >
-                <Clock size={14} className="text-emerald-600 shrink-0" />
-                <span className="text-sm font-bold text-gray-900">
-                  {formatDayLabel(p.dayKey, p.start, talentTimeZone)} ·{' '}
-                  {formatIntroTime(p.start, talentTimeZone)}
-                </span>
-                <span className="ml-auto text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Clock size={14} className="text-emerald-600 shrink-0" />
+                  <span className="text-sm font-bold text-gray-900 break-words">
+                    {formatDayLabel(p.dayKey, p.start, talentTimeZone)} ·{' '}
+                    {formatIntroTime(p.start, talentTimeZone)}
+                  </span>
+                </div>
+                <span className="self-start sm:ml-auto text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md shrink-0">
                   Booked
                 </span>
               </li>
@@ -265,7 +279,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
       )}
 
       {/* Available slots — publish for clients */}
-      <section className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 sm:p-6 shadow-sm">
         <div className="flex items-start gap-3 mb-5">
           <div className="w-10 h-10 rounded-xl bg-red/10 text-red flex items-center justify-center shrink-0">
             <Calendar size={18} />
@@ -318,7 +332,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
             No mutual slots in the next 15 days. Check your Cal.com and HR calendars.
           </p>
         ) : (
-          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 mb-5">
+          <div className="space-y-3 max-h-[min(50vh,300px)] sm:max-h-[300px] overflow-y-auto overscroll-contain pr-1 mb-5 -mx-0.5 px-0.5">
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
               Tap a time to select · highlighted = will be published
             </p>
@@ -356,7 +370,7 @@ export default function TalentIntroAvailability({ talentId, calConnected, connec
           type="button"
           onClick={handleSave}
           disabled={saving || !Object.keys(selected).length}
-          className="w-full py-3.5 rounded-xl bg-black hover:bg-red disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+          className="w-full min-h-[44px] py-3.5 rounded-xl bg-black hover:bg-red disabled:opacity-40 disabled:cursor-not-allowed text-white font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
         >
           {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
           {saving ? 'Saving…' : 'Publish availability'}
