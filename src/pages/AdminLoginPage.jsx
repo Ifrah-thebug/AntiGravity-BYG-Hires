@@ -102,9 +102,17 @@ const AdminLoginPage = () => {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
-                <Lock size={10} /> Password
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Lock size={10} /> Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-[10px] font-bold text-red uppercase tracking-widest hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 name="password"

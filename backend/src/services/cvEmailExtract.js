@@ -32,8 +32,28 @@ function scoreEmail(email) {
   return score;
 }
 
+/**
+ * PDF/Word exports often soft-wrap emails across lines (e.g. user@g + mail.com).
+ * Used only for email regex — raw text is kept for name heuristics.
+ */
+function repairSoftLineBreaksForEmailScan(text) {
+  let s = String(text || '');
+  // user@partialDomain + newline + rest.com  →  user@partialDomainrest.com
+  s = s.replace(
+    /([A-Z0-9._%+-]+@[A-Z0-9.-]*)\s*[\r\n]+\s*([A-Z0-9][A-Z0-9.-]*\.[A-Z]{2,})\b/gi,
+    '$1$2'
+  );
+  // user + newline + @domain.com  →  user@domain.com
+  s = s.replace(
+    /([A-Z0-9._%+-]+)\s*[\r\n]+\s*@([A-Z0-9.-]+\.[A-Z]{2,})\b/gi,
+    '$1@$2'
+  );
+  return s;
+}
+
 function pickBestEmail(text) {
-  const matches = String(text || '').match(EMAIL_REGEX) || [];
+  const repaired = repairSoftLineBreaksForEmailScan(text);
+  const matches = String(repaired || '').match(EMAIL_REGEX) || [];
   const unique = [...new Set(matches.map(normalizeEmail).filter(isUsableEmail))];
   if (!unique.length) return null;
   unique.sort((a, b) => scoreEmail(b) - scoreEmail(a));
@@ -196,7 +216,6 @@ function isLikelyBadExtractedName(name, filename) {
     String(filename || '').replace(/\.[^.]+$/, '').replace(/[_-]+/g, '')
   );
   if (fileStem && key === fileStem) return true;
-  if (fileStem && fileStem.includes(key) && key.length >= 10) return true;
 
   return false;
 }
@@ -208,6 +227,16 @@ function pickBestName({ textName, fileName }) {
   const fileOk = fromFile && !isLikelyBadExtractedName(fromFile, '');
 
   if (textOk && fileOk) {
+    const textKey = normalizeNameKey(fromText);
+    const fileKey = normalizeNameKey(fromFile);
+    if (
+      textKey !== fileKey &&
+      !textKey.includes(fileKey) &&
+      !fileKey.includes(textKey)
+    ) {
+      return fromFile;
+    }
+
     const textWords = fromText.split(/\s+/).length;
     const fileWords = fromFile.split(/\s+/).length;
     if (fileWords === 1 && textWords >= 2) return fromText;
@@ -251,6 +280,7 @@ async function extractEmailFromCv(buffer, mimeType, filename) {
 module.exports = {
   extractEmailFromCv,
   pickBestEmail,
+  repairSoftLineBreaksForEmailScan,
   nameFromFilename,
   nameFromPdfText,
   isLikelyBadExtractedName,

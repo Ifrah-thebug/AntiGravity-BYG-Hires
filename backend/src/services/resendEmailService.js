@@ -346,12 +346,48 @@ async function sendTalentAssessmentReminderEmail({ to, name }) {
   });
 }
 
+function buildPasswordResetEmailHtml({ name, resetUrl, tokenHours = 1 }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">We received a request to reset your <strong>BYG Hires</strong> password. Click below to choose a new password.</p>
+  <p style="margin: 24px 0;">
+    <a href="${resetUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Reset password</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${resetUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">This link expires in ${tokenHours} hour${tokenHours === 1 ? '' : 's'}. If you did not request a reset, you can ignore this email.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendPasswordResetEmail({ to, name, token, tokenHours = 1 }) {
+  const resetUrl = `${getAppPublicUrl()}/reset-password?token=${encodeURIComponent(token)}`;
+  const subject = 'Reset your BYG Hires password';
+  const html = buildPasswordResetEmailHtml({ name, resetUrl, tokenHours });
+  const result = await sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Password reset',
+  });
+  if (useConsoleProvider()) {
+    console.log(`  Link: ${resetUrl}\n`);
+  }
+  return { ...result, resetUrl };
+}
+
 module.exports = {
   sendClientActivationEmail,
   sendTalentActivationEmail,
   sendTalentActivationReminderEmail,
   sendTalentProfileReminderEmail,
   sendTalentAssessmentReminderEmail,
+  sendPasswordResetEmail,
   getAppPublicUrl,
   useConsoleProvider,
 };

@@ -19,6 +19,7 @@ const calWebhookRouter = require('./routes/calWebhook');
 const adminTalentImportRouter = require('./routes/adminTalentImport');
 const talentInviteRouter = require('./routes/talentInvite');
 const cronRouter = require('./routes/cron');
+const passwordResetRouter = require('./routes/passwordReset');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -69,6 +70,7 @@ app.use('/api/profile', profilePhotoRouter);
 app.use('/api/client', clientRouter);
 app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/talent-invite', talentInviteRouter);
+app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/cron', cronRouter);
 
 // Health check

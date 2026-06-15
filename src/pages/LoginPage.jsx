@@ -1,19 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, Lock, Mail, Shield } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, CheckCircle2, Lock, Mail, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { formatAuthError, routeAfterAuth } from '../lib/talentAuth';
 import { fetchLoginRoleHint, loginHintMessage } from '../lib/clientAuth';
 import { adminSignupConfigured } from '../lib/adminAuth';
-import { useNavigate } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { signIn } = useAuth();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState(location.state?.message || '');
   const [loading, setLoading] = useState(false);
   const [roleHint, setRoleHint] = useState(null);
   const [hintLoading, setHintLoading] = useState(false);
@@ -84,6 +85,13 @@ export default function LoginPage() {
             </div>
           )}
 
+          {successMessage && !error && (
+            <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-2xl flex items-start gap-3 text-sm font-semibold">
+              <CheckCircle2 size={16} className="shrink-0 mt-0.5" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-1.5">
               <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
@@ -115,9 +123,17 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
-                <Lock size={10} /> Password
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <Lock size={10} /> Password
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-[10px] font-bold text-red uppercase tracking-widest hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <input
                 type="password"
                 name="password"

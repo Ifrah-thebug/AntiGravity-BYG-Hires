@@ -2,10 +2,6 @@ const crypto = require('crypto');
 const { supabaseAdmin } = require('../middleware/requireAdmin');
 const store = require('./talentInviteStore');
 const { sendTalentActivationEmail, sendTalentActivationReminderEmail } = require('./resendEmailService');
-const {
-  extractEmailFromCv,
-  isLikelyBadExtractedName,
-} = require('./cvEmailExtract');
 const { findAuthUserIdByEmail } = require('./clientActivationService');
 
 const BUCKET = 'talent-files';
@@ -199,36 +195,8 @@ async function completeTalentActivation({ token, password }) {
   };
 }
 
-async function resolveInviteNameForEmail(invite) {
-  const current = String(invite?.name || '').trim();
-  if (current && !isLikelyBadExtractedName(current, invite.originalFilename)) {
-    return current;
-  }
-
-  if (!invite?.cvStoragePath) return current;
-
-  try {
-    const { data: fileData, error } = await supabaseAdmin.storage
-      .from(BUCKET)
-      .download(invite.cvStoragePath);
-    if (error || !fileData) return current;
-
-    const buffer = Buffer.from(await fileData.arrayBuffer());
-    const extracted = await extractEmailFromCv(
-      buffer,
-      invite.cvMimeType || 'application/pdf',
-      invite.originalFilename || ''
-    );
-    const resolved = String(extracted.name || '').trim();
-    if (resolved && resolved !== current) {
-      await store.updateInvite(invite.id, { name: resolved });
-      return resolved;
-    }
-    return resolved || current;
-  } catch (err) {
-    console.warn('[talent-invite] name re-extract failed:', err?.message || err);
-    return current;
-  }
+function inviteNameForEmail(invite) {
+  return String(invite?.name || '').trim();
 }
 
 async function sendInviteEmail(invite) {
@@ -242,7 +210,7 @@ async function sendInviteEmail(invite) {
     return { sent: false, reason: 'already_registered' };
   }
 
-  const displayName = await resolveInviteNameForEmail(invite);
+  const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id, { setFirstInvitedAt: !invite.firstInvitedAt });
   const tokenHours = getTokenTtlHours();
   const mailResult = await sendTalentActivationEmail({
@@ -279,7 +247,7 @@ async function sendActivationReminderEmail(invite) {
     return { sent: false, reason: 'already_registered' };
   }
 
-  const displayName = await resolveInviteNameForEmail(invite);
+  const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id);
   const tokenHours = getTokenTtlHours();
   const mailResult = await sendTalentActivationReminderEmail({
@@ -323,7 +291,7 @@ async function sendActivationFullResendEmail(invite) {
     return { sent: false, reason: 'already_registered' };
   }
 
-  const displayName = await resolveInviteNameForEmail(invite);
+  const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id);
   const tokenHours = getTokenTtlHours();
   const mailResult = await sendTalentActivationEmail({

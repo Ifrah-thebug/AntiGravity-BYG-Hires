@@ -46,6 +46,8 @@ import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
 import TalentActivatePage from './pages/TalentActivatePage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 
 // Import Supabase-backed Talent Pool Pages
@@ -86,6 +88,8 @@ const AppContent = () => {
   const isPortalPage =
     location.pathname === '/portal' ||
     location.pathname === '/login' ||
+    location.pathname === '/forgot-password' ||
+    location.pathname === '/reset-password' ||
     location.pathname.startsWith('/talent/login') ||
     location.pathname.startsWith('/talent/signup') ||
     location.pathname.startsWith('/talent/setup') ||
@@ -161,6 +165,8 @@ const AppContent = () => {
           <Route path="/talent" element={<TalentDirectoryPage />} />
           <Route path="/talent/signup" element={<TalentSignupPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/talent/login" element={<Navigate to="/login" replace />} />
           <Route path="/talent/activate" element={<TalentActivatePage />} />
           <Route path="/talent/setup" element={<TalentSetupPage />} />
