@@ -32,6 +32,14 @@ function scoreEmail(email) {
   return score;
 }
 
+function hasCompleteEmailDomain(domainPart) {
+  return /^[A-Z0-9.-]*\.[A-Z]{2,}$/i.test(String(domainPart || '').trim());
+}
+
+function isUrlContinuationAfterLineBreak(fragment) {
+  return /^(linkedin|github|www\.|http|ftp)/i.test(String(fragment || '').trim());
+}
+
 /**
  * PDF/Word exports often soft-wrap emails across lines (e.g. user@g + mail.com).
  * Used only for email regex — raw text is kept for name heuristics.
@@ -40,8 +48,12 @@ function repairSoftLineBreaksForEmailScan(text) {
   let s = String(text || '');
   // user@partialDomain + newline + rest.com  →  user@partialDomainrest.com
   s = s.replace(
-    /([A-Z0-9._%+-]+@[A-Z0-9.-]*)\s*[\r\n]+\s*([A-Z0-9][A-Z0-9.-]*\.[A-Z]{2,})\b/gi,
-    '$1$2'
+    /([A-Z0-9._%+-]+@([A-Z0-9.-]*))\s*[\r\n]+\s*([A-Z0-9][A-Z0-9.-]*\.[A-Z]{2,})\b/gi,
+    (match, localAndAt, domainPart, continuation) => {
+      if (hasCompleteEmailDomain(domainPart)) return match;
+      if (isUrlContinuationAfterLineBreak(continuation)) return match;
+      return `${localAndAt}${continuation}`;
+    }
   );
   // user + newline + @domain.com  →  user@domain.com
   s = s.replace(
