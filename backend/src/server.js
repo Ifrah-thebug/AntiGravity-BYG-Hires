@@ -20,6 +20,7 @@ const adminTalentImportRouter = require('./routes/adminTalentImport');
 const talentInviteRouter = require('./routes/talentInvite');
 const cronRouter = require('./routes/cron');
 const passwordResetRouter = require('./routes/passwordReset');
+const sitemapRouter = require('./routes/sitemap');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/talent-invite', talentInviteRouter);
 app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/cron', cronRouter);
+app.use(sitemapRouter);
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -109,4 +111,6 @@ app.listen(PORT, () => {
   } else {
     console.log('[cron] CRON_SECRET not set — scheduled talent reminders disabled');
   }
+  const siteUrl = (process.env.SITE_URL || process.env.FRONTEND_URL || 'https://byghires.com').replace(/\/$/, '');
+  console.log(`[sitemap] ${siteUrl}/sitemap.xml (gzip, cached)`);
 });
