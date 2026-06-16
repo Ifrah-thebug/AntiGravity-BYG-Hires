@@ -1,7 +1,13 @@
 const express = require('express');
-const { getSitemapGzip, getSiteUrl } = require('../services/sitemapService');
+const { getSitemapGzip, getSiteUrl, getRobotsTxt } = require('../services/sitemapService');
 
 const router = express.Router();
+
+router.get('/robots.txt', (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.send(getRobotsTxt());
+});
 
 router.get('/sitemap.xml', async (req, res) => {
   try {

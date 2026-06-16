@@ -20,6 +20,11 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      '/robots.txt': {
+        target: 'http://localhost:5001',
+        changeOrigin: true,
+        secure: false,
+      },
       // Proxy auth routes if needed
       '/auth': {
         target: 'http://localhost:5001',

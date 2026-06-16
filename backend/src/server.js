@@ -113,4 +113,5 @@ app.listen(PORT, () => {
   }
   const siteUrl = (process.env.SITE_URL || process.env.FRONTEND_URL || 'https://byghires.com').replace(/\/$/, '');
   console.log(`[sitemap] ${siteUrl}/sitemap.xml (gzip, cached)`);
+  console.log(`[sitemap] ${siteUrl}/robots.txt`);
 });

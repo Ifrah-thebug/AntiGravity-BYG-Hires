@@ -100,9 +100,34 @@ function clearSitemapCache() {
   sitemapCache = null;
 }
 
+function getRobotsTxt() {
+  const siteUrl = getSiteUrl();
+  return `User-agent: *
+Allow: /
+
+# Private / authenticated / legacy orphan pages — not for indexing
+Disallow: /admin
+Disallow: /portal
+Disallow: /login
+Disallow: /client
+Disallow: /talent/setup
+Disallow: /talent/activate
+Disallow: /forgot-password
+Disallow: /reset-password
+Disallow: /assessment
+Disallow: /case-studies
+Disallow: /why-us
+Disallow: /remote-sales-team
+Disallow: /remote-support-team
+
+Sitemap: ${siteUrl}/sitemap.xml
+`;
+}
+
 module.exports = {
   STATIC_ROUTES,
   getSiteUrl,
+  getRobotsTxt,
   getSitemapGzip,
   clearSitemapCache,
   buildSitemapGzipBuffer,
