@@ -25,6 +25,13 @@ const GRADE_MAX_OUTPUT_TOKENS = Number(process.env.GEMINI_GRADE_MAX_TOKENS) || 4
 const GRADE_ATTEMPTS_PER_MODEL = Number(process.env.GEMINI_GRADE_ATTEMPTS) || 3;
 const GRADE_TRANSIENT_RETRY_MS = Number(process.env.GEMINI_GRADE_RETRY_MS) || 30000;
 const ALLOW_ASSESSMENT_FALLBACK = process.env.GEMINI_ASSESSMENT_ALLOW_FALLBACK === 'true';
+const OPENROUTER_GENERATE_ATTEMPTS = Number(process.env.OPENROUTER_GENERATE_ATTEMPTS) || 2;
+const OPENROUTER_GRADE_ATTEMPTS = Number(process.env.OPENROUTER_GRADE_ATTEMPTS) || 2;
+const GROQ_GENERATE_ATTEMPTS = Number(process.env.GROQ_GENERATE_ATTEMPTS) || 2;
+const GROQ_GRADE_ATTEMPTS = Number(process.env.GROQ_GRADE_ATTEMPTS) || 2;
+
+const openRouter = require('./openRouterClient');
+const groq = require('./groqClient');
 
 function geminiEndpoint(model) {
   return `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
@@ -53,6 +60,17 @@ function countWords(text) {
 
 function normalizeQuestionPrompt(text) {
   let s = String(text).trim().replace(/\s+/g, ' ');
+  if (!s) {
+    s = 'Describe how you would handle this situation in a real remote role, including your approach, priorities, and expected outcome?';
+  }
+  if (!/[?.!]$/.test(s)) s = `${s}?`;
+
+  // Some models return very short fragments (e.g. "Deploy on SageMaker: how").
+  // Expand these into a complete interview-style question automatically.
+  if (countWords(s) < QUESTION_WORD_MIN) {
+    s = `${s.replace(/[?.!]+$/, '')}. Explain your step-by-step approach, key tradeoffs, and how you would measure success in practice?`;
+  }
+
   if (countWords(s) <= QUESTION_WORD_MAX) return s;
 
   const sentences = s.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [s];
@@ -94,7 +112,7 @@ Grade each answer against its question. Use this rubric per question (max_points
 Questions and answers:
 ${JSON.stringify(ctx.qaPairs)}
 
-JSON RULES (required): Return valid JSON only. No markdown. In feedback and summary use single quotes only — never double quotes. No newlines inside strings. Each feedback max 20 words. Summary is 2 short sentences max.
+JSON RULES (required): Return valid JSON only. No markdown. In feedback and summary use single quotes only — never double quotes. No newlines inside strings. Each feedback 18-35 words and include at least one concrete improvement step tied to the candidate answer. Summary is 2-3 short sentences and must mention one strength and one improvement area.
 
 Return ONLY this compact JSON (no extra keys):
 {"per_question":[{"id":"q1","score":16,"max_points":20,"feedback":"..."}],"total_score":82,"summary":"..."}`;
@@ -267,15 +285,15 @@ function salvageGradeFromBrokenJson(text, qaPairs = []) {
 function defaultQuestionFeedback(score, maxPoints = 20) {
   const ratio = score / (maxPoints || 20);
   if (ratio >= 0.85) {
-    return 'Strong answer with clear, relevant detail.';
+    return 'Strong answer. Add one measurable project result to make it more convincing.';
   }
   if (ratio >= 0.65) {
-    return 'Good response — add one more concrete example to strengthen it.';
+    return 'Good direction, but it needs one concrete example and clearer technical detail.';
   }
   if (ratio >= 0.45) {
-    return 'Partial credit — be more specific and tie your answer to the question.';
+    return 'Partially correct. Be more specific and answer the exact scenario directly.';
   }
-  return 'Needs more depth, structure, and real examples from your experience.';
+  return 'Too brief for full credit. Explain your approach step by step with a practical example.';
 }
 
 function buildGradeSummary(per_question, totalScore, skill) {
@@ -305,6 +323,13 @@ function buildGradeSummary(per_question, totalScore, skill) {
     parts.push('Keep practicing with specific examples from real projects.');
   }
   return parts.join(' ');
+}
+
+function normalizeGradeFeedbackText(text) {
+  let s = String(text || '').trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+  if (!/[.!?]$/.test(s)) s = `${s}.`;
+  return s;
 }
 
 function parseGradeModelJson(text, qaPairs, { allowSalvage = false, skill = '' } = {}) {
@@ -418,9 +443,9 @@ function parseGradeResult(data, qaPairs = [], skill = '') {
     const row = byId[id];
     return {
       ...row,
-      feedback:
-        String(row.feedback || '').trim() ||
-        defaultQuestionFeedback(row.score, row.max_points),
+      feedback: normalizeGradeFeedbackText(
+        String(row.feedback || '').trim() || defaultQuestionFeedback(row.score, row.max_points)
+      ),
     };
   });
 
@@ -598,6 +623,72 @@ async function tryGenerateWithModel(model, ctx) {
   throw lastErr;
 }
 
+async function tryGenerateWithOpenRouter(model, ctx) {
+  let lastErr;
+  for (let attempt = 0; attempt < OPENROUTER_GENERATE_ATTEMPTS; attempt++) {
+    try {
+      const data = await openRouter.callOpenRouterText(GENERATE_PROMPT(ctx), {
+        model,
+        temperature: Math.max(0.35, 0.6 - attempt * 0.1),
+        maxOutputTokens: GENERATE_MAX_OUTPUT_TOKENS,
+        timeoutMs: GENERATE_TIMEOUT_MS,
+        parse: parseModelJson,
+      });
+      const questions = parseGeneratedQuestions(data);
+      return { questions, questionSource: `openrouter:${model}` };
+    } catch (err) {
+      lastErr = err;
+      const retryable =
+        openRouter.isTransientOpenRouterError(err) ||
+        shouldRetryGemini(err, { includeJson: true });
+      if (retryable && attempt < OPENROUTER_GENERATE_ATTEMPTS - 1) {
+        const delayMs = openRouter.isTransientOpenRouterError(err) ? 2000 : 600;
+        console.warn(
+          `[openRouter] ${model} generate retry ${attempt + 1}/${OPENROUTER_GENERATE_ATTEMPTS}:`,
+          err?.message || err
+        );
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+async function tryGenerateWithGroq(model, ctx) {
+  let lastErr;
+  for (let attempt = 0; attempt < GROQ_GENERATE_ATTEMPTS; attempt++) {
+    try {
+      const data = await groq.callGroqText(GENERATE_PROMPT(ctx), {
+        model,
+        temperature: Math.max(0.35, 0.6 - attempt * 0.1),
+        maxOutputTokens: GENERATE_MAX_OUTPUT_TOKENS,
+        timeoutMs: GENERATE_TIMEOUT_MS,
+        parse: parseModelJson,
+      });
+      const questions = parseGeneratedQuestions(data);
+      return { questions, questionSource: `groq:${model}` };
+    } catch (err) {
+      lastErr = err;
+      const retryable =
+        groq.isTransientGroqError(err) ||
+        shouldRetryGemini(err, { includeJson: true });
+      if (retryable && attempt < GROQ_GENERATE_ATTEMPTS - 1) {
+        const delayMs = groq.isTransientGroqError(err) ? 1500 : 600;
+        console.warn(
+          `[groq] ${model} generate retry ${attempt + 1}/${GROQ_GENERATE_ATTEMPTS}:`,
+          err?.message || err
+        );
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 async function generateQuestions(profile, skill) {
   const ctx = {
     skill,
@@ -607,20 +698,48 @@ async function generateQuestions(profile, skill) {
     seed: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   };
 
-  if (!GEMINI_API_KEY) {
-    console.warn('[geminiAssessment] No API key — using fallback questions.');
+  if (!groq.isGroqEnabled() && !openRouter.isOpenRouterEnabled() && !GEMINI_API_KEY) {
+    console.warn('[geminiAssessment] No AI provider — using fallback questions.');
     return { ...mockQuestions(skill), questionSource: 'fallback' };
   }
 
   let lastErr;
-  for (const model of GENERATE_MODEL_CHAIN) {
-    try {
-      const result = await tryGenerateWithModel(model, ctx);
-      console.info(`[geminiAssessment] questions generated via ${model}`);
-      return result;
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[geminiAssessment] ${model} failed:`, err?.message || err);
+  if (groq.isGroqEnabled()) {
+    for (const model of groq.getGenerateModelChain()) {
+      try {
+        const result = await tryGenerateWithGroq(model, ctx);
+        console.info(`[groq] questions generated via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[groq] ${model} generate failed:`, err?.message || err);
+      }
+    }
+  }
+
+  if (openRouter.isOpenRouterEnabled()) {
+    for (const model of openRouter.getGenerateModelChain()) {
+      try {
+        const result = await tryGenerateWithOpenRouter(model, ctx);
+        console.info(`[openRouter] questions generated via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[openRouter] ${model} generate failed:`, err?.message || err);
+      }
+    }
+  }
+
+  if (GEMINI_API_KEY) {
+    for (const model of GENERATE_MODEL_CHAIN) {
+      try {
+        const result = await tryGenerateWithModel(model, ctx);
+        console.info(`[geminiAssessment] questions generated via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[geminiAssessment] ${model} failed:`, err?.message || err);
+      }
     }
   }
 
@@ -676,6 +795,90 @@ async function tryGradeWithModel(model, ctx, qaPairs, skill) {
   throw lastErr;
 }
 
+async function tryGradeWithOpenRouter(model, ctx, qaPairs, skill) {
+  let lastErr;
+
+  for (let attempt = 0; attempt < OPENROUTER_GRADE_ATTEMPTS; attempt++) {
+    const allowSalvage = attempt === OPENROUTER_GRADE_ATTEMPTS - 1;
+    const gradeParser = (text) =>
+      parseGradeModelJson(text, qaPairs, { allowSalvage, skill });
+
+    try {
+      const data = await openRouter.callOpenRouterText(GRADE_PROMPT(ctx), {
+        model,
+        temperature: Math.max(0.12, 0.28 - attempt * 0.06),
+        maxOutputTokens: GRADE_MAX_OUTPUT_TOKENS,
+        timeoutMs: GRADE_TIMEOUT_MS,
+        parse: gradeParser,
+      });
+      return parseGradeResult(data, qaPairs, skill);
+    } catch (err) {
+      lastErr = err;
+      const transient = openRouter.isTransientOpenRouterError(err);
+      const parseIssue =
+        isJsonParseError(err) ||
+        err.code === 'GRADE_JSON_INVALID' ||
+        err.code === 'GRADE_TRUNCATED' ||
+        /incomplete grade|too few|truncated/i.test(String(err?.message || ''));
+      const hasRetriesLeft = attempt < OPENROUTER_GRADE_ATTEMPTS - 1;
+
+      if ((transient || parseIssue) && hasRetriesLeft) {
+        const delayMs = transient ? 2000 : Math.min(2500, 800 * (attempt + 1));
+        console.warn(
+          `[openRouter] ${model} grade retry ${attempt + 1}/${OPENROUTER_GRADE_ATTEMPTS} in ${Math.round(delayMs / 1000)}s:`,
+          err?.message || err
+        );
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+async function tryGradeWithGroq(model, ctx, qaPairs, skill) {
+  let lastErr;
+
+  for (let attempt = 0; attempt < GROQ_GRADE_ATTEMPTS; attempt++) {
+    const allowSalvage = attempt === GROQ_GRADE_ATTEMPTS - 1;
+    const gradeParser = (text) =>
+      parseGradeModelJson(text, qaPairs, { allowSalvage, skill });
+
+    try {
+      const data = await groq.callGroqText(GRADE_PROMPT(ctx), {
+        model,
+        temperature: Math.max(0.12, 0.28 - attempt * 0.06),
+        maxOutputTokens: GRADE_MAX_OUTPUT_TOKENS,
+        timeoutMs: GRADE_TIMEOUT_MS,
+        parse: gradeParser,
+      });
+      return parseGradeResult(data, qaPairs, skill);
+    } catch (err) {
+      lastErr = err;
+      const transient = groq.isTransientGroqError(err);
+      const parseIssue =
+        isJsonParseError(err) ||
+        err.code === 'GRADE_JSON_INVALID' ||
+        err.code === 'GRADE_TRUNCATED' ||
+        /incomplete grade|too few|truncated/i.test(String(err?.message || ''));
+      const hasRetriesLeft = attempt < GROQ_GRADE_ATTEMPTS - 1;
+
+      if ((transient || parseIssue) && hasRetriesLeft) {
+        const delayMs = transient ? 1500 : Math.min(2500, 800 * (attempt + 1));
+        console.warn(
+          `[groq] ${model} grade retry ${attempt + 1}/${GROQ_GRADE_ATTEMPTS} in ${Math.round(delayMs / 1000)}s:`,
+          err?.message || err
+        );
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
 async function gradeAnswers(profile, skill, questions, answers) {
   const qaPairs = questions.map((q) => ({
     id: q.id,
@@ -684,7 +887,7 @@ async function gradeAnswers(profile, skill, questions, answers) {
     answer: sanitizeForGradePrompt(answers[q.id]),
   }));
 
-  if (!GEMINI_API_KEY) {
+  if (!groq.isGroqEnabled() && !openRouter.isOpenRouterEnabled() && !GEMINI_API_KEY) {
     return mockGrade(qaPairs);
   }
 
@@ -696,14 +899,42 @@ async function gradeAnswers(profile, skill, questions, answers) {
   };
 
   let lastErr;
-  for (const model of GRADE_MODEL_CHAIN) {
-    try {
-      const result = await tryGradeWithModel(model, ctx, qaPairs, skill);
-      console.info(`[geminiAssessment] graded via ${model}`);
-      return result;
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[geminiAssessment] ${model} grade failed:`, err?.message || err);
+  if (groq.isGroqEnabled()) {
+    for (const model of groq.getGradeModelChain()) {
+      try {
+        const result = await tryGradeWithGroq(model, ctx, qaPairs, skill);
+        console.info(`[groq] graded via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[groq] ${model} grade failed:`, err?.message || err);
+      }
+    }
+  }
+
+  if (openRouter.isOpenRouterEnabled()) {
+    for (const model of openRouter.getGradeModelChain()) {
+      try {
+        const result = await tryGradeWithOpenRouter(model, ctx, qaPairs, skill);
+        console.info(`[openRouter] graded via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[openRouter] ${model} grade failed:`, err?.message || err);
+      }
+    }
+  }
+
+  if (GEMINI_API_KEY) {
+    for (const model of GRADE_MODEL_CHAIN) {
+      try {
+        const result = await tryGradeWithModel(model, ctx, qaPairs, skill);
+        console.info(`[geminiAssessment] graded via ${model}`);
+        return result;
+      } catch (err) {
+        lastErr = err;
+        console.warn(`[geminiAssessment] ${model} grade failed:`, err?.message || err);
+      }
     }
   }
 

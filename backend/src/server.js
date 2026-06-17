@@ -21,6 +21,7 @@ const talentInviteRouter = require('./routes/talentInvite');
 const cronRouter = require('./routes/cron');
 const passwordResetRouter = require('./routes/passwordReset');
 const sitemapRouter = require('./routes/sitemap');
+const openRouterClient = require('./services/openRouterClient');
 const { useConsoleProvider } = require('./services/resendEmailService');
 
 const app = express();
@@ -114,4 +115,10 @@ app.listen(PORT, () => {
   const siteUrl = (process.env.SITE_URL || process.env.FRONTEND_URL || 'https://byghires.com').replace(/\/$/, '');
   console.log(`[sitemap] ${siteUrl}/sitemap.xml (gzip, cached)`);
   console.log(`[sitemap] ${siteUrl}/robots.txt`);
+  const openRouter = openRouterClient;
+  if (openRouter.isOpenRouterEnabled()) {
+    console.log(
+      `[openRouter] Assessment fallback enabled — models: ${openRouter.getGenerateModelChain().join(', ')}`
+    );
+  }
 });

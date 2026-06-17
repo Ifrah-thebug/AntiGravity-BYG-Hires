@@ -85,11 +85,16 @@ export default function TalentAssessmentPage() {
   const [viewingPast, setViewingPast] = useState(false);
   const [loadingSkill, setLoadingSkill] = useState('');
   const pageTopRef = useRef(null);
+  const stepRef = useRef(step);
 
   const questions = session?.questions || [];
   const question = questions[currentQ];
 
   const inProgressSkill = status?.activeSession?.skill || '';
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
 
   const loadStatus = useCallback(async () => {
     setError('');
@@ -97,9 +102,14 @@ export default function TalentAssessmentPage() {
       const data = await fetchAssessmentStatus();
       setStatus(data);
       setStep((prev) => (prev === STEPS.EXAM || prev === STEPS.GENERATING ? prev : STEPS.PICK));
-      setSelectedSkill(
-        pickDefaultSkill(data.skills, data.activeSession?.skill, data.best_skill)
-      );
+      setSelectedSkill((prev) => {
+        const currentStep = stepRef.current;
+        const lockedStep = currentStep === STEPS.GENERATING || currentStep === STEPS.EXAM;
+        const skills = data.skills || [];
+        if (lockedStep && prev) return prev;
+        if (prev && skills.some((s) => isSameSkill(s, prev))) return prev;
+        return pickDefaultSkill(skills, data.activeSession?.skill, data.best_skill);
+      });
     } catch (err) {
       setError(err.message || 'Could not load assessment.');
       setStep(STEPS.PICK);
