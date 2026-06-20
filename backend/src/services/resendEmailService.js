@@ -25,6 +25,30 @@ function getAppPublicUrl() {
   ).replace(/\/$/, '');
 }
 
+function getBackendPublicUrl() {
+  return (
+    process.env.BACKEND_PUBLIC_URL ||
+    `http://localhost:${process.env.PORT || 5001}`
+  ).replace(/\/$/, '');
+}
+
+function buildTalentActivationAppUrl(token) {
+  return `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
+}
+
+/** Email button → plain HTML bridge (works in Gmail in-app browsers). */
+function buildTalentActivationEmailButtonUrl(token) {
+  return `${getBackendPublicUrl()}/api/talent-invite/activate/open?token=${encodeURIComponent(token)}`;
+}
+
+function buildEmailLinkButton(href, label) {
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">${label}</a>`;
+}
+
+function buildEmailBrowserHintHtml() {
+  return `<p style="margin: 0 0 16px; font-size: 12px; color: #666; line-height: 1.5;">If the button shows a blank page in Gmail or your mail app, copy the link below and open it in <strong>Chrome</strong> or <strong>Safari</strong>.</p>`;
+}
+
 function getEmailLogoUrl() {
   const custom = String(process.env.EMAIL_LOGO_URL || '').trim();
   if (custom) return custom;
@@ -121,8 +145,9 @@ function buildActivationEmailHtml({ name, talentName, activationUrl, bookingCont
   <p style="margin: 0 0 12px;">${greeting}</p>
   <p style="margin: 0 0 12px;">${bookingLine} Activate your client account to manage intros and access your talent portal.</p>
   <p style="margin: 24px 0;">
-    <a href="${activationUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Activate account</a>
+    ${buildEmailLinkButton(activationUrl, 'Activate account')}
   </p>
+  ${buildEmailBrowserHintHtml()}
   <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
   <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${activationUrl}</p>
   <p style="margin: 0; font-size: 12px; color: #888;">This link expires in 72 hours. If you did not book an intro, you can ignore this email.</p>
@@ -180,7 +205,8 @@ async function sendClientActivationEmail({ to, name, talentName, token, bookingC
 
 function buildTalentActivationEmailHtml({
   name,
-  activationUrl,
+  buttonUrl,
+  copyUrl,
   reminder = false,
   tokenHours = 72,
   secondReminder = false,
@@ -202,10 +228,11 @@ function buildTalentActivationEmailHtml({
   <p style="margin: 0 0 12px;">${greeting}</p>
   ${intro}
   <p style="margin: 24px 0;">
-    <a href="${activationUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Activate account</a>
+    ${buildEmailLinkButton(buttonUrl, 'Activate account')}
   </p>
+  ${buildEmailBrowserHintHtml()}
   <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
-  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${activationUrl}</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${copyUrl}</p>
   <p style="margin: 0; font-size: 12px; color: #888;">This link expires in ${tokenHours} hours. If you were not expecting this invite, you can ignore this email.</p>
 </body>
 </html>`.trim();
@@ -269,11 +296,18 @@ async function sendTransactionalEmail({ to, subject, html, logLabel }) {
 }
 
 async function sendTalentActivationEmail({ to, name, token, tokenHours = 72 }) {
-  const activationUrl = `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
+  const copyUrl = buildTalentActivationAppUrl(token);
+  const buttonUrl = buildTalentActivationEmailButtonUrl(token);
   const subject = 'Activate your BYG Hires talent profile';
-  const html = buildTalentActivationEmailHtml({ name, activationUrl, reminder: false, tokenHours });
+  const html = buildTalentActivationEmailHtml({
+    name,
+    buttonUrl,
+    copyUrl,
+    reminder: false,
+    tokenHours,
+  });
   const result = await sendTransactionalEmail({ to, subject, html, logLabel: 'Talent activation' });
-  return { ...result, activationUrl };
+  return { ...result, activationUrl: copyUrl };
 }
 
 async function sendTalentActivationReminderEmail({
@@ -283,13 +317,15 @@ async function sendTalentActivationReminderEmail({
   tokenHours = 72,
   secondReminder = false,
 }) {
-  const activationUrl = `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
+  const copyUrl = buildTalentActivationAppUrl(token);
+  const buttonUrl = buildTalentActivationEmailButtonUrl(token);
   const subject = secondReminder
     ? 'Second reminder: activate your BYG Hires talent profile'
     : 'Reminder: activate your BYG Hires talent profile';
   const html = buildTalentActivationEmailHtml({
     name,
-    activationUrl,
+    buttonUrl,
+    copyUrl,
     reminder: true,
     tokenHours,
     secondReminder,
@@ -300,7 +336,7 @@ async function sendTalentActivationReminderEmail({
     html,
     logLabel: secondReminder ? 'Talent activation reminder (2nd)' : 'Talent activation reminder',
   });
-  return { ...result, activationUrl };
+  return { ...result, activationUrl: copyUrl };
 }
 
 function buildTalentProfileReminderEmailHtml({ name, setupUrl }) {
