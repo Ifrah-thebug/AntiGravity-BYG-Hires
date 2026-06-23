@@ -20,3 +20,12 @@ export function countOtherSkills(skills = [], bestSkill) {
   if (!best) return list.length;
   return list.filter((s) => s !== best).length;
 }
+
+/** Case-insensitive score lookup for profile skill labels vs assessment keys. */
+export function getSkillScore(skillScores, skill) {
+  if (!skillScores || !skill) return null;
+  if (skillScores[skill] != null) return skillScores[skill];
+  const target = String(skill).trim().toLowerCase();
+  const key = Object.keys(skillScores).find((k) => k.trim().toLowerCase() === target);
+  return key != null ? skillScores[key] : null;
+}

@@ -11,8 +11,10 @@ import { resolveRequestIntroTalent } from '../lib/requestIntroTalent';
 import { useAuth } from '../context/AuthContext';
 import { useAccountType } from '../hooks/useAccountType';
 import IntroSlotPicker from '../components/IntroSlotPicker';
+import RequestAiInterviewPanel from '../components/RequestAiInterviewPanel';
 import TalentSkillTags from '../components/TalentSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
+import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
 import { SHOW_ASSESSMENT_SCORE } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 
@@ -71,6 +73,7 @@ function TalentSummaryCard({ talent }) {
           )}
           <div className="min-w-0">
             <ProfileVerificationBadge talent={talent} variant="dark" />
+            <AiInterviewVerifiedBadge talent={talent} variant="dark" />
             <h2 className="text-lg sm:text-xl font-black tracking-tight truncate">{formatDisplayName(talent.name)}</h2>
             <p className="text-red font-bold text-xs uppercase tracking-wide truncate">{talent.role}</p>
           </div>
@@ -156,6 +159,9 @@ function ScheduleIntroPanel({
     >
       <div className="bg-white rounded-[1.5rem] sm:rounded-[2.5rem] border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-4 py-4 sm:px-8 sm:py-6 border-b border-gray-100">
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] mb-1">
+            Step 2
+          </p>
           <h3 className="font-black text-base sm:text-lg uppercase tracking-wide text-gray-900">
             Schedule an Introduction
           </h3>
@@ -216,7 +222,8 @@ const RequestIntroPage = () => {
   const [clientIdentity, setClientIdentity] = useState(null);
   const [clientIdentityLoading, setClientIdentityLoading] = useState(false);
 
-  const isActivatedClient = accountType === 'client' && Boolean(clientIdentity?.email);
+  const isLoggedInClient = accountType === 'client' && Boolean(clientIdentity?.email);
+  const canRequestAiInterview = isLoggedInClient && Boolean(clientIdentity?.activated);
   const guestPrefillName = requesterName || loggedInName;
   const guestPrefillEmail = requesterEmail || loggedInEmail;
 
@@ -252,6 +259,7 @@ const RequestIntroPage = () => {
             name,
             email,
             company: String(data.profile.company || '').trim(),
+            activated: Boolean(data.profile.activated),
           });
         } else {
           setClientIdentity(null);
@@ -331,15 +339,22 @@ const RequestIntroPage = () => {
           }`}
         >
           {canRequestIntro && (
-            <ScheduleIntroPanel
-              talent={talent}
-              scheduleError={scheduleError}
-              clientIdentityLoading={clientIdentityLoading}
-              isActivatedClient={isActivatedClient}
-              clientIdentity={clientIdentity}
-              guestPrefillName={guestPrefillName}
-              guestPrefillEmail={guestPrefillEmail}
-            />
+            <div className="lg:col-span-3 order-1 lg:order-2 space-y-0">
+              <RequestAiInterviewPanel
+                talent={talent}
+                clientEmail={clientIdentity?.email || guestPrefillEmail}
+                canRequestAiInterview={canRequestAiInterview}
+              />
+              <ScheduleIntroPanel
+                talent={talent}
+                scheduleError={scheduleError}
+                clientIdentityLoading={clientIdentityLoading}
+                isActivatedClient={isLoggedInClient}
+                clientIdentity={clientIdentity}
+                guestPrefillName={guestPrefillName}
+                guestPrefillEmail={guestPrefillEmail}
+              />
+            </div>
           )}
 
           <div className={`${canRequestIntro ? 'lg:col-span-2 order-2 lg:order-1' : ''}`}>

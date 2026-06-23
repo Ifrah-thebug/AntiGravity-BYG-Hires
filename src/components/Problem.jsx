@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { DollarSign, UserX, BatteryWarning } from 'lucide-react';
 import problemImg from '../assets/problem_illustration_1777839869302.png';
+import { fadeUpInView } from '../lib/scrollMotion';
 
 const painPoints = [
   {
@@ -50,12 +51,9 @@ const Problem = () => {
               {painPoints.map(({ icon: Icon, title, desc }, index) => (
                 <motion.div
                   key={title}
-                  initial={{ opacity: 0, x: -16 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, margin: '-40px' }}
-                  transition={{ delay: index * 0.1, duration: 0.45 }}
-                  whileHover={{ x: 4 }}
-                  className="group bg-gray-50 border border-gray-100 rounded-2xl p-5 md:p-6 flex gap-4 items-start hover:border-red/25 hover:shadow-md transition-all duration-300"
+                  {...fadeUpInView}
+                  transition={{ ...fadeUpInView.transition, delay: index * 0.08 }}
+                  className="group bg-gray-50 border border-gray-100 rounded-2xl p-5 md:p-6 flex gap-4 items-start hover:border-red/25 hover:shadow-md transition-all duration-300 md:hover:translate-x-1"
                 >
                   <div className="w-11 h-11 rounded-xl bg-red/10 text-red flex items-center justify-center shrink-0 group-hover:bg-red group-hover:text-white transition-colors duration-300">
                     <Icon size={20} strokeWidth={2.5} />
@@ -83,27 +81,20 @@ const Problem = () => {
 
           {/* Right — unified visual panel (sticky on desktop) */}
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.5 }}
+            {...fadeUpInView}
             className="lg:sticky lg:top-28"
           >
-            <div className="rounded-[32px] overflow-hidden shadow-xl border border-gray-100">
-              <motion.div
-                initial={{ opacity: 0, scale: 1.04 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.7 }}
-                className="relative h-52 md:h-60 overflow-hidden bg-gray-100"
-              >
+            <div className="rounded-[32px] overflow-hidden shadow-xl border border-gray-100 [contain:paint]">
+              <div className="relative h-52 md:h-60 overflow-hidden bg-gray-100">
                 <img
                   src={problemImg}
                   alt="Stressed business owner overwhelmed by scaling challenges"
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover object-top"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent pointer-events-none" />
-              </motion.div>
+              </div>
 
               <div className="bg-black p-7 md:p-8 text-white">
                 <div className="space-y-6">

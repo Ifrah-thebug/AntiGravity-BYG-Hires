@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const clientActivation = require('../services/clientActivationService');
 const discoveryStore = require('../services/discoveryBookingStore');
+const voiceInterviewRequestStore = require('../services/voiceInterviewRequestStore');
 const db = require('../services/dbService');
 const { createClient } = require('@supabase/supabase-js');
 
@@ -142,7 +143,7 @@ router.get('/dashboard/overview', async (req, res) => {
     if (supabaseAdmin) {
       const { data, error } = await supabaseAdmin
         .from('clients')
-        .select('id, email, name, company, user_id')
+        .select('id, email, name, company, user_id, account_confirmed_at')
         .eq('user_id', userId)
         .maybeSingle();
       if (error) throw error;
@@ -224,6 +225,16 @@ router.get('/dashboard/overview', async (req, res) => {
       (a, b) => new Date(a.start).getTime() - new Date(b.start).getTime()
     );
 
+    let aiInterviewRequests = [];
+    try {
+      aiInterviewRequests = await voiceInterviewRequestStore.listActiveRequestsForClient({
+        clientEmail: client.email,
+        clientId: client.id,
+      });
+    } catch (aiErr) {
+      console.warn('[client/dashboard] AI interview requests:', aiErr?.message || aiErr);
+    }
+
     return res.json({
       ok: true,
       profile: {
@@ -231,10 +242,12 @@ router.get('/dashboard/overview', async (req, res) => {
         email: client.email,
         name: client.name || null,
         company: client.company || null,
+        activated: Boolean(client.account_confirmed_at),
       },
       bookings: mergedBookings,
       discoveryBookings,
       introBookings,
+      aiInterviewRequests,
     });
   } catch (err) {
     console.error('[client/dashboard/overview]', err?.message || err);

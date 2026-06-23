@@ -2,13 +2,15 @@ import { supabase } from './supabase';
 import { talentService } from '../services/talentService';
 import { calculateDirectoryFeeUsd } from './profileContentPolicy';
 import { sanitizeTalentForPublicDisplay } from './talentVerification';
+import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
+import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 
 /** Shape expected by RequestIntroPage */
-export function mapProfileToRequestIntroTalent(row) {
-  const id = row.user_id || row.id;
+export function mapProfileToRequestIntroTalent(row, aiBadgeMap = {}) {
+  const aiMeta = aiBadgeMap[row.id] || {};
   const baseFee = Number(row.monthly_fee_usd) || 0;
   return {
-    id,
+    id: row.id,
     name: row.name || 'Candidate',
     role: row.job_title || 'Professional',
     bio: row.about || 'No bio provided.',
@@ -17,6 +19,8 @@ export function mapProfileToRequestIntroTalent(row) {
     photo: row.photo_url || null,
     score: 0,
     verified: false,
+    aiInterviewVerified: Boolean(aiMeta.aiInterviewVerified),
+    aiInterviewScore: aiMeta.interviewScore ?? null,
     fee: Number(row.directory_fee_usd) || calculateDirectoryFeeUsd(baseFee),
     period: '/mo',
     experience: row.experience_years ? `${row.experience_years} yrs` : '—',
@@ -46,7 +50,10 @@ export async function resolveRequestIntroTalent(id) {
     .eq('id', id)
     .maybeSingle();
 
-  if (byProfileId) return sanitizeTalentForPublicDisplay(mapProfileToRequestIntroTalent(byProfileId));
+  if (byProfileId) {
+    const badgeMap = await fetchPublicAiInterviewBadges([byProfileId.id]).catch(() => ({}));
+    return sanitizeTalentForPublicDisplay(mapProfileToRequestIntroTalent(byProfileId, badgeMap));
+  }
 
   const { data: byUserId } = await supabase
     .from('profiles')
@@ -54,6 +61,9 @@ export async function resolveRequestIntroTalent(id) {
     .eq('user_id', id)
     .maybeSingle();
 
-  if (byUserId) return sanitizeTalentForPublicDisplay(mapProfileToRequestIntroTalent(byUserId));
+  if (byUserId) {
+    const badgeMap = await fetchPublicAiInterviewBadges([byUserId.id]).catch(() => ({}));
+    return sanitizeTalentForPublicDisplay(mapProfileToRequestIntroTalent(byUserId, badgeMap));
+  }
   return null;
 }

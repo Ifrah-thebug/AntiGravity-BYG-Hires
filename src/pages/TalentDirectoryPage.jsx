@@ -17,10 +17,11 @@ import { formatDisplayName } from '../lib/formatDisplayName';
 import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
 import { fetchLiveDirectoryTalents, pickFeaturedTalents } from '../lib/liveDirectoryTalents';
 import TalentSkillTags from '../components/TalentSkillTags';
+import TalentModalSkillTags from '../components/TalentModalSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
+import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
-import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 
 // ─── Avatar initials helper ──────────────────────────────────────────────────
 const Avatar = ({ name, score, photo, size = "w-16 h-16 text-lg" }) => {
@@ -236,6 +237,7 @@ const TalentModal = ({ talent, onClose, canRequestIntro = true }) => {
               <Avatar name={talent.name} score={talent.score} photo={talent.photo} size="w-48 h-48 text-5xl" />
               <div>
                 <ProfileVerificationBadge talent={talent} variant="dark" />
+                <AiInterviewVerifiedBadge talent={talent} variant="dark" />
                 <h2 className="text-2xl font-black tracking-tight" title={talent.name}>{formatDisplayName(talent.name)}</h2>
                 <p className="text-red font-bold text-sm uppercase tracking-wide">{talent.role}</p>
                 <div className="flex items-center gap-3 mt-2 text-gray-400 text-xs font-semibold">
@@ -267,24 +269,7 @@ const TalentModal = ({ talent, onClose, canRequestIntro = true }) => {
             {/* Tags */}
             <div>
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Skills & Expertise</p>
-              <div className="flex flex-wrap gap-2">
-                {talent.tags.map(tag => {
-                  const skillScore = talent.skillScores?.[tag];
-                  return (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-red/5 border border-red/10 text-red font-bold text-[10px] uppercase tracking-wide rounded-xl"
-                    >
-                      {tag}
-                      {SHOW_ASSESSMENT_SCORE && skillScore != null && (
-                        <span className={`px-1.5 py-0.5 rounded-md border text-[9px] ${scoreBadgeClass(skillScore)}`}>
-                          {skillScore}
-                        </span>
-                      )}
-                    </span>
-                  );
-                })}
-              </div>
+              <TalentModalSkillTags tags={talent.tags} skillScores={talent.skillScores} />
             </div>
 
             {/* Details grid */}

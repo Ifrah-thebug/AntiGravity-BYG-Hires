@@ -10,7 +10,9 @@ import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
 import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
+import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
+import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 
 const TalentProfilePage = () => {
   const { id } = useParams();
@@ -38,8 +40,14 @@ const TalentProfilePage = () => {
     if (err || !data) {
       setError('Profile not found.');
     } else {
-      setProfile(data);
       const scoreMap = await fetchPublicSkillScores([data.id].filter(Boolean));
+      const aiBadgeMap = await fetchPublicAiInterviewBadges([data.id]).catch(() => ({}));
+      const aiMeta = aiBadgeMap[data.id] || {};
+      setProfile({
+        ...data,
+        aiInterviewVerified: Boolean(aiMeta.aiInterviewVerified),
+        aiInterviewScore: aiMeta.interviewScore ?? null,
+      });
       setSkillScores(buildTalentSkillScores(scoreMap, data.id, data.skills || []));
     }
     setLoading(false);
@@ -69,6 +77,8 @@ const TalentProfilePage = () => {
     bestSkill: best_skill || skills?.[0],
     tags: skills || [],
     skillScores,
+    aiInterviewVerified: profile.aiInterviewVerified,
+    aiInterviewScore: profile.aiInterviewScore,
   });
   const displayName = formatDisplayName(name);
   const firstName = formatFirstName(name);
@@ -118,6 +128,7 @@ const TalentProfilePage = () => {
               {/* Info */}
               <div className="flex-1 space-y-4">
                 <ProfileVerificationBadge talent={displayTalent} variant="dark" />
+                <AiInterviewVerifiedBadge talent={displayTalent} variant="dark" />
                 <div>
                   <h1 className="text-3xl md:text-4xl font-black tracking-tight" title={name}>{displayName}</h1>
                   <p className="text-red font-bold text-base uppercase tracking-wider mt-1">{job_title}</p>

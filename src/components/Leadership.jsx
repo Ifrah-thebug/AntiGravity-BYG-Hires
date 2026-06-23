@@ -1,33 +1,25 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import remoteHiringImg from '../assets/remote-hiring.png';
+import { fadeUpInView } from '../lib/scrollMotion';
 
 const Leadership = () => {
   return (
     <section className="py-24 bg-gray-50 border-y border-gray-100">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-14 max-w-3xl mx-auto">
-          <motion.span
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            viewport={{ once: true }}
-            className="text-red font-bold tracking-wider uppercase text-sm mb-4 block"
-          >
+          <motion.span {...fadeUpInView} className="text-red font-bold tracking-wider uppercase text-sm mb-4 block">
             Our Founder&apos;s Philosophy
           </motion.span>
           <motion.h2
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            {...fadeUpInView}
+            transition={{ ...fadeUpInView.transition, delay: 0.05 }}
             className="text-4xl md:text-5xl font-extrabold text-black"
           >
             People first. <span className="text-red">Always driven.</span>
           </motion.h2>
           <motion.p
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
+            {...fadeUpInView}
+            transition={{ ...fadeUpInView.transition, delay: 0.1 }}
             className="mt-5 text-lg md:text-xl text-gray-600 font-medium leading-relaxed"
           >
             When you hire right, remote doesn&apos;t mean disconnected—it means driven.
@@ -35,26 +27,23 @@ const Leadership = () => {
         </div>
 
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 lg:items-stretch">
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="rounded-[32px] overflow-hidden shadow-xl min-h-[320px] lg:min-h-[480px]"
-          >
+          {/* Static image — no scroll transform (large asset + motion glitches mobile Safari) */}
+          <div className="rounded-[32px] overflow-hidden shadow-xl min-h-[280px] sm:min-h-[320px] lg:min-h-[480px] [contain:paint]">
             <img
-              src={remoteHiringImg}
-              alt="Remote hiring — building driven, connected teams"
-              className="w-full h-full min-h-[320px] lg:min-h-[480px] object-cover"
+              src="/BYG.png"
+              alt="BYG — building driven, connected remote teams"
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full min-h-[280px] sm:min-h-[320px] lg:min-h-[480px] object-cover"
             />
-          </motion.div>
+          </div>
 
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
+            {...fadeUpInView}
+            transition={{ ...fadeUpInView.transition, delay: 0.08 }}
             className="bg-black text-white p-10 md:p-12 rounded-[32px] relative overflow-hidden shadow-2xl min-h-[320px] lg:min-h-[480px] flex flex-col justify-center"
           >
-            <div className="absolute top-0 right-0 w-32 h-32 bg-red opacity-20 rounded-bl-full" />
+            <div className="absolute top-0 right-0 w-32 h-32 bg-red opacity-20 rounded-bl-full pointer-events-none" />
             <div className="relative z-10">
               <div className="text-red mb-8">
                 <svg width="48" height="36" viewBox="0 0 48 36" fill="currentColor" aria-hidden="true">

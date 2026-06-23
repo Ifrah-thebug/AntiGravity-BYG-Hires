@@ -9,6 +9,7 @@ import {
   BookOpen,
   Check,
   ArrowRight,
+  Mic,
 } from 'lucide-react';
 
 const GUIDE_STEPS = [
@@ -23,20 +24,28 @@ const GUIDE_STEPS = [
     id: 'assessment',
     step: 2,
     title: 'Take a skills test',
-    short: 'Pick one skill from your profile and complete the test (~25 min).',
+    short: 'Pick one skill and complete the test (~25 min) so clients see verified expertise.',
     icon: ClipboardCheck,
   },
   {
-    id: 'timings',
+    id: 'voice-interview',
     step: 3,
+    title: 'AI voice interview',
+    short: 'Only when a client requests it — speak with our AI interviewer about your role.',
+    icon: Mic,
+  },
+  {
+    id: 'timings',
+    step: 4,
     title: 'Publish intro timings',
     short: 'Choose slots on this page so clients can see when you are free.',
     icon: Clock,
   },
 ];
 
-function GuideHeader({ doneById, onClose }) {
-  const completedCount = GUIDE_STEPS.filter((s) => doneById[s.id]).length;
+function GuideHeader({ doneById, visibleSteps, onClose }) {
+  const completedCount = visibleSteps.filter((s) => doneById[s.id]).length;
+  const totalSteps = visibleSteps.length;
   const floatIcons = [
     { Icon: Calendar, className: 'top-6 right-24', delay: 0 },
     { Icon: ClipboardCheck, className: 'bottom-5 right-36', delay: 0.35 },
@@ -185,7 +194,7 @@ function GuideHeader({ doneById, onClose }) {
               })}
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-white/45 uppercase tracking-wider leading-snug">
-              {completedCount === 3 ? (
+              {completedCount === totalSteps && totalSteps > 0 ? (
                 <motion.span
                   className="text-green-400"
                   initial={{ opacity: 0 }}
@@ -195,7 +204,9 @@ function GuideHeader({ doneById, onClose }) {
                   All set — you&apos;re ready for clients
                 </motion.span>
               ) : (
-                <span>{completedCount} of 3 complete</span>
+                <span>
+                  {completedCount} of {totalSteps} complete
+                </span>
               )}
             </p>
           </motion.div>
@@ -254,12 +265,19 @@ export default function TalentGuideModal({
   connectCalendarUrl = '',
   calendarConnected = false,
   assessmentDone = false,
+  interviewUnlocked = false,
+  interviewCompleted = false,
   introSlotsPublished = false,
   onScrollToTimings,
 }) {
+  const visibleSteps = GUIDE_STEPS.filter(
+    (step) => step.id !== 'voice-interview' || interviewUnlocked
+  );
+
   const doneById = {
     calendar: calendarConnected,
     assessment: assessmentDone,
+    'voice-interview': interviewCompleted,
     timings: introSlotsPublished,
   };
 
@@ -307,11 +325,11 @@ export default function TalentGuideModal({
             className="bg-white rounded-t-[1.75rem] sm:rounded-[2rem] w-full sm:max-w-md max-h-[min(90dvh,720px)] overflow-hidden flex flex-col shadow-2xl border border-gray-100 border-b-0 sm:border-b"
             onClick={(e) => e.stopPropagation()}
           >
-            <GuideHeader doneById={doneById} onClose={onClose} />
+            <GuideHeader doneById={doneById} visibleSteps={visibleSteps} onClose={onClose} />
 
             <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-4">
               <ol className="space-y-2.5 list-none">
-                {GUIDE_STEPS.map((step, index) => (
+                {visibleSteps.map((step, index) => (
                   <StepCard key={step.id} step={step} done={doneById[step.id]} index={index} />
                 ))}
               </ol>
@@ -338,6 +356,15 @@ export default function TalentGuideModal({
                     className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-gray-200 hover:border-red text-gray-900 text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
                   >
                     <ClipboardCheck size={14} /> Skills test
+                  </Link>
+                )}
+                {interviewUnlocked && assessmentDone && !interviewCompleted && (
+                  <Link
+                    to="/interview"
+                    onClick={onClose}
+                    className="w-full min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-3 bg-white border-2 border-gray-200 hover:border-red text-gray-900 text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
+                  >
+                    <Mic size={14} /> AI voice interview
                   </Link>
                 )}
                 {!introSlotsPublished && (
