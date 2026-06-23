@@ -3,18 +3,22 @@ import { formatDisplayName } from './formatDisplayName';
 import { DEFAULT_MONTHLY_FEE_USD } from './profileContentPolicy';
 import { normalizeTalentDepartment } from './talentDepartments';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
+import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 
 export const LIVE_PROFILE_COLUMNS =
   'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, created_at';
 
-export function mapProfileToDirectoryTalent(profile, scoreMap = {}) {
+export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap = {}) {
   const skills = profile.skills || [];
+  const aiMeta = aiBadgeMap[profile.id] || {};
   return {
     id: profile.id,
     name: formatDisplayName(profile.name) || 'Anonymous',
     photo: profile.photo_url || null,
     score: 0,
     verified: false,
+    aiInterviewVerified: Boolean(aiMeta.aiInterviewVerified),
+    aiInterviewScore: aiMeta.interviewScore ?? null,
     role: profile.job_title || 'Professional',
     experience: profile.experience_years ? `${profile.experience_years} yrs` : 'Flexible',
     tags: skills,
@@ -41,8 +45,11 @@ export async function fetchLiveDirectoryTalents() {
 
   const profiles = data || [];
   const profileIds = profiles.map((p) => p.id).filter(Boolean);
-  const scoreMap = await fetchPublicSkillScores(profileIds);
-  return profiles.map((p) => mapProfileToDirectoryTalent(p, scoreMap));
+  const [scoreMap, aiBadgeMap] = await Promise.all([
+    fetchPublicSkillScores(profileIds),
+    fetchPublicAiInterviewBadges(profileIds).catch(() => ({})),
+  ]);
+  return profiles.map((p) => mapProfileToDirectoryTalent(p, scoreMap, aiBadgeMap));
 }
 
 function talentHaystack(talent) {

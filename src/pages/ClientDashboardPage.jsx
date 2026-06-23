@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ArrowRight, Building2, Link as LinkIcon, AlertTriangle } from 'lucide-react';
+import { Calendar, ArrowRight, Building2, Link as LinkIcon, AlertTriangle, Mic } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClientSchedulingTimezone } from '../hooks/useClientSchedulingTimezone';
 import { formatIntroSlotSummary } from '../lib/clientSchedulingTimezone';
+import IntroBookingAiInterviewAction from '../components/IntroBookingAiInterviewAction';
+import AiInterviewClientStatus from '../components/AiInterviewClientStatus';
 const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 
 async function parseApiJson(resp) {
@@ -26,6 +28,7 @@ export default function ClientDashboardPage() {
 
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
+  const [aiInterviewRequests, setAiInterviewRequests] = useState([]);
 
   const [companyDraft, setCompanyDraft] = useState('');
   const [savingCompany, setSavingCompany] = useState(false);
@@ -36,6 +39,16 @@ export default function ClientDashboardPage() {
     const next = String(companyDraft || '').trim();
     return current !== next;
   }, [profile, companyDraft]);
+
+  const aiRequestByTalentId = useMemo(() => {
+    const map = {};
+    for (const req of aiInterviewRequests) {
+      if (req.talentId && !map[req.talentId]) {
+        map[req.talentId] = req;
+      }
+    }
+    return map;
+  }, [aiInterviewRequests]);
 
   useEffect(() => {
     if (!authLoading && !user?.id) {
@@ -67,6 +80,7 @@ export default function ClientDashboardPage() {
         if (cancelled) return;
         setProfile(data.profile || null);
         setBookings(data.bookings || []);
+        setAiInterviewRequests(data.aiInterviewRequests || []);
         setCompanyDraft(data.profile?.company || '');
       } catch (err) {
         if (!cancelled) setError(err.message || 'Could not load dashboard.');
@@ -80,6 +94,23 @@ export default function ClientDashboardPage() {
       cancelled = true;
     };
   }, [user?.id, authLoading]);
+
+  const reloadDashboard = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const resp = await fetch(
+        `${API_BASE}/api/client/dashboard/overview?userId=${encodeURIComponent(user.id)}`
+      );
+      const data = await parseApiJson(resp);
+      if (resp.ok && data?.ok) {
+        setProfile(data.profile || null);
+        setBookings(data.bookings || []);
+        setAiInterviewRequests(data.aiInterviewRequests || []);
+      }
+    } catch {
+      // keep existing data on refresh failure
+    }
+  }, [user?.id]);
 
   async function saveCompany() {
     if (!user?.id) return;
@@ -205,6 +236,37 @@ export default function ClientDashboardPage() {
               </div>
             </div>
 
+            {aiInterviewRequests.length > 0 && (
+              <div className="mb-8">
+                <div className="flex items-center gap-2 mb-4">
+                  <Mic size={16} className="text-violet-600" />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-gray-900">
+                    AI interview requests
+                  </h2>
+                </div>
+                <div className="space-y-3">
+                  {aiInterviewRequests.map((req) => (
+                    <div
+                      key={req.requestId}
+                      className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-6 md:p-8"
+                    >
+                      <AiInterviewClientStatus
+                        variant="card"
+                        requested
+                        hasCompleted={req.hasCompleted}
+                        interviewScore={req.interviewScore}
+                        completedAt={req.completedAt}
+                        aiInterviewVerified={req.aiInterviewVerified}
+                        talentName={req.talentName}
+                        talentId={req.talentId}
+                        onRefresh={reloadDashboard}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               {bookings.length === 0 && (
                 <div className="text-center py-16">
@@ -269,6 +331,17 @@ export default function ClientDashboardPage() {
                         </a>
                       )}
                     </div>
+
+                    {!isDiscovery && b.talentId && (
+                      <IntroBookingAiInterviewAction
+                        talentId={b.talentId}
+                        talentName={b.talentName}
+                        clientEmail={profile?.email}
+                        activated={Boolean(profile?.activated)}
+                        initialRequest={aiRequestByTalentId[b.talentId] || null}
+                        onUpdated={reloadDashboard}
+                      />
+                    )}
                   </div>
                 );
               })}

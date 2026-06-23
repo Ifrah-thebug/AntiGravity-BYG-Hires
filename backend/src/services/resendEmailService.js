@@ -417,6 +417,42 @@ async function sendPasswordResetEmail({ to, name, token, tokenHours = 1 }) {
   return { ...result, resetUrl };
 }
 
+function buildTalentAiInterviewRequestEmailHtml({ name, interviewUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">A client has requested an <strong>AI voice interview</strong> with you on BYG Hires. Please complete it at your earliest convenience — before your intro call is scheduled.</p>
+  <p style="margin: 0 0 12px;">Log in to your talent portal, complete your skills test if you have not already, then take the AI interview (~15 minutes, microphone required).</p>
+  <p style="margin: 24px 0;">
+    <a href="${interviewUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Take AI interview</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${interviewUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">This interview is only available because a client requested it. If you have questions, reply to your BYG Hires contact.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendTalentAiInterviewRequestEmail({ to, name }) {
+  const interviewUrl = `${getAppPublicUrl()}/interview`;
+  const subject = 'A client requested your AI voice interview — BYG Hires';
+  const html = buildTalentAiInterviewRequestEmailHtml({
+    name,
+    interviewUrl,
+  });
+  const result = await sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Talent AI interview request',
+  });
+  return { ...result, interviewUrl };
+}
+
 module.exports = {
   sendClientActivationEmail,
   sendTalentActivationEmail,
@@ -424,6 +460,7 @@ module.exports = {
   sendTalentProfileReminderEmail,
   sendTalentAssessmentReminderEmail,
   sendPasswordResetEmail,
+  sendTalentAiInterviewRequestEmail,
   getAppPublicUrl,
   useConsoleProvider,
 };

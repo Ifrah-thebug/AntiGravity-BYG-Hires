@@ -12,7 +12,8 @@ const Hero = () => {
         muted
         loop
         playsInline
-        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-40"
+        preload="metadata"
+        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-25 md:opacity-40"
       >
         <source src={heroVideo} type="video/quicktime" />
         <source src={heroVideo} type="video/mp4" />
@@ -67,8 +68,8 @@ const Hero = () => {
         </div>
       </div>
 
-      <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-red/5 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-gray-100 rounded-full blur-3xl" />
+      <div className="hidden md:block absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-red/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="hidden md:block absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-gray-100 rounded-full blur-3xl pointer-events-none" />
     </div>
   );
 };

@@ -42,6 +42,7 @@ import TalentDashboardPage from './pages/TalentDashboardPage';
 // Import New System Pages
 import AssessmentPage from './pages/AssessmentPage';
 import TalentAssessmentPage from './pages/TalentAssessmentPage';
+import TalentVoiceInterviewPage from './pages/TalentVoiceInterviewPage';
 import StatusPage from './pages/StatusPage';
 import AdminReviewsPage from './pages/AdminReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
@@ -80,7 +81,8 @@ const AppContent = () => {
   const debug = new URLSearchParams(location.search).get('debug') === 'true';
   const isAssessment =
     location.pathname === '/assessment' ||
-    location.pathname.startsWith('/assessment/');
+    location.pathname.startsWith('/assessment/') ||
+    location.pathname === '/interview';
   const isAdmin = location.pathname.startsWith('/admin');
   const isSuperAdminShell =
     location.pathname === '/admin/login' ||
@@ -119,6 +121,7 @@ const AppContent = () => {
           <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
           <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
           <Route path="/assessment" element={<TalentAssessmentPage />} />
+          <Route path="/interview" element={<TalentVoiceInterviewPage />} />
           <Route path="/assessment/legacy" element={<AssessmentPage />} />
           <Route path="/assessment/coming-soon" element={<Navigate to="/assessment" replace />} />
           <Route path="/status" element={<StatusPage />} />

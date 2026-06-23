@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, CheckCircle2 } from 'lucide-react';
 import setsUsApartGif from '../assets/sets-us-apart.gif';
+import { fadeUpInView } from '../lib/scrollMotion';
 
 const Solutions = () => {
   const solutions = [
@@ -74,14 +75,14 @@ const Solutions = () => {
           </div>
 
           <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true }}
-            className="lg:sticky lg:top-28 lg:self-start rounded-3xl overflow-hidden shadow-xl"
+            {...fadeUpInView}
+            className="lg:sticky lg:top-28 lg:self-start rounded-3xl overflow-hidden shadow-xl [contain:paint]"
           >
             <img
               src={setsUsApartGif}
               alt="Remote team collaboration"
+              loading="lazy"
+              decoding="async"
               className="w-full h-auto object-cover"
             />
           </motion.div>

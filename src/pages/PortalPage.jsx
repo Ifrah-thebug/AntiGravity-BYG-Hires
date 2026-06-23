@@ -6,7 +6,7 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Save, AlertTriangle, CheckCircle2,
   ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
-  Sparkles, ArrowRight, Calendar, Video, Check,
+  Sparkles, ArrowRight, Calendar, Video, Check, Mic,
 } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
@@ -34,6 +34,7 @@ import {
   DEFAULT_TALENT_DEPARTMENT,
 } from '../lib/talentDepartments';
 import { fetchAssessmentStatus } from '../services/assessmentService';
+import { fetchVoiceInterviewStatus } from '../services/voiceInterviewService';
 
 const INTRO_API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
 
@@ -65,7 +66,14 @@ function ActionIconWithCheck({ icon: Icon, done }) {
   );
 }
 
-function buildStrengthenTiles({ connectCalendarUrl, calendarConnected, introSlotsPublished, assessmentDone }) {
+function buildStrengthenTiles({
+  connectCalendarUrl,
+  calendarConnected,
+  introSlotsPublished,
+  assessmentDone,
+  interviewUnlocked,
+  interviewCompleted,
+}) {
   const tiles = [
     {
       id: 'assessment',
@@ -76,6 +84,20 @@ function buildStrengthenTiles({ connectCalendarUrl, calendarConnected, introSlot
       done: assessmentDone,
     },
   ];
+
+  if (interviewUnlocked) {
+    tiles.push({
+      id: 'voice-interview',
+      label: 'AI voice interview',
+      description: assessmentDone
+        ? 'A client requested this — speak with our AI interviewer (~15 min).'
+        : 'Complete at least one skills test first, then take the AI interview.',
+      href: '/interview',
+      icon: Mic,
+      done: interviewCompleted,
+      disabled: !assessmentDone,
+    });
+  }
 
   if (connectCalendarUrl) {
     tiles.push({
@@ -113,6 +135,8 @@ function StrengthenProfilePanel({
   calendarConnected,
   introSlotsPublished,
   assessmentDone,
+  interviewUnlocked,
+  interviewCompleted,
   onOpenGuide,
 }) {
   const tiles = buildStrengthenTiles({
@@ -120,6 +144,8 @@ function StrengthenProfilePanel({
     calendarConnected,
     introSlotsPublished,
     assessmentDone,
+    interviewUnlocked,
+    interviewCompleted,
   });
 
   const tileClassName =
@@ -155,8 +181,8 @@ function StrengthenProfilePanel({
           Strengthen your profile
         </h3>
         <p className="text-white text-sm font-semibold mt-2 sm:mt-3 leading-relaxed">
-          Complete your skills test and connect your calendar. Then publish intro availability for
-          clients.
+          Complete your skills test so clients can see verified expertise. When a client requests an
+          AI interview, it will appear here. Connect your calendar and publish intro availability.
         </p>
         {onOpenGuide && (
           <button
@@ -171,6 +197,17 @@ function StrengthenProfilePanel({
 
       <div className="flex flex-col gap-3">
         {tiles.map((tile) => {
+          if (tile.disabled) {
+            return (
+              <div
+                key={tile.id}
+                className="block w-full text-left rounded-2xl border-2 border-white/60 p-3.5 sm:p-4 bg-white/70 opacity-80 cursor-not-allowed"
+                aria-disabled="true"
+              >
+                {renderTileInner(tile)}
+              </div>
+            );
+          }
           if (tile.external) {
             return (
               <a key={tile.id} href={tile.href} className={tileClassName}>
@@ -250,6 +287,8 @@ const PortalPage = () => {
   const [introSlotsPublished, setIntroSlotsPublished] = useState(false);
   const [skillScores, setSkillScores] = useState({});
   const [assessmentDone, setAssessmentDone] = useState(false);
+  const [interviewUnlocked, setInterviewUnlocked] = useState(false);
+  const [interviewCompleted, setInterviewCompleted] = useState(false);
   const [inProgressSkill, setInProgressSkill] = useState('');
   const justCreated = location.state?.justCreated;
   const portalUploadWarnings = location.state?.uploadWarnings;
@@ -395,8 +434,13 @@ const PortalPage = () => {
     const talentId = data.id;
     const assessmentPromise = fetchAssessmentStatus().catch(() => null);
     const introPromise = talentId ? fetchIntroSlotsPublished(talentId) : Promise.resolve(false);
+    const interviewPromise = fetchVoiceInterviewStatus().catch(() => null);
 
-    const [assessment, introPublished] = await Promise.all([assessmentPromise, introPromise]);
+    const [assessment, introPublished, interviewStatus] = await Promise.all([
+      assessmentPromise,
+      introPromise,
+      interviewPromise,
+    ]);
 
     if (assessment) {
       setSkillScores(assessment.skillScores || {});
@@ -409,6 +453,8 @@ const PortalPage = () => {
     }
 
     setIntroSlotsPublished(introPublished);
+    setInterviewUnlocked(Boolean(interviewStatus?.interviewUnlocked));
+    setInterviewCompleted(Boolean(interviewStatus?.hasCompleted));
 
     const availabilityRaw = String(data.availability || '');
     const availabilityDate = /^\d{4}-\d{2}-\d{2}$/.test(availabilityRaw) ? availabilityRaw : '';
@@ -654,6 +700,8 @@ const PortalPage = () => {
               calendarConnected={Boolean(profile?.cal_username)}
               introSlotsPublished={introSlotsPublished}
               assessmentDone={assessmentDone}
+              interviewUnlocked={interviewUnlocked}
+              interviewCompleted={interviewCompleted}
               onOpenGuide={openGuide}
             />
           </div>
@@ -886,6 +934,8 @@ const PortalPage = () => {
         connectCalendarUrl={connectCalendarUrl}
         calendarConnected={Boolean(profile?.cal_username)}
         assessmentDone={assessmentDone}
+        interviewUnlocked={interviewUnlocked}
+        interviewCompleted={interviewCompleted}
         introSlotsPublished={introSlotsPublished}
         onScrollToTimings={scrollToClientIntroSection}
       />
