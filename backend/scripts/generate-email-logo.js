@@ -2,7 +2,7 @@
  * Builds email logo variants in public/:
  *   - byg-hires-email-logo.png          — flat white pad (baseline)
  *   - byg-hires-email-logo-round.png    — pill / capsule (full rounded ends)
- *   - byg-hires-email-logo-rounded.png  — button-style corners (~14px), light border
+ *   - byg-hires-email-logo-rounded.png  — button-style corners (~14px), no border
  *   - byg-hires-email-logo-soft.png     — softer corners (~22px), light border
  *   - byg-hires-email-logo-frame.png    — button-style + slightly stronger border
  * Run: node backend/scripts/generate-email-logo.js
@@ -141,11 +141,8 @@ async function buildRectLogo(paddedBuf, contentW, contentH) {
     color: '#e5e7eb',
   });
 
-  // Button-style — matches CTA rounded-xl (~12px at button scale → ~14px on logo)
-  await writeVariant('rounded', paddedBuf, contentW, contentH, 14, {
-    width: 2,
-    color: '#e5e7eb',
-  });
+  // Button-style — no border stroke (clean on light + dark email backgrounds)
+  await writeVariant('rounded', paddedBuf, contentW, contentH, 14, null);
 
   // Softer corners
   await writeVariant('soft', paddedBuf, contentW, contentH, 22, {
