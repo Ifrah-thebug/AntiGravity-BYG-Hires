@@ -98,13 +98,9 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+    <div
       onClick={() => onSelect(talent)}
-      className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-all duration-300 flex flex-col cursor-pointer"
+      className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-[border-color,box-shadow] duration-300 flex flex-col cursor-pointer"
     >
       {/* Photo container */}
       <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-50">
@@ -181,7 +177,7 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
               e.stopPropagation();
               navigate(`/request-intro?id=${talent.id}`);
             }}
-            className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-all duration-200 text-center shadow-md shadow-black/5"
+            className="w-full py-3.5 bg-black text-white text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-red transition-colors duration-200 text-center shadow-md shadow-black/5"
           >
             Request Intro
           </button>
@@ -198,7 +194,7 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           </button>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 };
 
@@ -658,11 +654,7 @@ const TalentDirectoryPage = () => {
             </span>
             <div className="flex-1 h-px bg-gray-100" />
           </div>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
-          >
+          <div className="talent-directory-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
             {featuredTalents.map((talent) => (
               <TalentCard
                 key={`featured-${talent.id}`}
@@ -671,7 +663,7 @@ const TalentDirectoryPage = () => {
                 canRequestIntro={canRequestIntro}
               />
             ))}
-          </motion.div>
+          </div>
         </div>
       )}
 
@@ -708,40 +700,27 @@ const TalentDirectoryPage = () => {
               </div>
             ))}
           </div>
+        ) : visible.length > 0 ? (
+          <div className="talent-directory-grid grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5">
+            {visible.map((talent) => (
+              <TalentCard
+                key={talent.id}
+                talent={talent}
+                onSelect={setSelectedTalent}
+                canRequestIntro={canRequestIntro}
+              />
+            ))}
+          </div>
         ) : (
-          <AnimatePresence>
-            {visible.length > 0 ? (
-              <motion.div
-                key="grid"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
-              >
-                {visible.map(talent => (
-                  <TalentCard
-                    key={talent.id}
-                    talent={talent}
-                    onSelect={setSelectedTalent}
-                    canRequestIntro={canRequestIntro}
-                  />
-                ))}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="empty"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                className="text-center py-24"
-              >
-                <Search size={40} className="text-gray-200 mx-auto mb-4" />
-                <p className="font-black text-gray-400 uppercase tracking-widest text-sm">No talent found</p>
-                <p className="text-gray-400 text-xs font-medium mt-2">Try adjusting your filters or search query.</p>
-                <button onClick={() => { setSearch(''); setActivedept('all'); clearFilters(); }}
-                  className="mt-6 px-6 py-3 bg-black text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red transition-colors">
-                  Reset All
-                </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="text-center py-24">
+            <Search size={40} className="text-gray-200 mx-auto mb-4" />
+            <p className="font-black text-gray-400 uppercase tracking-widest text-sm">No talent found</p>
+            <p className="text-gray-400 text-xs font-medium mt-2">Try adjusting your filters or search query.</p>
+            <button onClick={() => { setSearch(''); setActivedept('all'); clearFilters(); }}
+              className="mt-6 px-6 py-3 bg-black text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red transition-colors">
+              Reset All
+            </button>
+          </div>
         )}
       </div>
 

@@ -20,6 +20,10 @@
   html {
     scroll-behavior: auto;
   }
+  /* Framer/transform layers inside overflow:hidden cards tear on iOS during scroll */
+  .talent-directory-grid img {
+    transform: none !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
