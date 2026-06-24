@@ -7,11 +7,11 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    overflow-x: clip;
   }
   body {
     @apply text-black bg-white font-sans antialiased;
-    overflow-x: clip;
+    /* hidden (not clip) — clip on html/body breaks position:sticky on mobile Safari */
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
   }
 }
@@ -38,6 +38,9 @@
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
+  }
+  .overscroll-x-contain {
+    overscroll-behavior-x: contain;
   }
 }
 

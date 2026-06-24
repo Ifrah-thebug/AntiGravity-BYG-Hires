@@ -99,11 +99,10 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
 
   return (
     <motion.div
-      layout
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      transition={{ duration: 0.22 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       onClick={() => onSelect(talent)}
       className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-all duration-300 flex flex-col cursor-pointer"
     >
@@ -113,7 +112,9 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           <img
             src={talent.photo}
             alt={talent.name}
-            className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover object-top md:group-hover:scale-105 md:transition-transform md:duration-500"
           />
         ) : (
           <div
@@ -127,7 +128,7 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
         )}
 
         {/* Availability Badge */}
-        <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+        <div className="absolute bottom-3 right-3 bg-white border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
           <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'from_month' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
           <span>{formatAvailabilityLabel(talent.availability)}</span>
         </div>
@@ -515,7 +516,7 @@ const TalentDirectoryPage = () => {
 
         {/* ─── Search + Sort + Filter bar ─────────────────────────────────── */}
         <div className="max-w-3xl mx-auto space-y-3">
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3">
             {/* Search */}
             <div className="relative flex-1">
               <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -613,9 +614,9 @@ const TalentDirectoryPage = () => {
       </div>
 
       {/* ─── Department Tabs (Pill Style) ────────────────────────────────────────────────── */}
-      <div className="mb-10 sticky top-20 bg-white z-10 pt-4 pb-4">
+      <div className="mb-10 md:sticky md:top-20 bg-white z-10 pt-4 pb-4">
         <div className="max-w-7xl mx-auto px-6">
-          <div className="flex flex-nowrap gap-2 items-center overflow-x-auto scrollbar-hide pb-2 md:pb-0 select-none">
+          <div className="flex flex-nowrap gap-2 items-center overflow-x-auto scrollbar-hide overscroll-x-contain pb-2 md:pb-0 select-none">
             <span className="text-gray-500 font-bold text-xs tracking-widest uppercase mr-1 hidden md:block whitespace-nowrap">
               Select Department:
             </span>
@@ -708,11 +709,12 @@ const TalentDirectoryPage = () => {
             ))}
           </div>
         ) : (
-          <AnimatePresence mode="popLayout">
+          <AnimatePresence>
             {visible.length > 0 ? (
               <motion.div
                 key="grid"
-                layout
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5"
               >
                 {visible.map(talent => (

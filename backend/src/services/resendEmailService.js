@@ -52,7 +52,7 @@ function buildEmailBrowserHintHtml() {
 function getEmailLogoUrl() {
   const custom = String(process.env.EMAIL_LOGO_URL || '').trim();
   if (custom) return custom;
-  return `${getAppPublicUrl()}/byg-hires-logo.png`;
+  return `${getAppPublicUrl()}/byg-hires-email-logo.png`;
 }
 
 function isLocalhostUrl(url) {
@@ -70,6 +70,7 @@ function readInlineLogoDataUri() {
   if (cachedInlineLogoDataUri) return cachedInlineLogoDataUri;
 
   const candidates = [
+    path.join(__dirname, '../../../public/byg-hires-email-logo.png'),
     path.join(__dirname, '../../../public/byg-hires-logo.png'),
     path.join(__dirname, '../../../src/assets/BYG Hires Logo.png'),
   ];
@@ -97,7 +98,7 @@ function buildEmailLogoHtml() {
   if (!logoSrc) {
     return `<p style="font-size: 11px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #ff3d3d; margin: 0 0 20px;">BYG Hires</p>`;
   }
-  return `<img src="${logoSrc}" alt="BYG Hires" width="140" style="display: block; height: auto; max-width: 140px; margin: 0 0 20px; border: 0;" />`;
+  return `<img src="${logoSrc}" alt="BYG Hires" width="160" style="display: block; height: auto; max-width: 160px; margin: 0 0 20px; border: 0; border-radius: 8px;" />`;
 }
 
 function getDevAllowlist() {
