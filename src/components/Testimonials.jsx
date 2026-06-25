@@ -92,11 +92,11 @@ const Testimonials = () => {
           </div>
         </div>
 
-        <div 
-          ref={scrollRef}
-          className="flex overflow-x-auto gap-6 pb-12 snap-x snap-mandatory hide-scrollbar scroll-smooth"
-          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-        >
+        <div className="w-full min-w-0 max-w-full overflow-hidden">
+          <div
+            ref={scrollRef}
+            className="flex w-full max-w-full overflow-x-auto gap-6 pb-12 snap-x snap-mandatory scrollbar-hide scroll-smooth overscroll-x-contain"
+          >
           {testimonials.map((test, index) => (
             <motion.div
               key={index}
@@ -127,6 +127,7 @@ const Testimonials = () => {
               </div>
             </motion.div>
           ))}
+          </div>
         </div>
         <div className="mt-12 text-center">
           <motion.div
@@ -146,12 +147,6 @@ const Testimonials = () => {
           </motion.div>
         </div>
       </div>
-      
-      <style dangerouslySetInnerHTML={{__html: `
-        .hide-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-      `}} />
     </section>
   );
 };

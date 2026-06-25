@@ -106,10 +106,10 @@ const AppContent = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden max-w-full">
       <ScrollToTop />
       {!isSuperAdminShell && <Navbar />}
-      <main>
+      <main className="overflow-x-hidden max-w-full">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/how-it-works" element={<HowItWorksPage />} />

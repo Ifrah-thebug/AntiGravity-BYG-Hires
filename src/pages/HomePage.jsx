@@ -14,7 +14,7 @@ import FAQ from '../components/FAQ';
 
 const HomePage = () => {
   return (
-    <div className="pt-20">
+    <div className="pt-20 overflow-x-hidden max-w-full">
       <Hero />
       <TalentMatchmaking />
       <Leadership />

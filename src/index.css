@@ -7,12 +7,18 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
+    max-width: 100%;
   }
   body {
     @apply text-black bg-white font-sans antialiased;
-    /* hidden (not clip) — clip on html/body breaks position:sticky on mobile Safari */
     overflow-x: hidden;
+    max-width: 100%;
     -webkit-overflow-scrolling: touch;
+  }
+  #root {
+    overflow-x: hidden;
+    max-width: 100%;
   }
 }
 

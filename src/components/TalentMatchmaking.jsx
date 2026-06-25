@@ -368,7 +368,7 @@ const TalentMatchmaking = () => {
   );
 
   return (
-    <section className="py-28 bg-white border-t border-gray-100">
+    <section className="py-28 bg-white border-t border-gray-100 overflow-hidden">
       <div className="max-w-7xl mx-auto px-6">
 
         {/* Header */}
