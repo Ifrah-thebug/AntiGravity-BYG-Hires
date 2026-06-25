@@ -13,13 +13,13 @@ const Hero = () => {
         loop
         playsInline
         preload="metadata"
-        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-25 md:opacity-40"
+        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-60 md:opacity-80"
       >
         <source src={heroVideo} type="video/quicktime" />
         <source src={heroVideo} type="video/mp4" />
       </video>
 
-      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/75 via-white/60 to-white/80 z-[1]" />
+      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/60 via-white/45 to-white/65 z-[1]" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         <div className="text-center max-w-3xl mx-auto">
@@ -39,7 +39,7 @@ const Hero = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.15 }}
-            className="text-base md:text-lg text-gray-700 mb-8 max-w-2xl mx-auto font-medium leading-snug"
+            className="text-base md:text-lg text-gray-800 mb-8 max-w-2xl mx-auto font-medium leading-snug"
           >
             We find, vet, and place remote talent so founders can focus on building—not recruiting.
           </motion.p>
@@ -69,7 +69,6 @@ const Hero = () => {
       </div>
 
       <div className="hidden md:block absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-red/5 rounded-full blur-3xl pointer-events-none" />
-      <div className="hidden md:block absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 bg-gray-100 rounded-full blur-3xl pointer-events-none" />
     </div>
   );
 };
