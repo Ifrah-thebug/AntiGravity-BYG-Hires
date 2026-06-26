@@ -6,7 +6,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName, formatFirstName } from '../lib/formatDisplayName';
+import { useAuth } from '../context/AuthContext';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
+import { isDirectoryLive } from '../lib/profileReview';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
 import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
@@ -17,6 +19,7 @@ import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService'
 const TalentProfilePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { isLoggedInTalent } = useIsLoggedInTalent();
   const canRequestIntro = !isLoggedInTalent;
   const [profile, setProfile] = useState(null);
@@ -85,6 +88,9 @@ const TalentProfilePage = () => {
   const initials = name ? name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() : '?';
   const hue = name ? (name.charCodeAt(0) * 37 + (name.charCodeAt(1) || 0) * 17) % 360 : 200;
 
+  const isOwner = Boolean(user?.id && profile?.user_id === user.id);
+  const directoryLive = isDirectoryLive(profile?.directory_status);
+
   return (
     <div className="bg-white min-h-screen pt-24 pb-24 font-sans">
       {/* Back button */}
@@ -96,6 +102,18 @@ const TalentProfilePage = () => {
           <ArrowLeft size={13} /> Back to Directory
         </button>
       </div>
+
+      {isOwner && !directoryLive && (
+        <div className="max-w-4xl mx-auto px-6 mb-6">
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs font-semibold text-amber-900">
+            <p className="font-black uppercase tracking-wider text-[10px] mb-1">Preview only</p>
+            <p>
+              This is how your profile will look once approved. It is not visible on the public directory yet.{' '}
+              <Link to="/portal" className="text-red font-black hover:underline">Open portal</Link>
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="max-w-4xl mx-auto px-6 space-y-8">
         {/* ── Profile Header Card ── */}

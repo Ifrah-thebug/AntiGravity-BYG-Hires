@@ -44,7 +44,7 @@ import AssessmentPage from './pages/AssessmentPage';
 import TalentAssessmentPage from './pages/TalentAssessmentPage';
 import TalentVoiceInterviewPage from './pages/TalentVoiceInterviewPage';
 import StatusPage from './pages/StatusPage';
-import AdminReviewsPage from './pages/AdminReviewsPage';
+import AdminProfileReviewsPage from './pages/AdminProfileReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
 import TalentActivatePage from './pages/TalentActivatePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
@@ -144,13 +144,14 @@ const AppContent = () => {
             )}
           />
           <Route
-            path="/admin/reviews"
+            path="/admin/profile-reviews"
             element={(
               <AdminRoute>
-                <AdminReviewsPage />
+                <AdminProfileReviewsPage />
               </AdminRoute>
             )}
           />
+          <Route path="/admin/reviews" element={<Navigate to="/admin/profile-reviews" replace />} />
           <Route
             path="/admin/talent/import"
             element={(

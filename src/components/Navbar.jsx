@@ -17,7 +17,7 @@ const ADMIN_NAV_LINKS = [
   { name: 'Browse Candidates', href: '/admin/dashboard' },
   { name: 'Bulk CV Import', href: '/admin/talent/import' },
   { name: 'Browse Clients', href: '/admin/clients' },
-  { name: 'Reviews', href: '/admin/reviews' },
+  { name: 'Profile reviews', href: '/admin/profile-reviews' },
 ];
 
 function isNavLinkActive(pathname, href) {
@@ -40,8 +40,8 @@ function isNavLinkActive(pathname, href) {
   if (href === '/admin/clients') {
     return pathname === '/admin/clients';
   }
-  if (href === '/admin/reviews') {
-    return pathname === '/admin/reviews';
+  if (href === '/admin/profile-reviews') {
+    return pathname === '/admin/profile-reviews' || pathname === '/admin/reviews';
   }
   if (href === '/admin/talent/import') {
     return pathname === '/admin/talent/import';

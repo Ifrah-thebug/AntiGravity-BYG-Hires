@@ -4,6 +4,7 @@ import { DEFAULT_MONTHLY_FEE_USD } from './profileContentPolicy';
 import { normalizeTalentDepartment } from './talentDepartments';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
 import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
+import { isDirectoryStatusColumnMissing } from './profileDirectoryCompat';
 
 export const LIVE_PROFILE_COLUMNS =
   'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, created_at';
@@ -36,10 +37,18 @@ export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap =
 }
 
 export async function fetchLiveDirectoryTalents() {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('profiles')
     .select(LIVE_PROFILE_COLUMNS)
+    .eq('directory_status', 'approved')
     .order('created_at', { ascending: false });
+
+  if (error && isDirectoryStatusColumnMissing(error)) {
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select(LIVE_PROFILE_COLUMNS)
+      .order('created_at', { ascending: false }));
+  }
 
   if (error) throw new Error(error.message);
 

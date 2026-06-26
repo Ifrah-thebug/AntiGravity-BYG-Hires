@@ -2,7 +2,7 @@ import { supabase } from './supabase';
 import { normalizeProfileName } from './formatDisplayName';
 
 export function mapProfileToAdminTalent(row) {
-  const id = row.user_id || row.id;
+  const id = row.id || row.user_id;
   const name = row.name || '';
   return {
     id,
@@ -21,6 +21,9 @@ export function mapProfileToAdminTalent(row) {
     photo: row.photo_url || null,
     cvUrl: row.cv_url || '',
     hasResume: Boolean(row.cv_url?.trim()),
+    directoryStatus: row.directory_status || 'draft',
+    reviewNotes: row.review_notes || '',
+    submittedAt: row.submitted_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at || row.created_at,
   };
@@ -30,7 +33,7 @@ export async function fetchAllTalentsForAdmin() {
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'user_id, email, name, job_title, about, skills, experience_years, photo_url, cv_url, created_at'
+      'id, user_id, email, name, job_title, about, skills, experience_years, photo_url, cv_url, directory_status, review_notes, submitted_at, created_at, updated_at'
     )
     .order('created_at', { ascending: false });
 

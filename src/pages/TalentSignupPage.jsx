@@ -434,7 +434,7 @@ const TalentSignupPage = () => {
               <div className="flex items-center gap-3 bg-black/5 border border-black/10 rounded-2xl p-4">
                 <Sparkles size={18} className="text-red shrink-0" />
                 <p className="text-[11px] text-gray-600 font-bold leading-snug">
-                  Your CV will be read and it will extract your best title, skills, and bio. You'll review everything before publishing.
+                  Our AI reads your CV and drafts your title, skills, and bio. You review and edit everything, then submit for admin approval before your profile goes live on the talent directory.
                 </p>
               </div>
 
@@ -479,9 +479,9 @@ const TalentSignupPage = () => {
             <h3 className="font-black text-sm uppercase tracking-widest text-gray-800 px-2">How It Works</h3>
             <div className="bg-gray-50 border border-gray-200 rounded-[2rem] p-6 space-y-6">
               {[
-                { id: '01', title: 'DECLARE', desc: 'Upload your CV and let our AI build your profile. Edit and enhance it before publishing.' },
+                { id: '01', title: 'DECLARE', desc: 'Upload your CV — our AI builds your profile. Review it, then submit for admin approval.' },
                 { id: '02', title: 'DEMONSTRATE', desc: 'Complete a tailored, 25-min real-world client challenge.' },
-                { id: '03', title: 'DEPLOY', desc: 'Qualified candidates are admitted to our pool and rank higher to the regional employers.' }
+                { id: '03', title: 'DEPLOY', desc: 'Once approved, your profile goes live in our talent directory for regional employers.' }
               ].map((step, idx) => (
                 <div key={idx} className="relative pl-8">
                   <div className="absolute left-0 top-0 font-mono text-[9px] font-black text-red">

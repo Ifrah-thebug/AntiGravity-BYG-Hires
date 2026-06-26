@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { talentService } from '../services/talentService';
 import { calculateDirectoryFeeUsd } from './profileContentPolicy';
 import { sanitizeTalentForPublicDisplay } from './talentVerification';
+import { isDirectoryStatusColumnMissing } from './profileDirectoryCompat';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
 import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 
@@ -42,24 +43,46 @@ export async function resolveRequestIntroTalent(id) {
   if (!UUID_RE.test(id)) return null;
 
   const profileFields =
-    'id, user_id, name, job_title, about, skills, best_skill, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type';
+    'id, user_id, name, job_title, about, skills, best_skill, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, directory_status';
 
-  const { data: byProfileId } = await supabase
+  let { data: byProfileId, error: err1 } = await supabase
     .from('profiles')
     .select(profileFields)
     .eq('id', id)
+    .eq('directory_status', 'approved')
     .maybeSingle();
+
+  if (err1 && isDirectoryStatusColumnMissing(err1)) {
+    ({ data: byProfileId } = await supabase
+      .from('profiles')
+      .select(profileFields.replace(', directory_status', ''))
+      .eq('id', id)
+      .maybeSingle());
+  } else if (err1) {
+    throw err1;
+  }
 
   if (byProfileId) {
     const badgeMap = await fetchPublicAiInterviewBadges([byProfileId.id]).catch(() => ({}));
     return sanitizeTalentForPublicDisplay(mapProfileToRequestIntroTalent(byProfileId, badgeMap));
   }
 
-  const { data: byUserId } = await supabase
+  let { data: byUserId, error: err2 } = await supabase
     .from('profiles')
     .select(profileFields)
     .eq('user_id', id)
+    .eq('directory_status', 'approved')
     .maybeSingle();
+
+  if (err2 && isDirectoryStatusColumnMissing(err2)) {
+    ({ data: byUserId } = await supabase
+      .from('profiles')
+      .select(profileFields.replace(', directory_status', ''))
+      .eq('user_id', id)
+      .maybeSingle());
+  } else if (err2) {
+    throw err2;
+  }
 
   if (byUserId) {
     const badgeMap = await fetchPublicAiInterviewBadges([byUserId.id]).catch(() => ({}));

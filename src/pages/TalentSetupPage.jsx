@@ -24,7 +24,10 @@ import {
   validateProfileFields,
   DEFAULT_MONTHLY_FEE_USD,
 } from '../lib/profileContentPolicy';
-import { fetchInviteSetupStatus, parseInviteCvOnSetup, reuploadInviteCvOnSetup } from '../lib/talentInvite';
+import {
+  fetchInviteSetupStatus, parseInviteCvOnSetup, reuploadInviteCvOnSetup,
+} from '../lib/talentInvite';
+import { submitProfileForReview } from '../lib/profileReview';
 import ProfilePhotoGeneratingLoader from '../components/ProfilePhotoGeneratingLoader';
 import CvParseRetryScreen from '../components/CvParseRetryScreen';
 import {
@@ -312,6 +315,8 @@ const TalentSetupPage = () => {
 
       if (dbErr) throw dbErr;
 
+      await submitProfileForReview();
+
       setForm((f) => ({
         ...f,
         name: prepared.data.name,
@@ -334,7 +339,7 @@ const TalentSetupPage = () => {
       notifyAccountProfileUpdated();
       navigate('/portal', {
         state: {
-          justCreated: true,
+          justSubmitted: true,
           uploadWarnings: fileWarnings.length ? fileWarnings : undefined,
         },
       });
@@ -416,7 +421,7 @@ const TalentSetupPage = () => {
           <p className="text-gray-500 text-sm font-medium max-w-sm mx-auto">
             {stateData.incompleteProfile
               ? 'Finish setting up your profile so it appears when you log in.'
-              : 'Correct anything that looks off, then confirm to save to your account.'}
+              : 'Correct anything that looks off, then submit for admin review.'}
           </p>
         </motion.div>
 
@@ -655,7 +660,7 @@ const TalentSetupPage = () => {
                   canConfirm && !saving ? 'bg-black text-white hover:bg-red shadow-lg' : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                 }`}
               >
-                {saving ? 'Saving Profile…' : 'Confirm & Create Profile'} <ArrowRight size={14} />
+                {saving ? 'Submitting…' : 'Submit for review'} <ArrowRight size={14} />
               </button>
             </div>
           </div>

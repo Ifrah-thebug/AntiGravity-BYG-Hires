@@ -456,6 +456,128 @@ async function sendTalentAiInterviewRequestEmail({ to, name }) {
   return { ...result, interviewUrl };
 }
 
+const PROFILE_ISSUE_COPY = {
+  photo: 'Upload a clear, professional headshot (face visible, good lighting, neutral background).',
+  cv: 'Re-upload your CV as a clear PDF so we can verify your experience and role.',
+  bio: 'Update your about section so it reflects your experience and what you offer clients.',
+  skills: 'Review and update your skills list — include your strongest areas.',
+  job_title: 'Set a clear, accurate job title that matches your experience.',
+  pricing: 'Review your monthly fee and availability settings.',
+  other: 'See the notes below for what to fix.',
+};
+
+function buildProfileIssueListHtml(issues, notes) {
+  const codes = Array.isArray(issues) ? issues : [];
+  const items = codes
+    .map((code) => PROFILE_ISSUE_COPY[code])
+    .filter(Boolean);
+  if (notes?.trim()) items.push(notes.trim());
+  if (!items.length) {
+    return '<p style="margin: 0 0 12px;">Please log in and update your profile as discussed with BYG Hires.</p>';
+  }
+  return `<ul style="margin: 0 0 16px; padding-left: 20px;">${items
+    .map((text) => `<li style="margin-bottom: 8px;">${text}</li>`)
+    .join('')}</ul>`;
+}
+
+function buildProfileChangesRequestedEmailHtml({ name, portalUrl, issues, notes }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">Thank you for submitting your BYG Hires talent profile. Before we can list you in the <strong>talent directory</strong>, we need a few updates:</p>
+  ${buildProfileIssueListHtml(issues, notes)}
+  <p style="margin: 0 0 12px;">You are on our waitlist until your profile is approved. Once approved, clients will be able to find you on the directory.</p>
+  <p style="margin: 24px 0;">
+    <a href="${portalUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Update profile &amp; resubmit</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${portalUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">After making changes, open your portal and submit your profile for review again.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendProfileChangesRequestedEmail({ to, name, issues, notes }) {
+  const portalUrl = `${getAppPublicUrl()}/portal`;
+  const subject = 'Action needed: update your BYG Hires profile';
+  const html = buildProfileChangesRequestedEmailHtml({ name, portalUrl, issues, notes });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Profile changes requested',
+  });
+}
+
+function buildProfileApprovedEmailHtml({ name, portalUrl, directoryUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">Great news — your BYG Hires talent profile has been <strong>approved</strong> and is now visible in our talent directory.</p>
+  <p style="margin: 24px 0;">
+    <a href="${directoryUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">View talent directory</a>
+  </p>
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Manage your profile:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${portalUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">Clients can now discover your profile and request introductions.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendProfileApprovedEmail({ to, name, profileId }) {
+  const portalUrl = `${getAppPublicUrl()}/portal`;
+  const directoryUrl = profileId
+    ? `${getAppPublicUrl()}/talent/${encodeURIComponent(profileId)}`
+    : `${getAppPublicUrl()}/talent`;
+  const subject = 'Your BYG Hires profile is live';
+  const html = buildProfileApprovedEmailHtml({ name, portalUrl, directoryUrl });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Profile approved',
+  });
+}
+
+function buildProfileSubmittedAdminEmailHtml({ talentName, talentEmail, reviewUrl }) {
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">A talent profile is ready for review.</p>
+  <p style="margin: 0 0 8px;"><strong>${talentName || 'Candidate'}</strong></p>
+  <p style="margin: 0 0 16px; font-size: 13px; color: #555;">${talentEmail || ''}</p>
+  <p style="margin: 24px 0;">
+    <a href="${reviewUrl}" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Open review queue</a>
+  </p>
+</body>
+</html>`.trim();
+}
+
+async function sendProfileSubmittedAdminEmail({ talentName, talentEmail, profileId }) {
+  const adminNotify = String(process.env.ADMIN_NOTIFY_EMAIL || process.env.RESEND_FROM_EMAIL || '').trim();
+  if (!adminNotify) return null;
+
+  const reviewUrl = `${getAppPublicUrl()}/admin/profile-reviews`;
+  const subject = `Profile review: ${talentName || talentEmail || 'New submission'}`;
+  const html = buildProfileSubmittedAdminEmailHtml({ talentName, talentEmail, reviewUrl });
+  return sendTransactionalEmail({
+    to: adminNotify,
+    subject,
+    html,
+    logLabel: 'Profile submitted (admin)',
+  });
+}
+
 module.exports = {
   sendClientActivationEmail,
   sendTalentActivationEmail,
@@ -464,6 +586,9 @@ module.exports = {
   sendTalentAssessmentReminderEmail,
   sendPasswordResetEmail,
   sendTalentAiInterviewRequestEmail,
+  sendProfileChangesRequestedEmail,
+  sendProfileApprovedEmail,
+  sendProfileSubmittedAdminEmail,
   getAppPublicUrl,
   useConsoleProvider,
 };

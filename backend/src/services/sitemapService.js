@@ -41,12 +41,22 @@ async function fetchPublicTalentProfileUrls() {
     return [];
   }
 
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('profiles')
     .select('id, updated_at, created_at, name, job_title')
+    .eq('directory_status', 'approved')
     .not('id', 'is', null)
     .not('name', 'is', null)
     .order('updated_at', { ascending: false });
+
+  if (error && String(error.message || '').toLowerCase().includes('directory_status')) {
+    ({ data, error } = await supabaseAdmin
+      .from('profiles')
+      .select('id, updated_at, created_at, name, job_title')
+      .not('id', 'is', null)
+      .not('name', 'is', null)
+      .order('updated_at', { ascending: false }));
+  }
 
   if (error) {
     console.error('[sitemap] profiles query failed:', error.message);

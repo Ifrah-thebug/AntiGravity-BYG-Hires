@@ -670,6 +670,16 @@ export default function AdminTalentImportPage() {
                                   icon={UserCircle}
                                 />
                                 <EngagementStep
+                                  done={Boolean(invite.lifecycle?.directoryApproved)}
+                                  label="Directory approved"
+                                  detail={
+                                    invite.lifecycle?.directoryStatus
+                                      ? invite.lifecycle.directoryStatus.replace(/_/g, ' ')
+                                      : null
+                                  }
+                                  icon={Award}
+                                />
+                                <EngagementStep
                                   done={testDone}
                                   label="Skills test"
                                   detail={assessmentDetail(invite)}

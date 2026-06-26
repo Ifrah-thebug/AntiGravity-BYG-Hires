@@ -13,6 +13,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { fetchAllTalentsForAdmin, downloadTalentResume } from '../../lib/adminTalent';
+import { STATUS_BADGE_CLASS, STATUS_LABELS } from '../../lib/profileReview';
 
 const TalentDetailModal = ({ talent, onClose, onDownload }) => {
   if (!talent) return null;
@@ -164,7 +165,10 @@ const AdminCandidatesPanel = () => {
       <div>
         <h1 className="text-3xl md:text-4xl font-black tracking-tight">Browse candidates</h1>
         <p className="text-gray-500 text-sm font-medium mt-2">
-          Full talent profiles, photos, and CVs from Supabase.
+          Full talent profiles, photos, and CVs from Supabase.{' '}
+          <Link to="/admin/profile-reviews" className="text-red font-black hover:underline">
+            Open profile reviews →
+          </Link>
         </p>
       </div>
 
@@ -229,6 +233,13 @@ const AdminCandidatesPanel = () => {
                       <FileText size={10} className="text-red" /> CV
                     </span>
                   )}
+                  <span
+                    className={`absolute top-3 right-3 text-[9px] font-black uppercase px-2 py-1 rounded-full border shadow-sm ${
+                      STATUS_BADGE_CLASS[talent.directoryStatus] || STATUS_BADGE_CLASS.draft
+                    }`}
+                  >
+                    {STATUS_LABELS[talent.directoryStatus] || talent.directoryStatus}
+                  </span>
                 </div>
                 <div className="p-5 space-y-3">
                   <div>

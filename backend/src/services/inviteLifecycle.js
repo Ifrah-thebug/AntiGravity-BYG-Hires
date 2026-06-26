@@ -22,7 +22,7 @@ async function fetchProfilesForInvites(invites) {
   if (userIds.length) {
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .select('user_id, id, email, name, job_title, created_at')
+      .select('user_id, id, email, name, job_title, directory_status, created_at, updated_at')
       .in('user_id', userIds);
     if (error) throw error;
     for (const row of data || []) {
@@ -35,7 +35,7 @@ async function fetchProfilesForInvites(invites) {
   for (const email of missingEmails) {
     const { data, error } = await supabaseAdmin
       .from('profiles')
-      .select('user_id, id, email, name, job_title, created_at')
+      .select('user_id, id, email, name, job_title, directory_status, created_at, updated_at')
       .ilike('email', email)
       .maybeSingle();
     if (error) throw error;
@@ -105,6 +105,8 @@ function buildLifecycleFields(invite, profile, assessmentSummary) {
     profileCompletedAt: profileComplete
       ? profile.updated_at || profile.created_at || null
       : null,
+    directoryStatus: profile?.directory_status || null,
+    directoryApproved: profile?.directory_status === 'approved',
     assessmentDone,
     assessedSkillCount: assessedCount,
     latestAssessmentAt: assessmentSummary?.latestSubmittedAt || null,

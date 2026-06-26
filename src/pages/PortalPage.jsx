@@ -35,6 +35,13 @@ import {
 } from '../lib/talentDepartments';
 import { fetchAssessmentStatus } from '../services/assessmentService';
 import { fetchVoiceInterviewStatus } from '../services/voiceInterviewService';
+import {
+  canSubmitForReview,
+  isDirectoryLive,
+  submitProfileForReview,
+  STATUS_LABELS,
+  REVIEW_ISSUE_OPTIONS,
+} from '../lib/profileReview';
 
 const INTRO_API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
 
@@ -273,6 +280,7 @@ const PortalPage = () => {
   const [newSkill, setNewSkill] = useState('');
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saved' | 'error'
   const [error, setError] = useState('');
@@ -290,7 +298,7 @@ const PortalPage = () => {
   const [interviewUnlocked, setInterviewUnlocked] = useState(false);
   const [interviewCompleted, setInterviewCompleted] = useState(false);
   const [inProgressSkill, setInProgressSkill] = useState('');
-  const justCreated = location.state?.justCreated;
+  const justSubmitted = location.state?.justSubmitted;
   const portalUploadWarnings = location.state?.uploadWarnings;
   const [showGuideModal, setShowGuideModal] = useState(false);
 
@@ -584,6 +592,27 @@ const PortalPage = () => {
     }
   };
 
+  const handleSubmitForReview = async () => {
+    setError('');
+    setSubmittingReview(true);
+    try {
+      const updated = await submitProfileForReview();
+      setProfile((p) => ({ ...p, ...updated }));
+      setSaveStatus('');
+    } catch (err) {
+      setError(err.message || 'Could not submit for review.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  const directoryStatus = profile?.directory_status || 'draft';
+  const directoryLive = isDirectoryLive(directoryStatus);
+  const showSubmitReview = canSubmitForReview(directoryStatus);
+  const reviewIssueLabels = (profile?.review_issues || [])
+    .map((code) => REVIEW_ISSUE_OPTIONS.find((o) => o.code === code)?.label || code)
+    .filter(Boolean);
+
   if (authLoading || loadingProfile) {
     return (
       <div className="bg-white min-h-screen pt-28 flex items-center justify-center">
@@ -612,25 +641,78 @@ const PortalPage = () => {
           </div>
         )}
 
-        {justCreated && (
+        {justSubmitted && (
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
-            className="bg-green-50 border border-green-200 rounded-2xl p-5 flex items-center gap-4"
+            className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-center gap-4"
           >
-            <CheckCircle2 size={24} className="text-green-600 shrink-0" />
+            <CheckCircle2 size={24} className="text-amber-600 shrink-0" />
             <div>
-              <p className="font-black text-green-800 text-sm">Profile created! Welcome to the talent pool.</p>
-              <p className="text-green-600 text-xs font-medium mt-0.5">
-                Your profile is now live at{' '}
-                {profile?.id && (
-                  <Link to={`/talent/${profile.id}`} className="underline font-bold">
-                    /talent/{profile.id}
-                  </Link>
-                )}
+              <p className="font-black text-amber-900 text-sm">Profile submitted for review</p>
+              <p className="text-amber-800 text-xs font-medium mt-0.5">
+                You are on our waitlist. We will email you when your profile is approved for the talent directory.
               </p>
             </div>
           </motion.div>
         )}
+
+        {directoryStatus === 'pending_review' && !justSubmitted && (
+          <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex items-start gap-4">
+            <AlertTriangle size={22} className="text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-black text-amber-900 text-sm">On waitlist — pending admin review</p>
+              <p className="text-amber-800 text-xs font-medium mt-1">
+                Your profile is not visible on the talent directory yet. We typically review within a few business days.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {directoryStatus === 'changes_requested' && (
+          <div className="bg-orange-50 border border-orange-200 rounded-2xl p-5 space-y-3">
+            <div className="flex items-start gap-4">
+              <AlertTriangle size={22} className="text-orange-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-black text-orange-900 text-sm">Updates required before going live</p>
+                <p className="text-orange-800 text-xs font-medium mt-1">
+                  Please fix the items below, save your changes, then submit for review again.
+                </p>
+              </div>
+            </div>
+            {reviewIssueLabels.length > 0 && (
+              <ul className="text-xs font-semibold text-orange-900 list-disc pl-5 space-y-1">
+                {reviewIssueLabels.map((label) => (
+                  <li key={label}>{label}</li>
+                ))}
+              </ul>
+            )}
+            {profile?.review_notes && (
+              <p className="text-xs font-medium text-orange-900 bg-white/60 rounded-xl p-3 border border-orange-100">
+                {profile.review_notes}
+              </p>
+            )}
+          </div>
+        )}
+
+        {directoryLive && (
+          <div className="bg-green-50 border border-green-200 rounded-2xl p-5 flex items-center gap-4">
+            <CheckCircle2 size={24} className="text-green-600 shrink-0" />
+            <div>
+              <p className="font-black text-green-800 text-sm">Profile live on talent directory</p>
+              <p className="text-green-700 text-xs font-medium mt-0.5">
+                {profile?.id && (
+                  <>
+                    Clients can find you at{' '}
+                    <Link to={`/talent/${profile.id}`} className="underline font-bold">
+                      /talent/{profile.id}
+                    </Link>
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
 
         {/* ── Header Card (full width) ── */}
         <motion.div
@@ -671,7 +753,7 @@ const PortalPage = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full">
-            {profile?.id && (
+            {profile?.id && directoryLive && (
               <Link
                 to={`/talent/${profile.id}`}
                 target="_blank"
@@ -873,19 +955,39 @@ const PortalPage = () => {
             </div>
           )}
 
-          {/* Save button */}
+          {/* Save + submit */}
+          <div className="space-y-3">
           <button
             onClick={handleSave}
-            disabled={saving || uploadingPhoto || photoProcessing}
+            disabled={saving || uploadingPhoto || photoProcessing || submittingReview}
             className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-              !saving && !uploadingPhoto && !photoProcessing
+              !saving && !uploadingPhoto && !photoProcessing && !submittingReview
                 ? 'bg-black text-white hover:bg-red cursor-pointer shadow-lg'
                 : 'bg-gray-100 text-gray-400 cursor-not-allowed'
             }`}
           >
             {photoProcessing ? 'Processing photo…' : uploadingPhoto ? 'Uploading photo…' : saving ? 'Saving…' : 'Save Changes'}
-            {!saving && !uploadingPhoto && !photoProcessing && <Save size={14} />}
+            {!saving && !uploadingPhoto && !photoProcessing && !submittingReview && <Save size={14} />}
           </button>
+
+          {showSubmitReview && (
+            <button
+              type="button"
+              onClick={handleSubmitForReview}
+              disabled={submittingReview || saving || photoProcessing}
+              className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 bg-red text-white hover:bg-black disabled:opacity-50"
+            >
+              {submittingReview ? 'Submitting…' : 'Submit for review'}
+              {!submittingReview && <ArrowRight size={14} />}
+            </button>
+          )}
+
+          {directoryStatus === 'pending_review' && (
+            <p className="text-center text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+              Status: {STATUS_LABELS.pending_review}
+            </p>
+          )}
+          </div>
         </motion.div>
 
         {/* ── Intro scheduling (availability + booked calls) ── */}
