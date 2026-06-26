@@ -5,9 +5,10 @@ import { normalizeTalentDepartment } from './talentDepartments';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
 import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 import { isDirectoryStatusColumnMissing } from './profileDirectoryCompat';
+import { photoUrlForDisplay } from './talentStorage';
 
 export const LIVE_PROFILE_COLUMNS =
-  'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, created_at';
+  'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, created_at, updated_at';
 
 export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap = {}) {
   const skills = profile.skills || [];
@@ -15,7 +16,7 @@ export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap =
   return {
     id: profile.id,
     name: formatDisplayName(profile.name) || 'Anonymous',
-    photo: profile.photo_url || null,
+    photo: photoUrlForDisplay(profile.photo_url, profile.updated_at || profile.created_at) || null,
     score: 0,
     verified: false,
     aiInterviewVerified: Boolean(aiMeta.aiInterviewVerified),

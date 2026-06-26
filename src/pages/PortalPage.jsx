@@ -35,6 +35,7 @@ import {
 } from '../lib/talentDepartments';
 import { fetchAssessmentStatus } from '../services/assessmentService';
 import { fetchVoiceInterviewStatus } from '../services/voiceInterviewService';
+import { withPhotoCacheBust, photoUrlForDisplay } from '../lib/talentStorage';
 import {
   canSubmitForReview,
   isDirectoryLive,
@@ -518,69 +519,77 @@ const PortalPage = () => {
     setUploadingPhoto(false);
     if (upErr) { setError('Photo upload failed: ' + upErr.message); return null; }
     const { data } = supabase.storage.from('talent-files').getPublicUrl(path);
-    return data.publicUrl;
+    return withPhotoCacheBust(data.publicUrl);
+  };
+
+  const persistProfileChanges = async () => {
+    const prepared = prepareProfileForSave(form);
+    if (!prepared.ok) {
+      throw new Error(formatProfileValidationErrors(prepared.errors));
+    }
+
+    let photoUrl = profile?.photo_url || '';
+    if (uploadedPhotoFile) {
+      const uploaded = await uploadPhoto();
+      if (!uploaded) {
+        throw new Error('Photo upload failed. Please try again.');
+      }
+      photoUrl = uploaded;
+    }
+
+    const { error: dbErr } = await supabase
+      .from('profiles')
+      .upsert({
+        user_id: user.id,
+        email: user.email,
+        name: prepared.data.name,
+        job_title: prepared.data.job_title,
+        about: prepared.data.about,
+        experience_years: prepared.data.experience_years,
+        monthly_fee_usd: prepared.data.monthly_fee_usd,
+        directory_fee_usd: prepared.data.directory_fee_usd,
+        availability: prepared.data.availability,
+        role_type: prepared.data.role_type,
+        department: prepared.data.department,
+        skills: prepared.data.skills,
+        best_skill: prepared.data.best_skill,
+        photo_url: photoUrl,
+        cv_url: profile?.cv_url || '',
+      }, { onConflict: 'user_id' });
+
+    if (dbErr) throw new Error(dbErr.message);
+
+    setProfile((p) => (p ? { ...p, photo_url: photoUrl, updated_at: new Date().toISOString() } : p));
+
+    setForm((f) => ({
+      ...f,
+      name: prepared.data.name,
+      job_title: prepared.data.job_title,
+      about: prepared.data.about,
+      skills: prepared.data.skills,
+      best_skill: prepared.data.best_skill,
+      experience_years: prepared.data.experience_years,
+      monthly_fee_usd: prepared.data.monthly_fee_usd,
+      directory_fee_usd: prepared.data.directory_fee_usd,
+      availability: prepared.data.availability,
+      availability_from_month:
+        prepared.data.availability && /^\d{4}-\d{2}-\d{2}$/.test(prepared.data.availability)
+          ? prepared.data.availability
+          : '',
+      role_type: prepared.data.role_type,
+      department: prepared.data.department,
+    }));
+
+    clearPhoto();
+    return photoUrl;
   };
 
   const handleSave = async () => {
     setError('');
     setSaveStatus('');
-    const prepared = prepareProfileForSave(form);
-    if (!prepared.ok) {
-      setError(formatProfileValidationErrors(prepared.errors));
-      setSaveStatus('error');
-      return;
-    }
-
     setSaving(true);
     try {
-      let photoUrl = profile?.photo_url || '';
-      if (uploadedPhotoFile) {
-        const uploaded = await uploadPhoto();
-        if (uploaded) photoUrl = uploaded;
-      }
-
-      const { error: dbErr } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: user.id,
-          email: user.email,
-          name: prepared.data.name,
-          job_title: prepared.data.job_title,
-          about: prepared.data.about,
-          experience_years: prepared.data.experience_years,
-          monthly_fee_usd: prepared.data.monthly_fee_usd,
-          directory_fee_usd: prepared.data.directory_fee_usd,
-          availability: prepared.data.availability,
-          role_type: prepared.data.role_type,
-          department: prepared.data.department,
-          skills: prepared.data.skills,
-          best_skill: prepared.data.best_skill,
-          photo_url: photoUrl,
-          cv_url: profile?.cv_url || '',
-        }, { onConflict: 'user_id' });
-
-      if (dbErr) throw new Error(dbErr.message);
-
-      setForm((f) => ({
-        ...f,
-        name: prepared.data.name,
-        job_title: prepared.data.job_title,
-        about: prepared.data.about,
-          skills: prepared.data.skills,
-          best_skill: prepared.data.best_skill,
-          experience_years: prepared.data.experience_years,
-        monthly_fee_usd: prepared.data.monthly_fee_usd,
-        directory_fee_usd: prepared.data.directory_fee_usd,
-        availability: prepared.data.availability,
-        availability_from_month:
-          prepared.data.availability && /^\d{4}-\d{2}-\d{2}$/.test(prepared.data.availability)
-            ? prepared.data.availability
-            : '',
-        role_type: prepared.data.role_type,
-        department: prepared.data.department,
-      }));
-
-      clearPhoto();
+      await persistProfileChanges();
       await fetchProfile();
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus(''), 3000);
@@ -594,11 +603,13 @@ const PortalPage = () => {
 
   const handleSubmitForReview = async () => {
     setError('');
+    setSaveStatus('');
     setSubmittingReview(true);
     try {
+      await persistProfileChanges();
       const updated = await submitProfileForReview();
       setProfile((p) => ({ ...p, ...updated }));
-      setSaveStatus('');
+      await fetchProfile();
     } catch (err) {
       setError(err.message || 'Could not submit for review.');
     } finally {
@@ -627,7 +638,8 @@ const PortalPage = () => {
     ? form.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
   const hue = form.name ? (form.name.charCodeAt(0) * 37 + (form.name.charCodeAt(1) || 0) * 17) % 360 : 200;
-  const displayPhoto = photoPreview || profile?.photo_url || '';
+  const displayPhoto =
+    photoPreview || photoUrlForDisplay(profile?.photo_url, profile?.updated_at) || '';
 
   return (
     <div className="bg-white min-h-screen pt-20 sm:pt-24 pb-16 sm:pb-24 px-3 sm:px-4 font-sans">
@@ -675,7 +687,7 @@ const PortalPage = () => {
               <div>
                 <p className="font-black text-orange-900 text-sm">Updates required before going live</p>
                 <p className="text-orange-800 text-xs font-medium mt-1">
-                  Please fix the items below, save your changes, then submit for review again.
+                  Please fix the items below, then use <strong>Save &amp; submit for review</strong> — your edits are saved and sent to admin in one step.
                 </p>
               </div>
             </div>
@@ -951,35 +963,51 @@ const PortalPage = () => {
           {uploadedPhotoFile && !photoProcessing && (
             <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-2xl p-4 text-sm text-green-800 font-bold">
               <CheckCircle2 size={16} className="shrink-0 text-green-600" />
-              Professional photo ready — save to update your profile.
+              {showSubmitReview
+                ? 'New photo ready — it will be saved when you submit for review.'
+                : 'Professional photo ready — save to update your profile.'}
             </div>
           )}
 
           {/* Save + submit */}
           <div className="space-y-3">
+          {showSubmitReview ? (
+            <button
+              type="button"
+              onClick={handleSubmitForReview}
+              disabled={submittingReview || saving || uploadingPhoto || photoProcessing}
+              className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 bg-red text-white hover:bg-black disabled:opacity-50 shadow-lg"
+            >
+              {submittingReview
+                ? 'Saving & submitting…'
+                : uploadingPhoto
+                  ? 'Uploading photo…'
+                  : photoProcessing
+                    ? 'Processing photo…'
+                    : 'Save & submit for review'}
+              {!submittingReview && !uploadingPhoto && !photoProcessing && <ArrowRight size={14} />}
+            </button>
+          ) : null}
+
           <button
             onClick={handleSave}
             disabled={saving || uploadingPhoto || photoProcessing || submittingReview}
             className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-all ${
-              !saving && !uploadingPhoto && !photoProcessing && !submittingReview
-                ? 'bg-black text-white hover:bg-red cursor-pointer shadow-lg'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-            }`}
+              showSubmitReview
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 border border-gray-200'
+                : !saving && !uploadingPhoto && !photoProcessing && !submittingReview
+                  ? 'bg-black text-white hover:bg-red cursor-pointer shadow-lg'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+            } ${saving || uploadingPhoto || photoProcessing || submittingReview ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
-            {photoProcessing ? 'Processing photo…' : uploadingPhoto ? 'Uploading photo…' : saving ? 'Saving…' : 'Save Changes'}
+            {photoProcessing ? 'Processing photo…' : uploadingPhoto ? 'Uploading photo…' : saving ? 'Saving…' : showSubmitReview ? 'Save changes only' : 'Save Changes'}
             {!saving && !uploadingPhoto && !photoProcessing && !submittingReview && <Save size={14} />}
           </button>
 
           {showSubmitReview && (
-            <button
-              type="button"
-              onClick={handleSubmitForReview}
-              disabled={submittingReview || saving || photoProcessing}
-              className="w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 bg-red text-white hover:bg-black disabled:opacity-50"
-            >
-              {submittingReview ? 'Submitting…' : 'Submit for review'}
-              {!submittingReview && <ArrowRight size={14} />}
-            </button>
+            <p className="text-center text-[10px] font-medium text-gray-500">
+              Use <span className="font-bold">Save changes only</span> if you are not ready to resubmit yet.
+            </p>
           )}
 
           {directoryStatus === 'pending_review' && (

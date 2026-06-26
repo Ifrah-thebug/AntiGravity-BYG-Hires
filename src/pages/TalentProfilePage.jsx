@@ -14,7 +14,7 @@ import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
-import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
+import { photoUrlForDisplay } from '../lib/talentStorage';
 
 const TalentProfilePage = () => {
   const { id } = useParams();
@@ -76,6 +76,7 @@ const TalentProfilePage = () => {
   }
 
   const { id: profileId, name, job_title, about, skills, experience_years, photo_url, best_skill } = profile;
+  const displayPhotoUrl = photoUrlForDisplay(photo_url, profile.updated_at || profile.created_at);
   const displayTalent = sanitizeTalentForPublicDisplay({
     bestSkill: best_skill || skills?.[0],
     tags: skills || [],
@@ -128,9 +129,9 @@ const TalentProfilePage = () => {
             <div className="flex flex-col md:flex-row items-start gap-8">
               {/* Photo */}
               <div className="shrink-0">
-                {photo_url ? (
+                {displayPhotoUrl ? (
                   <img
-                    src={photo_url} alt={name}
+                    src={displayPhotoUrl} alt={name}
                     className="w-40 h-40 md:w-48 md:h-48 rounded-3xl object-cover object-top border-2 border-white/10 shadow-2xl"
                   />
                 ) : (
