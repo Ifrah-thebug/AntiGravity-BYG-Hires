@@ -90,7 +90,6 @@ const TalentProfileCard = ({ profile }) => {
           )}
         </div>
 
-        {/* CTA */}
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -1,0 +1,578 @@
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Plus, Trash2, ExternalLink, Eye, EyeOff,
+  Link2, Image as ImageIcon, Loader2, ChevronUp, ChevronDown, Pencil, BookOpen, Copy, Check,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import {
+  createPortfolioProject,
+  deletePortfolioProject,
+  fetchOwnPortfolioProjects,
+  isValidProjectUrl,
+  normalizeProjectUrl,
+  reorderPortfolioProjects,
+  updatePortfolioProject,
+} from '../lib/talentPortfolio';
+import { uploadPortfolioCover } from '../lib/talentStorage';
+
+const emptyDraft = () => ({
+  title: '',
+  description: '',
+  project_url: '',
+  tagsInput: '',
+  published: true,
+});
+
+export default function PortalPortfolioEditor({
+  profileId,
+  userId,
+  autoOpenAdd = false,
+  openAddSignal = 0,
+  onAutoOpenHandled,
+  onProjectsChange,
+  embedded = false,
+}) {
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [draft, setDraft] = useState(emptyDraft());
+  const [coverFile, setCoverFile] = useState(null);
+  const [coverPreview, setCoverPreview] = useState('');
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const loadProjects = useCallback(async () => {
+    if (!profileId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const rows = await fetchOwnPortfolioProjects(profileId);
+      setProjects(rows);
+    } catch (e) {
+      setError(e.message || 'Failed to load portfolio.');
+    } finally {
+      setLoading(false);
+    }
+  }, [profileId]);
+
+  useEffect(() => {
+    loadProjects();
+  }, [loadProjects]);
+
+  const notifyChange = useCallback(() => {
+    onProjectsChange?.();
+  }, [onProjectsChange]);
+
+  useEffect(() => {
+    if (!autoOpenAdd) return;
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setCoverFile(null);
+    setShowForm(true);
+    onAutoOpenHandled?.();
+  }, [autoOpenAdd, onAutoOpenHandled]);
+
+  useEffect(() => {
+    if (!openAddSignal) return;
+    openAddForm();
+  }, [openAddSignal]);
+
+  useEffect(() => {
+    if (!coverFile) {
+      setCoverPreview('');
+      return undefined;
+    }
+    const url = URL.createObjectURL(coverFile);
+    setCoverPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
+
+  const resetForm = () => {
+    setDraft(emptyDraft());
+    setCoverFile(null);
+    setEditingId(null);
+    setShowForm(false);
+    setError('');
+  };
+
+  const startEdit = (project) => {
+    setEditingId(project.id);
+    setDraft({
+      title: project.title || '',
+      description: project.description || '',
+      project_url: project.project_url || '',
+      tagsInput: (project.tags || []).join(', '),
+      published: project.published !== false,
+    });
+    setCoverFile(null);
+    setCoverPreview('');
+    setShowForm(true);
+    setError('');
+  };
+
+  function openAddForm() {
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setCoverFile(null);
+    setShowForm(true);
+    setError('');
+  }
+
+  const parseTags = (input) =>
+    String(input || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+
+  const handleSave = async (e) => {
+    e.preventDefault();
+    if (!profileId || !userId) return;
+
+    const title = draft.title.trim();
+    if (!title) {
+      setError('Project title is required.');
+      return;
+    }
+    if (draft.project_url && !isValidProjectUrl(draft.project_url)) {
+      setError('Enter a valid project URL (https://…).');
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    try {
+      const tags = parseTags(draft.tagsInput);
+      const fields = {
+        title,
+        description: draft.description.trim(),
+        project_url: draft.project_url,
+        tags,
+        published: draft.published,
+      };
+
+      if (editingId) {
+        let updated = await updatePortfolioProject(editingId, fields);
+        if (coverFile) {
+          const coverUrl = await uploadPortfolioCover(userId, editingId, coverFile);
+          updated = await updatePortfolioProject(editingId, { cover_image_url: coverUrl });
+        }
+        setProjects((prev) => prev.map((p) => (p.id === editingId ? updated : p)));
+      } else {
+        let created = await createPortfolioProject({
+          profileId,
+          userId,
+          title,
+          description: fields.description,
+          projectUrl: draft.project_url,
+          tags,
+          published: draft.published,
+        });
+
+        if (coverFile) {
+          const coverUrl = await uploadPortfolioCover(userId, created.id, coverFile);
+          created = await updatePortfolioProject(created.id, { cover_image_url: coverUrl });
+        }
+
+        setProjects((prev) => [...prev, created]);
+      }
+
+      resetForm();
+      notifyChange();
+    } catch (err) {
+      setError(err.message || `Failed to ${editingId ? 'update' : 'save'} project.`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTogglePublished = async (project) => {
+    try {
+      const updated = await updatePortfolioProject(project.id, { published: !project.published });
+      setProjects((prev) => prev.map((p) => (p.id === project.id ? updated : p)));
+      notifyChange();
+    } catch (e) {
+      setError(e.message || 'Failed to update project.');
+    }
+  };
+
+  const handleDelete = async (projectId) => {
+    if (!window.confirm('Delete this portfolio project?')) return;
+    try {
+      await deletePortfolioProject(projectId);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      notifyChange();
+    } catch (e) {
+      setError(e.message || 'Failed to delete project.');
+    }
+  };
+
+  const moveProject = async (index, direction) => {
+    const next = index + direction;
+    if (next < 0 || next >= projects.length) return;
+    const ordered = [...projects];
+    const [item] = ordered.splice(index, 1);
+    ordered.splice(next, 0, item);
+    setProjects(ordered);
+    try {
+      await reorderPortfolioProjects(profileId, ordered.map((p) => p.id));
+      notifyChange();
+    } catch (e) {
+      setError(e.message || 'Failed to reorder.');
+      loadProjects();
+    }
+  };
+
+  if (!profileId) return null;
+
+  const publishedCount = projects.filter((p) => p.published).length;
+  const draftCount = projects.filter((p) => !p.published).length;
+  const portfolioUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/talent/${profileId}/portfolio`
+    : `/talent/${profileId}/portfolio`;
+
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(portfolioUrl);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const shellClass = embedded
+    ? 'bg-[#fffbf5] border border-[#e8dcc8] shadow-[0_12px_48px_-16px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.9)] rounded-sm p-5 sm:p-8 space-y-6'
+    : 'bg-white border border-gray-200 rounded-[1.5rem] sm:rounded-[2rem] overflow-hidden';
+
+  const formBlock = showForm && (
+    <form onSubmit={handleSave} className="space-y-4 p-5 sm:p-6 bg-gray-50 border border-gray-100 rounded-2xl">
+      <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+        {editingId ? 'Edit project' : 'New project'}
+      </p>
+      <div className="space-y-1.5">
+        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Project Title *</label>
+        <input
+          value={draft.title}
+          onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+          placeholder="e.g. E-commerce Redesign"
+          className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red outline-none"
+        />
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Description</label>
+        <textarea
+          value={draft.description}
+          onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+          rows={3}
+          placeholder="What you built, your role, and the outcome."
+          className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red outline-none resize-none"
+        />
+      </div>
+
+      <div className="grid sm:grid-cols-2 gap-4">
+        <div className="space-y-1.5">
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+            <Link2 size={11} /> Live Work Link
+          </label>
+          <input
+            value={draft.project_url}
+            onChange={(e) => setDraft((d) => ({ ...d, project_url: e.target.value }))}
+            placeholder="https://github.com/…"
+            className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red outline-none"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Tags</label>
+          <input
+            value={draft.tagsInput}
+            onChange={(e) => setDraft((d) => ({ ...d, tagsInput: e.target.value }))}
+            placeholder="React, UI Design, SaaS"
+            className="block w-full px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:border-red outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+          <ImageIcon size={11} /> Cover Image
+        </label>
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => setCoverFile(e.target.files?.[0] || null)}
+          className="block w-full text-xs font-medium text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-black file:text-white file:font-black file:text-[10px] file:uppercase file:tracking-widest"
+        />
+        {coverPreview ? (
+          <img src={coverPreview} alt="" className="mt-2 w-full max-h-40 object-cover rounded-xl border border-gray-200" />
+        ) : editingId && projects.find((p) => p.id === editingId)?.cover_image_url ? (
+          <img
+            src={projects.find((p) => p.id === editingId).cover_image_url}
+            alt=""
+            className="mt-2 w-full max-h-40 object-cover rounded-xl border border-gray-200"
+          />
+        ) : null}
+      </div>
+
+      <label className="flex items-center gap-2 text-xs font-bold text-gray-600 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={draft.published}
+          onChange={(e) => setDraft((d) => ({ ...d, published: e.target.checked }))}
+          className="rounded border-gray-300 text-red focus:ring-red"
+        />
+        Publish on portfolio page
+      </label>
+
+      <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <button
+          type="submit"
+          disabled={saving}
+          className="flex-1 py-3 bg-black hover:bg-red text-white font-black text-[10px] uppercase tracking-widest rounded-xl disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+          {saving ? 'Saving…' : editingId ? 'Update project' : 'Save project'}
+        </button>
+        <button
+          type="button"
+          onClick={resetForm}
+          className="px-5 py-3 bg-white border border-gray-200 text-gray-600 font-black text-[10px] uppercase tracking-widest rounded-xl hover:border-gray-400"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+
+  const projectList = loading ? (
+    <div className="flex justify-center py-10">
+      <Loader2 size={24} className="animate-spin text-gray-300" />
+    </div>
+  ) : projects.length === 0 ? (
+    <div className="text-center py-10 px-4 border border-dashed border-gray-200 rounded-2xl bg-gray-50/50">
+      <BookOpen size={32} className="mx-auto text-gray-300 mb-3" strokeWidth={1.5} />
+      <p className="text-sm font-bold text-gray-500">No chapters yet</p>
+      <p className="text-xs text-gray-400 mt-1">Add your first project to appear on your storybook.</p>
+      {!showForm && (
+        <button
+          type="button"
+          onClick={openAddForm}
+          className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-black hover:bg-red text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-colors"
+        >
+          <Plus size={14} /> Add first project
+        </button>
+      )}
+    </div>
+  ) : (
+    <ul className="space-y-3">
+      {projects.map((project, index) => (
+        <li
+          key={project.id}
+          className="group rounded-2xl border border-gray-100 bg-white hover:border-gray-200 hover:shadow-sm transition-all overflow-hidden"
+        >
+          <div className="flex flex-col sm:flex-row">
+            <div className="flex items-center gap-3 p-4 sm:p-0 sm:contents">
+              {project.cover_image_url ? (
+                <img
+                  src={project.cover_image_url}
+                  alt=""
+                  className="w-20 h-20 sm:w-24 sm:h-auto sm:min-h-[6.5rem] rounded-xl sm:rounded-none object-cover border border-gray-100 sm:border-0 shrink-0"
+                />
+              ) : (
+                <div className="w-20 h-20 sm:w-24 sm:min-h-[6.5rem] rounded-xl sm:rounded-none bg-gray-50 border border-gray-100 sm:border-0 flex items-center justify-center shrink-0">
+                  <ImageIcon size={22} className="text-gray-300" />
+                </div>
+              )}
+
+              <div className="flex-1 min-w-0 sm:px-5 sm:py-4">
+                <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                    Ch. {index + 1}
+                  </span>
+                  <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${
+                    project.published
+                      ? 'bg-green-50 text-green-700 border border-green-100'
+                      : 'bg-amber-50 text-amber-700 border border-amber-100'
+                  }`}>
+                    {project.published ? 'Published' : 'Draft'}
+                  </span>
+                </div>
+                <p className="font-black text-sm sm:text-base text-gray-900 break-words">{project.title}</p>
+                {project.project_url && (
+                  <a
+                    href={normalizeProjectUrl(project.project_url)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] font-semibold text-gray-400 hover:text-red truncate block mt-0.5"
+                  >
+                    {project.project_url.replace(/^https?:\/\//, '')}
+                  </a>
+                )}
+                {project.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {project.tags.slice(0, 3).map((tag) => (
+                      <span key={tag} className="px-2 py-0.5 bg-gray-50 text-gray-500 text-[9px] font-bold uppercase rounded-md">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between sm:justify-end gap-1 px-4 pb-4 sm:pb-0 sm:px-4 sm:py-4 border-t sm:border-t-0 border-gray-50 sm:flex-col sm:justify-center">
+              <div className="flex sm:flex-col gap-0.5">
+                <button
+                  type="button"
+                  onClick={() => moveProject(index, -1)}
+                  disabled={index === 0}
+                  className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-50 disabled:opacity-30"
+                  aria-label="Move up"
+                >
+                  <ChevronUp size={15} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => moveProject(index, 1)}
+                  disabled={index === projects.length - 1}
+                  className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-50 disabled:opacity-30"
+                  aria-label="Move down"
+                >
+                  <ChevronDown size={15} />
+                </button>
+              </div>
+              <div className="flex gap-0.5">
+                <button type="button" onClick={() => startEdit(project)} className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-50" title="Edit">
+                  <Pencil size={16} />
+                </button>
+                <button type="button" onClick={() => handleTogglePublished(project)} className="p-2 rounded-lg text-gray-400 hover:text-black hover:bg-gray-50" title={project.published ? 'Unpublish' : 'Publish'}>
+                  {project.published ? <Eye size={16} /> : <EyeOff size={16} />}
+                </button>
+                {project.project_url && (
+                  <a href={normalizeProjectUrl(project.project_url)} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg text-gray-400 hover:text-red hover:bg-gray-50">
+                    <ExternalLink size={16} />
+                  </a>
+                )}
+                <button type="button" onClick={() => handleDelete(project.id)} className="p-2 rounded-lg text-gray-400 hover:text-red hover:bg-red/5">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+
+  if (embedded) {
+    return (
+      <div className={shellClass}>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div>
+            <h3 className="font-black text-sm uppercase tracking-widest text-gray-800">Chapter studio</h3>
+            <p className="text-[11px] text-gray-500 font-medium mt-1 leading-relaxed max-w-xl">
+              Add and edit project chapters here — published ones appear in the storybook above.
+            </p>
+          </div>
+          {!showForm && (
+            <button type="button" onClick={openAddForm} className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-black hover:bg-red text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-colors shrink-0">
+              <Plus size={14} /> Add project
+            </button>
+          )}
+        </div>
+        {error && <div className="p-3 bg-red/5 border border-red/20 text-red rounded-xl text-xs font-semibold">{error}</div>}
+        {formBlock}
+        {projectList}
+      </div>
+    );
+  }
+
+  return (
+    <div className={shellClass}>
+      {/* Header */}
+      <div className="px-5 sm:px-8 pt-6 sm:pt-8 pb-5 border-b border-gray-100 bg-gradient-to-br from-gray-50/80 to-white">
+        <p className="text-[10px] font-black text-red uppercase tracking-[0.2em] mb-1 flex items-center gap-1.5">
+          <BookOpen size={12} /> Storybook portfolio
+        </p>
+        <h3 className="font-black text-xl text-gray-900 tracking-tight">Project chapters</h3>
+        <p className="text-xs text-gray-500 font-medium mt-1.5 max-w-2xl leading-relaxed">
+          Each project becomes a chapter on your portfolio story. Add a cover, description, and link — then publish when ready.
+        </p>
+
+        <div className="flex flex-wrap gap-2 mt-4">
+          <span className="px-3 py-1 bg-white border border-gray-200 rounded-full text-[10px] font-black text-gray-600 uppercase tracking-widest">
+            {projects.length} total
+          </span>
+          <span className="px-3 py-1 bg-green-50 border border-green-100 rounded-full text-[10px] font-black text-green-700 uppercase tracking-widest">
+            {publishedCount} live
+          </span>
+          {draftCount > 0 && (
+            <span className="px-3 py-1 bg-amber-50 border border-amber-100 rounded-full text-[10px] font-black text-amber-700 uppercase tracking-widest">
+              {draftCount} draft{draftCount === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Toolbar */}
+      <div className="px-5 sm:px-8 py-4 flex flex-col sm:flex-row sm:items-center gap-3 border-b border-gray-50">
+        {!showForm ? (
+          <button
+            type="button"
+            onClick={openAddForm}
+            className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-black hover:bg-red text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-colors"
+          >
+            <Plus size={14} /> Add project
+          </button>
+        ) : (
+          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Editing chapter…</p>
+        )}
+        <div className="flex flex-wrap gap-2 sm:ml-auto">
+          <Link
+            to={`/talent/${profileId}/portfolio`}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-black border border-gray-200 rounded-xl hover:border-gray-300 bg-white transition-colors"
+          >
+            <BookOpen size={13} /> Open storybook
+          </Link>
+          <Link
+            to={`/talent/${profileId}/portfolio?preview=visitor`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-black border border-gray-200 rounded-xl hover:border-gray-300 bg-white transition-colors"
+          >
+            <Eye size={13} /> Preview
+          </Link>
+        </div>
+      </div>
+
+      {/* Share link */}
+      <div className="px-5 sm:px-8 py-3 border-b border-gray-50">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 bg-gray-50 rounded-xl">
+          <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">Share when live</span>
+          <p className="flex-1 text-[11px] font-semibold text-gray-500 truncate">{portfolioUrl}</p>
+          <button
+            type="button"
+            onClick={copyShareLink}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-2 bg-white border border-gray-200 rounded-lg text-[10px] font-black uppercase tracking-widest text-gray-600 hover:border-black hover:text-black transition-colors shrink-0"
+          >
+            {linkCopied ? <Check size={12} className="text-green-600" /> : <Copy size={12} />}
+            {linkCopied ? 'Copied' : 'Copy'}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-5 sm:px-8 py-5 sm:py-6 space-y-5">
+        {error && (
+          <div className="p-3 bg-red/5 border border-red/20 text-red rounded-xl text-xs font-semibold">
+            {error}
+          </div>
+        )}
+        {formBlock}
+        {projectList}
+      </div>
+    </div>
+  );
+}

@@ -58,6 +58,7 @@ import LoginPage from './pages/LoginPage';
 import TalentSetupPage from './pages/TalentSetupPage';
 import TalentDirectoryPage from './pages/TalentDirectoryPage';
 import TalentProfilePage from './pages/TalentProfilePage';
+import TalentPortfolioPage from './pages/TalentPortfolioPage';
 import PortalPage from './pages/PortalPage';
 import AdminLoginPage from './pages/AdminLoginPage';
 import AdminSignupPage from './pages/AdminSignupPage';
@@ -98,6 +99,7 @@ const AppContent = () => {
     location.pathname === '/talent/activate' ||
     location.pathname === '/client' ||
     location.pathname.startsWith('/client/');
+  const isPortfolioPage = /\/talent\/[^/]+\/portfolio$/.test(location.pathname);
 
   // One-time cleanup: remove any test/Ifrah profiles from localStorage
   useEffect(() => {
@@ -174,6 +176,7 @@ const AppContent = () => {
           <Route path="/talent/login" element={<Navigate to="/login" replace />} />
           <Route path="/talent/activate" element={<TalentActivatePage />} />
           <Route path="/talent/setup" element={<TalentSetupPage />} />
+          <Route path="/talent/:id/portfolio" element={<TalentPortfolioPage />} />
           <Route path="/talent/:id" element={<TalentProfilePage />} />
           <Route path="/portal" element={<PortalPage />} />
           <Route path="/client/activate" element={<ClientActivatePage />} />
@@ -182,7 +185,7 @@ const AppContent = () => {
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
-      {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && <Footer />}
+      {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && !isPortfolioPage && <Footer />}
       {/* Sandbox Debug Overlay Widgets - visible only with ?debug=true */}
       {debug && (
         <>

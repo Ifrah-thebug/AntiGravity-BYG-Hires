@@ -3,13 +3,15 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star } from 'lucide-react';
+import { ArrowLeft, Briefcase, ArrowRight, CheckCircle2, Star, Layers } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatDisplayName, formatFirstName } from '../lib/formatDisplayName';
 import { useAuth } from '../context/AuthContext';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { isDirectoryLive } from '../lib/profileReview';
+import { PUBLIC_PORTFOLIO_ENABLED } from '../lib/portfolioFeature';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
+import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 import { scoreBadgeClass } from '../lib/skillAssessmentDisplay';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
@@ -91,6 +93,7 @@ const TalentProfilePage = () => {
 
   const isOwner = Boolean(user?.id && profile?.user_id === user.id);
   const directoryLive = isDirectoryLive(profile?.directory_status);
+  const showPortfolioLink = PUBLIC_PORTFOLIO_ENABLED || isOwner;
 
   return (
     <div className="bg-white min-h-screen pt-24 pb-24 font-sans">
@@ -156,6 +159,16 @@ const TalentProfilePage = () => {
                   <div className="flex items-center gap-2 text-gray-400 text-sm font-semibold">
                     <Briefcase size={14} />
                     <span>{experience_years} years of experience</span>
+                  </div>
+                )}
+                {showPortfolioLink && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Link
+                      to={`/talent/${profileId}/portfolio`}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 bg-red hover:bg-white hover:text-black text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all"
+                    >
+                      <Layers size={12} /> View Portfolio
+                    </Link>
                   </div>
                 )}
               </div>
@@ -239,7 +252,15 @@ const TalentProfilePage = () => {
             <p className="font-black text-black text-lg">Ready to bring {firstName} on board?</p>
             <p className="text-gray-500 text-sm font-medium mt-1">Let us make the introduction — we handle the matching process.</p>
           </div>
-          <div className="flex gap-3 shrink-0">
+          <div className="flex gap-3 shrink-0 flex-wrap justify-center md:justify-end">
+            {showPortfolioLink && (
+              <Link
+                to={`/talent/${profileId}/portfolio`}
+                className="px-6 py-3.5 bg-white border-2 border-black text-black font-black text-xs uppercase tracking-widest rounded-xl hover:bg-black hover:text-white transition-colors flex items-center gap-2"
+              >
+                <Layers size={12} /> View Portfolio
+              </Link>
+            )}
             {canRequestIntro && (
               <Link
                 to={`/request-intro?id=${profileId}`}

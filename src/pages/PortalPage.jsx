@@ -6,9 +6,10 @@ import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   Save, AlertTriangle, CheckCircle2,
   ExternalLink, Camera, Award, TrendingUp, ClipboardCheck,
-  Sparkles, ArrowRight, Calendar, Video, Check, Mic,
+  Sparkles, ArrowRight, Calendar, Video, Check, Mic, BookOpen,
 } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
+import PortalPortfolioEditor from '../components/PortalPortfolioEditor';
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
 import TalentGuideModal, { TALENT_GUIDE_STORAGE_KEY } from '../components/TalentGuideModal';
 import { useAuth } from '../context/AuthContext';
@@ -75,6 +76,8 @@ function ActionIconWithCheck({ icon: Icon, done }) {
 }
 
 function buildStrengthenTiles({
+  profileId,
+  navigate,
   connectCalendarUrl,
   calendarConnected,
   introSlotsPublished,
@@ -83,6 +86,20 @@ function buildStrengthenTiles({
   interviewCompleted,
 }) {
   const tiles = [
+    {
+      id: 'portfolio',
+      label: 'Build your portfolio',
+      description: 'Add project chapters with cover images and live work links.',
+      onClick: () => {
+        if (profileId && navigate) {
+          navigate(`/talent/${profileId}/portfolio?add=1#portfolio-editor`);
+        } else {
+          scrollToPortfolioSection({ openAdd: true });
+        }
+      },
+      icon: BookOpen,
+      done: false,
+    },
     {
       id: 'assessment',
       label: 'Take skills test',
@@ -138,7 +155,18 @@ function scrollToClientIntroSection() {
   window.history.replaceState(null, '', '#client-intro-scheduling');
 }
 
+function scrollToPortfolioSection({ openAdd = false } = {}) {
+  const el = document.getElementById('talent-portfolio');
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const search = openAdd ? '?portfolio=add' : '';
+  window.history.replaceState(null, '', `/portal${search}#talent-portfolio`);
+  window.dispatchEvent(new CustomEvent('byg-portfolio-scroll', { detail: { openAdd } }));
+}
+
 function StrengthenProfilePanel({
+  profileId,
+  navigate,
   connectCalendarUrl,
   calendarConnected,
   introSlotsPublished,
@@ -148,6 +176,8 @@ function StrengthenProfilePanel({
   onOpenGuide,
 }) {
   const tiles = buildStrengthenTiles({
+    profileId,
+    navigate,
     connectCalendarUrl,
     calendarConnected,
     introSlotsPublished,
@@ -302,6 +332,7 @@ const PortalPage = () => {
   const justSubmitted = location.state?.justSubmitted;
   const portalUploadWarnings = location.state?.uploadWarnings;
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [portfolioOpenAdd, setPortfolioOpenAdd] = useState(false);
 
   const connectCalendarUrl = user?.id
     ? `${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001'}/api/cal/connect/start?talentId=${encodeURIComponent(user.id)}&email=${encodeURIComponent(user.email || '')}`
@@ -381,6 +412,26 @@ const PortalPage = () => {
       requestAnimationFrame(() => scrollToClientIntroSection());
     }
   }, [loadingProfile, location.hash]);
+
+  // Deep link: /portal#talent-portfolio or /portal?portfolio=add
+  useEffect(() => {
+    if (loadingProfile) return;
+    const params = new URLSearchParams(location.search);
+    const hashOk = location.hash === '#talent-portfolio' || location.hash === '#portfolio';
+    const wantsAdd = params.get('portfolio') === 'add';
+    if (hashOk || wantsAdd) {
+      requestAnimationFrame(() => scrollToPortfolioSection({ openAdd: wantsAdd }));
+      if (wantsAdd) setPortfolioOpenAdd(true);
+    }
+  }, [loadingProfile, location.hash, location.search]);
+
+  useEffect(() => {
+    const onPortfolioScroll = (e) => {
+      if (e.detail?.openAdd) setPortfolioOpenAdd(true);
+    };
+    window.addEventListener('byg-portfolio-scroll', onPortfolioScroll);
+    return () => window.removeEventListener('byg-portfolio-scroll', onPortfolioScroll);
+  }, []);
 
   useEffect(() => {
     if (loadingProfile || !user) return;
@@ -775,6 +826,30 @@ const PortalPage = () => {
                 View Public Profile <ExternalLink size={10} />
               </Link>
             )}
+            {profile?.id && (
+              <Link
+                to={`/talent/${profile.id}/portfolio`}
+                className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
+              >
+                My portfolio <ExternalLink size={10} />
+              </Link>
+            )}
+            {profile?.id && (
+              <Link
+                to={`/talent/${profile.id}/portfolio?preview=visitor`}
+                className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
+              >
+                Preview as visitor <ExternalLink size={10} />
+              </Link>
+            )}
+            {profile?.id && (
+              <Link
+                to={`/talent/${profile.id}/portfolio?add=1#portfolio-editor`}
+                className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
+              >
+                Add chapter <ExternalLink size={10} />
+              </Link>
+            )}
             <button
               type="button"
               onClick={openGuide}
@@ -790,6 +865,8 @@ const PortalPage = () => {
           {/* ── Strengthen profile — first on phone, sidebar on desktop ── */}
           <div className="lg:col-span-2 lg:col-start-4 lg:row-start-1 order-1 lg:order-2">
             <StrengthenProfilePanel
+              profileId={profile?.id}
+              navigate={navigate}
               connectCalendarUrl={connectCalendarUrl}
               calendarConnected={Boolean(profile?.cal_username)}
               introSlotsPublished={introSlotsPublished}
@@ -1018,6 +1095,21 @@ const PortalPage = () => {
           </div>
         </motion.div>
 
+        <motion.div
+          id="talent-portfolio"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.11 }}
+          className="scroll-mt-28"
+        >
+          <PortalPortfolioEditor
+            profileId={profile?.id}
+            userId={user?.id}
+            autoOpenAdd={portfolioOpenAdd}
+            onAutoOpenHandled={() => setPortfolioOpenAdd(false)}
+          />
+        </motion.div>
+
         {/* ── Intro scheduling (availability + booked calls) ── */}
         <motion.div
           id="client-intro-scheduling"
@@ -1048,6 +1140,21 @@ const PortalPage = () => {
           {profile?.id && (
             <Link to={`/talent/${profile.id}`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
               <ExternalLink size={12} /> View Public Profile
+            </Link>
+          )}
+          {profile?.id && (
+            <Link to={`/talent/${profile.id}/portfolio`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
+              <ExternalLink size={12} /> My portfolio
+            </Link>
+          )}
+          {profile?.id && (
+            <Link to={`/talent/${profile.id}/portfolio?preview=visitor`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
+              <ExternalLink size={12} /> Preview as visitor
+            </Link>
+          )}
+          {profile?.id && (
+            <Link to={`/talent/${profile.id}/portfolio?add=1#portfolio-editor`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
+              <ExternalLink size={12} /> Add chapter
             </Link>
           )}
           <Link to="/talent" className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">

@@ -55,6 +55,19 @@ export async function uploadTalentFile(userId, file, kind) {
   return withPhotoCacheBust(data.publicUrl);
 }
 
+/** Upload portfolio project cover image */
+export async function uploadPortfolioCover(userId, projectId, file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  const safeExt = ['jpg', 'jpeg', 'png', 'webp', 'gif'].includes(ext) ? ext : 'jpg';
+  const path = `${userId}/portfolio/${projectId}.${safeExt}`;
+  const { error } = await supabase.storage
+    .from('talent-files')
+    .upload(path, file, { upsert: true, contentType: file.type || `image/${safeExt}` });
+  if (error) throw error;
+  const { data } = supabase.storage.from('talent-files').getPublicUrl(path);
+  return withPhotoCacheBust(data.publicUrl);
+}
+
 /**
  * Upload both files; returns URLs and non-fatal warnings if one fails.
  * Lets signup continue so user can retry on setup / portal.
