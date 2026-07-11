@@ -413,6 +413,15 @@ const PortalPage = () => {
     }
   }, [loadingProfile, location.hash]);
 
+  // Deep links: profile sections used by onboarding chat actions
+  useEffect(() => {
+    if (loadingProfile) return;
+    if (!['#profile-photo', '#profile-pricing', '#profile-submit'].includes(location.hash)) return;
+    requestAnimationFrame(() => {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, [loadingProfile, location.hash]);
+
   // Deep link: /portal#talent-portfolio or /portal?portfolio=add
   useEffect(() => {
     if (loadingProfile) return;
@@ -786,7 +795,7 @@ const PortalPage = () => {
           <div className="relative z-10 flex flex-col gap-4 sm:gap-6">
             <div className="flex items-center gap-4 min-w-0">
             {/* Photo */}
-            <div className="relative shrink-0">
+            <div className="relative shrink-0" id="profile-photo">
               {displayPhoto ? (
                 <img src={displayPhoto} alt={form.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover object-top border-2 border-white/20 shadow-xl" />
               ) : (
@@ -943,7 +952,7 @@ const PortalPage = () => {
               className="block w-full max-w-[8rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4" id="profile-pricing">
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Monthly Fee (USD)</label>
               <input
@@ -1047,7 +1056,7 @@ const PortalPage = () => {
           )}
 
           {/* Save + submit */}
-          <div className="space-y-3">
+          <div className="space-y-3" id="profile-submit">
           {showSubmitReview ? (
             <button
               type="button"

@@ -173,8 +173,93 @@ async function callGroqText(
   return parse(text);
 }
 
+/**
+ * Multi-turn chat completions.
+ * @param {{ role: 'system'|'user'|'assistant', content: string }[]} messages
+ * @param {{ model?: string, temperature?: number, maxOutputTokens?: number, timeoutMs?: number }} opts
+ */
+async function callGroqChat(
+  messages,
+  {
+    model,
+    temperature = 0.35,
+    maxOutputTokens = 1200,
+    timeoutMs = getDefaultTimeoutMs(),
+  } = {}
+) {
+  const apiKey = getGroqApiKey();
+  if (!apiKey) {
+    const err = new Error('Groq API key not configured');
+    err.status = 503;
+    throw err;
+  }
+
+  const resolvedModel = model || getDefaultModel();
+  if (!resolvedModel) {
+    const err = new Error('Groq model not configured');
+    err.status = 503;
+    throw err;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${getBaseUrl()}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: resolvedModel,
+        messages,
+        temperature,
+        max_tokens: maxOutputTokens,
+      }),
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr = new Error(`Groq API timed out after ${timeoutMs}ms`);
+      timeoutErr.status = 504;
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    const err = new Error(`Groq API error ${response.status}: ${responseText.slice(0, 300)}`);
+    err.status = response.status;
+    throw err;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    const err = new Error('Invalid JSON from Groq API');
+    err.status = 502;
+    throw err;
+  }
+
+  const text = extractGroqText(data);
+  if (!text) {
+    const err = new Error('Empty response from Groq');
+    err.status = 502;
+    err.code = 'GROQ_EMPTY';
+    throw err;
+  }
+  return text.trim();
+}
+
 module.exports = {
   callGroqText,
+  callGroqChat,
   getGroqApiKey,
   isGroqEnabled,
   getGenerateModelChain,

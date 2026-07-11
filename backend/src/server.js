@@ -77,6 +77,7 @@ app.use('/api/client', clientRouter);
 app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/admin/profile-review', adminProfileReviewRouter);
 app.use('/api/admin/clients', require('./routes/adminClients'));
+app.use('/api/talent/chat', require('./routes/talentChat'));
 app.use('/api/talent/profile', talentProfileReviewRouter);
 app.use('/api/talent-invite', talentInviteRouter);
 app.use('/api/auth', passwordResetRouter);

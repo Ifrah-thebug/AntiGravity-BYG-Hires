@@ -70,6 +70,7 @@ import ClientDashboardPage from './pages/ClientDashboardPage';
 import NotFoundPage from './pages/NotFoundPage';
 import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
+import TalentOnboardingChat from './components/talentChat/TalentOnboardingChat';
 
 // Import Global Sandbox Tools
 import DeveloperConsole from './components/DeveloperConsole';
@@ -186,6 +187,7 @@ const AppContent = () => {
         </Routes>
       </main>
       {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && !isPortfolioPage && <Footer />}
+      <TalentOnboardingChat />
       {/* Sandbox Debug Overlay Widgets - visible only with ?debug=true */}
       {debug && (
         <>
