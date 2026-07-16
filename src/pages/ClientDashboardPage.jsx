@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Calendar, ArrowRight, Building2, Link as LinkIcon, AlertTriangle, Mic } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Calendar, ArrowRight, Building2, Link as LinkIcon, AlertTriangle, Mic, Layers, CheckCircle2, Clock } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useClientSchedulingTimezone } from '../hooks/useClientSchedulingTimezone';
 import { formatIntroSlotSummary } from '../lib/clientSchedulingTimezone';
@@ -29,6 +29,7 @@ export default function ClientDashboardPage() {
   const [profile, setProfile] = useState(null);
   const [bookings, setBookings] = useState([]);
   const [aiInterviewRequests, setAiInterviewRequests] = useState([]);
+  const [portfolioAccessRequests, setPortfolioAccessRequests] = useState([]);
 
   const [companyDraft, setCompanyDraft] = useState('');
   const [savingCompany, setSavingCompany] = useState(false);
@@ -81,6 +82,7 @@ export default function ClientDashboardPage() {
         setProfile(data.profile || null);
         setBookings(data.bookings || []);
         setAiInterviewRequests(data.aiInterviewRequests || []);
+        setPortfolioAccessRequests(data.portfolioAccessRequests || []);
         setCompanyDraft(data.profile?.company || '');
       } catch (err) {
         if (!cancelled) setError(err.message || 'Could not load dashboard.');
@@ -106,11 +108,29 @@ export default function ClientDashboardPage() {
         setProfile(data.profile || null);
         setBookings(data.bookings || []);
         setAiInterviewRequests(data.aiInterviewRequests || []);
+        setPortfolioAccessRequests(data.portfolioAccessRequests || []);
       }
     } catch {
       // keep existing data on refresh failure
     }
   }, [user?.id]);
+
+  // Auto-refresh while any portfolio request is still pending.
+  useEffect(() => {
+    const hasPending = portfolioAccessRequests.some((r) => r.pending || r.status === 'pending');
+    if (!hasPending || !user?.id) return undefined;
+    const timer = setInterval(() => {
+      reloadDashboard();
+    }, 8000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') reloadDashboard();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [portfolioAccessRequests, user?.id, reloadDashboard]);
 
   async function saveCompany() {
     if (!user?.id) return;
@@ -234,6 +254,95 @@ export default function ClientDashboardPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            <div id="portfolio-requests" className="mb-8 scroll-mt-28">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="flex items-center gap-2">
+                  <Layers size={16} className="text-red" />
+                  <h2 className="text-sm font-black uppercase tracking-widest text-gray-900">
+                    Portfolio requests
+                  </h2>
+                </div>
+                {portfolioAccessRequests.some((r) => r.pending || r.status === 'pending') && (
+                  <button
+                    type="button"
+                    onClick={reloadDashboard}
+                    className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-colors"
+                  >
+                    Refresh
+                  </button>
+                )}
+              </div>
+
+              {portfolioAccessRequests.length === 0 ? (
+                <div className="bg-white border border-dashed border-gray-200 rounded-[2rem] p-8 text-center">
+                  <Layers size={22} className="mx-auto text-gray-300 mb-3" />
+                  <p className="font-black text-gray-700 text-sm">No portfolio requests yet</p>
+                  <p className="text-gray-500 text-sm font-medium mt-2 max-w-md mx-auto">
+                    When you request a talent&apos;s portfolio from their profile or intro page, it will appear here. After they approve, you can open it from this section.
+                  </p>
+                  <Link
+                    to="/talent"
+                    className="inline-flex items-center gap-2 mt-5 text-[10px] font-black uppercase tracking-widest text-red hover:text-black transition-colors"
+                  >
+                    Browse talent directory <ArrowRight size={12} />
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {portfolioAccessRequests.map((req) => {
+                    const approved = req.approved || req.status === 'approved';
+                    return (
+                      <div
+                        key={req.requestId}
+                        className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-6 md:p-8"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                              {approved ? 'Access granted' : 'Waiting for talent'}
+                            </p>
+                            <p className="text-lg font-black text-black truncate">
+                              {req.talentName || 'Talent portfolio'}
+                            </p>
+                            {req.talentRole && (
+                              <p className="text-sm text-gray-500 font-medium mt-1 truncate">{req.talentRole}</p>
+                            )}
+                            <p className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold">
+                              {approved ? (
+                                <span className="text-green-700 inline-flex items-center gap-1.5">
+                                  <CheckCircle2 size={14} /> Approved — open from here anytime
+                                </span>
+                              ) : (
+                                <span className="text-amber-700 inline-flex items-center gap-1.5">
+                                  <Clock size={14} /> Pending approval (this list updates automatically)
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                          {approved && req.talentId ? (
+                            <Link
+                              to={`/talent/${req.talentId}/portfolio`}
+                              className="inline-flex items-center justify-center gap-2 rounded-xl bg-red px-6 py-3.5 text-white font-black text-xs uppercase tracking-widest hover:bg-black transition-colors shrink-0"
+                            >
+                              Open portfolio <ArrowRight size={14} />
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={reloadDashboard}
+                              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-6 py-3.5 text-gray-700 font-black text-xs uppercase tracking-widest hover:border-black transition-colors shrink-0"
+                            >
+                              Check status
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {aiInterviewRequests.length > 0 && (

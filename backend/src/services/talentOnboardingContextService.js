@@ -1,4 +1,5 @@
 const { supabaseAdmin } = require('../middleware/requireAdmin');
+const portfolioAccessStore = require('./portfolioAccessRequestStore');
 
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
@@ -85,6 +86,15 @@ function buildOnboardingChecklist(ctx) {
 
   const status = String(p.directory_status || 'draft').toLowerCase();
   const onWaitlist = status === 'pending_review';
+
+  if (ctx.pendingPortfolioRequestCount > 0) {
+    items.push({
+      id: 'portal-portfolio-requests',
+      label: `Review portfolio request${ctx.pendingPortfolioRequestCount > 1 ? 's' : ''} (${ctx.pendingPortfolioRequestCount})`,
+      done: false,
+      priority: 0,
+    });
+  }
 
   // Profile is already submitted — skip draft/setup gaps (photo, CV, pricing, etc.)
   if (!onWaitlist) {
@@ -179,6 +189,11 @@ function buildActionCatalog(ctx) {
       href: '/portal?portfolio=add#talent-portfolio',
       external: false,
     },
+    'portal-portfolio-requests': {
+      label: 'Review portfolio requests',
+      href: '/portal#portfolio-requests',
+      external: false,
+    },
   };
 
   if (userId && backendBase) {
@@ -221,6 +236,7 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
   let assessmentCount = 0;
   let introSlotsCount = 0;
   let portfolioProjectCount = 0;
+  let pendingPortfolioRequestCount = 0;
   let interviewUnlocked = false;
   let interviewCompleted = false;
   let assessmentScores = {};
@@ -260,6 +276,7 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
     interviewUnlocked = (interviewReqRes.data || []).length > 0;
     interviewCompleted = (interviewRes.data || []).length > 0;
     assessmentScores = await fetchAssessmentScores(talentId);
+    pendingPortfolioRequestCount = await portfolioAccessStore.countPendingForTalent(talentId);
   }
 
   const pricing = buildPricingGuidance(profile, assessmentScores);
@@ -297,6 +314,7 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
     assessmentScores,
     introSlotsCount,
     portfolioProjectCount,
+    pendingPortfolioRequestCount,
     interviewUnlocked,
     interviewCompleted,
     pricing,
@@ -304,8 +322,46 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
 
   ctx.nextSteps = buildOnboardingChecklist(ctx);
   ctx.actionCatalog = buildActionCatalog(ctx);
+  ctx.guideNotifications = buildGuideNotifications(ctx);
 
   return ctx;
+}
+
+/** Badge + proactive nudge flags for the BGuides launcher. */
+function buildGuideNotifications(ctx) {
+  const hasProfile = Boolean(ctx.profile?.id);
+  const needsSkillsTest = hasProfile && !(Number(ctx.assessmentCount) > 0);
+  const needsPortfolio = hasProfile && !(Number(ctx.portfolioProjectCount) > 0);
+  const pendingPortfolioRequests = Math.max(0, Number(ctx.pendingPortfolioRequestCount) || 0);
+
+  const items = [];
+  if (pendingPortfolioRequests > 0) {
+    items.push({
+      id: 'portfolio_requests',
+      count: pendingPortfolioRequests,
+      label:
+        pendingPortfolioRequests === 1
+          ? '1 portfolio request waiting'
+          : `${pendingPortfolioRequests} portfolio requests waiting`,
+    });
+  }
+  if (needsSkillsTest) {
+    items.push({ id: 'skills_test', count: 1, label: 'Skills test not taken yet' });
+  }
+  if (needsPortfolio) {
+    items.push({ id: 'portfolio', count: 1, label: 'Portfolio not built yet' });
+  }
+
+  const notificationCount = items.reduce((sum, item) => sum + item.count, 0);
+
+  return {
+    notificationCount,
+    needsSkillsTest,
+    needsPortfolio,
+    pendingPortfolioRequests,
+    items,
+    primaryLabel: items[0]?.label || null,
+  };
 }
 
 module.exports = {
@@ -313,6 +369,7 @@ module.exports = {
   buildPricingGuidance,
   buildOnboardingChecklist,
   buildActionCatalog,
+  buildGuideNotifications,
   calculateDirectoryFeeUsd,
   isProfileOnWaitlist,
 };

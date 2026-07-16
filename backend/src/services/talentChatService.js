@@ -96,6 +96,11 @@ function normalizeAssistantPayload(parsed, actionCatalog, fallbackText, ctx) {
 function pickSmartActionId(ctx) {
   const nextSteps = ctx?.nextSteps || [];
   const catalog = ctx?.actionCatalog || {};
+
+  if (ctx.pendingPortfolioRequestCount > 0 && catalog['portal-portfolio-requests']) {
+    return 'portal-portfolio-requests';
+  }
+
   if (!nextSteps.length) return catalog.portal ? 'portal' : null;
 
   if (isProfileOnWaitlist(ctx?.profile)) {
@@ -151,15 +156,19 @@ GOALS:
 4. Write natural, human responses in 2-3 short paragraphs (around 90-160 words).
 ${waitlistRules}
 RULES:
+- SCOPE ONLY: BYG Hires talent onboarding — profile, directory approval, portfolio, pricing, skills tests, AI interview, calendar/intros, sharing, and how this platform works for talent.
+- OUT OF SCOPE — refuse politely and briefly: general programming/tech tutorials (e.g. "how C++ works", language syntax, algorithms), homework/school help, unrelated career advice outside BYG Hires, news, politics, personal life, medical/legal advice, writing code for them, or any topic not about using BYG Hires as talent.
+- When out of scope: do NOT give definitions, explanations, or tutorials. Say you're only here for their BYG Hires profile journey, then offer one relevant next step (actions from the catalog). Keep "reply" under ~60 words.
 - Never claim admin approved/rejected unless directory_status says so.
 - Never invent review feedback — only cite review_notes and review_issues from context.
 - Do not include phone, email, or LinkedIn in profile text suggestions.
 - Voice interview only when interviewUnlocked is true; requires skills test first.
+- When pendingPortfolioRequestCount > 0, prioritize reviewing portfolio requests — a client wants to see their work. Encourage polishing portfolio before approving if project count is low.
 - Pricing suggestions should use pricing.suggestedRecommendedUsd as anchor unless talent asks otherwise.
 - If pricing.currentMonthlyUsd exists, acknowledge that exact saved value first and avoid suggesting a lower number by default.
 - When suggesting pricing, explain how verified skills and experience justify the rate.
 - Avoid repeating the same recommendation sentence across consecutive replies.
-- End with one friendly follow-up question to keep conversation flowing.
+- End with one friendly follow-up question to keep conversation flowing — except on out-of-scope refusals, where one short redirect question is enough.
 - Always respond with VALID JSON only (no markdown outside JSON):
 
 {
@@ -189,6 +198,7 @@ ${JSON.stringify({
   assessmentScores: ctx.assessmentScores,
   introSlotsCount: ctx.introSlotsCount,
   portfolioProjectCount: ctx.portfolioProjectCount,
+  pendingPortfolioRequestCount: ctx.pendingPortfolioRequestCount,
   interviewUnlocked: ctx.interviewUnlocked,
   interviewCompleted: ctx.interviewCompleted,
   pricing: ctx.pricing,
@@ -431,7 +441,14 @@ function buildWelcomeMessage(ctx) {
 
   let reply = `Hi ${name}! I'm BGuides — I'll help you finish your profile and get in front of clients faster.`;
 
-  if (!ctx.profile) {
+  if (ctx.pendingPortfolioRequestCount > 0) {
+    const n = ctx.pendingPortfolioRequestCount;
+    reply += ` You have ${n} client portfolio request${n > 1 ? 's' : ''} waiting — someone wants to see your work. Review ${n > 1 ? 'them' : 'it'} in your portal when you have a moment`;
+    if (!ctx.portfolioProjectCount) {
+      reply += ' and consider adding a project first so you make a strong impression';
+    }
+    reply += '.';
+  } else if (!ctx.profile) {
     reply += ' Start by completing your profile setup — I can walk you through every step.';
   } else if (status === 'pending_review') {
     if (!ctx.calendarConnected) {
@@ -491,6 +508,110 @@ function buildWelcomeMessage(ctx) {
   return { reply, actions, pricingTip };
 }
 
+async function maybeAppendPortfolioRequestNudge(sessionId, ctx) {
+  if (!ctx.pendingPortfolioRequestCount || ctx.pendingPortfolioRequestCount <= 0) return null;
+
+  const { data: recent } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .select('id, metadata, created_at')
+    .eq('session_id', sessionId)
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(5);
+
+  const alreadyNudged = (recent || []).some(
+    (m) => m.metadata?.trigger === 'portfolio_request_pending'
+  );
+  if (alreadyNudged) return null;
+
+  const n = ctx.pendingPortfolioRequestCount;
+  const reply =
+    `You have ${n} pending portfolio request${n > 1 ? 's' : ''} from client${n > 1 ? 's' : ''} who want to see your work. ` +
+    (ctx.portfolioProjectCount
+      ? 'Review and approve them in your portal when you are ready.'
+      : 'Before you approve, consider adding or polishing a portfolio project — it helps you stand out.');
+
+  const actions = [];
+  if (ctx.actionCatalog['portal-portfolio-requests']) {
+    actions.push({ id: 'portal-portfolio-requests', ...ctx.actionCatalog['portal-portfolio-requests'] });
+  }
+  if (ctx.actionCatalog.portfolio) {
+    actions.push({ id: 'portfolio', ...ctx.actionCatalog.portfolio });
+  }
+
+  return insertMessage(sessionId, {
+    role: 'assistant',
+    content: reply,
+    actions,
+    metadata: { kind: 'proactive', trigger: 'portfolio_request_pending' },
+  });
+}
+
+async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
+  const notes = ctx.guideNotifications || {};
+  if (!notes.needsSkillsTest && !notes.needsPortfolio) return null;
+
+  const { data: recent } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .select('id, metadata, created_at')
+    .eq('session_id', sessionId)
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(12);
+
+  const triggers = new Set((recent || []).map((m) => m.metadata?.trigger).filter(Boolean));
+
+  // Prefer skills test first; then portfolio. Skip if already nudged for that gap.
+  if (notes.needsSkillsTest && !triggers.has('skills_test_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.assessment) {
+      actions.push({ id: 'assessment', ...ctx.actionCatalog.assessment });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Quick reminder: you haven’t taken a skills test yet. Verified skill scores help you stand out on the directory and support stronger pricing — it usually takes about 25 minutes.',
+      actions,
+      metadata: { kind: 'proactive', trigger: 'skills_test_missing' },
+    });
+  }
+
+  if (notes.needsPortfolio && !triggers.has('portfolio_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.portfolio) {
+      actions.push({ id: 'portfolio', ...ctx.actionCatalog.portfolio });
+    } else if (ctx.actionCatalog['portal-portfolio']) {
+      actions.push({ id: 'portal-portfolio', ...ctx.actionCatalog['portal-portfolio'] });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your portfolio storybook is still empty. Adding even one published project makes a big difference when clients open your profile or request portfolio access.',
+      actions,
+      metadata: { kind: 'proactive', trigger: 'portfolio_missing' },
+    });
+  }
+
+  return null;
+}
+
+function publicChatContext(ctx) {
+  const notes = ctx.guideNotifications || {};
+  return {
+    nextSteps: ctx.nextSteps,
+    pricing: ctx.pricing,
+    directoryStatus: ctx.profile?.directory_status || null,
+    profileComplete: Boolean(ctx.profile?.name && ctx.profile?.job_title),
+    pendingPortfolioRequestCount: ctx.pendingPortfolioRequestCount || 0,
+    assessmentCount: ctx.assessmentCount || 0,
+    portfolioProjectCount: ctx.portfolioProjectCount || 0,
+    needsSkillsTest: Boolean(notes.needsSkillsTest),
+    needsPortfolio: Boolean(notes.needsPortfolio),
+    guideNotificationCount: Number(notes.notificationCount) || 0,
+    guideNotificationLabel: notes.primaryLabel || null,
+  };
+}
+
 async function loadChatSession({ user, currentPath, backendBaseUrl }) {
   const profile = await fetchFullProfile(user.id);
   const ctx = await buildTalentOnboardingContext({
@@ -512,16 +633,16 @@ async function loadChatSession({ user, currentPath, backendBaseUrl }) {
       metadata: { pricingTip: welcome.pricingTip, kind: 'welcome' },
     });
     messages = [saved];
+  } else {
+    const requestNudge = await maybeAppendPortfolioRequestNudge(session.id, ctx);
+    if (requestNudge) messages = [...messages, requestNudge];
+    const gapNudge = await maybeAppendOnboardingGapNudge(session.id, ctx);
+    if (gapNudge) messages = [...messages, gapNudge];
   }
 
   return {
     session: { id: session.id, updatedAt: session.updated_at },
-    context: {
-      nextSteps: ctx.nextSteps,
-      pricing: ctx.pricing,
-      directoryStatus: ctx.profile?.directory_status || null,
-      profileComplete: Boolean(ctx.profile?.name && ctx.profile?.job_title),
-    },
+    context: publicChatContext(ctx),
     messages: messages.map((m) => ({
       id: m.id,
       role: m.role,
@@ -587,11 +708,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
         pricingTip: saved.metadata?.pricingTip || null,
         createdAt: saved.created_at,
       },
-      context: {
-        nextSteps: ctx.nextSteps,
-        pricing: ctx.pricing,
-        directoryStatus: ctx.profile?.directory_status || null,
-      },
+      context: publicChatContext(ctx),
     };
   }
 
@@ -620,11 +737,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
       pricingTip: saved.metadata?.pricingTip || null,
       createdAt: saved.created_at,
     },
-    context: {
-      nextSteps: ctx.nextSteps,
-      pricing: ctx.pricing,
-      directoryStatus: ctx.profile?.directory_status || null,
-    },
+    context: publicChatContext(ctx),
   };
 }
 

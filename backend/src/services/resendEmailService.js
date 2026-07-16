@@ -456,6 +456,84 @@ async function sendTalentAiInterviewRequestEmail({ to, name }) {
   return { ...result, interviewUrl };
 }
 
+function buildTalentPortfolioRequestEmailHtml({ name, portalUrl, clientLabel }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;"><strong>${clientLabel}</strong> wants to see your portfolio on BYG Hires. Please review the request in your talent portal and approve it when you are ready to share your work.</p>
+  <p style="margin: 0 0 12px;">If your portfolio could use another project or a quick polish, now is a great time — clients notice the details.</p>
+  <p style="margin: 24px 0;">
+    ${buildEmailLinkButton(portalUrl, 'Review portfolio request')}
+  </p>
+  ${buildEmailBrowserHintHtml()}
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${portalUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">Each client request is approved individually — you stay in control of who sees your portfolio.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendTalentPortfolioRequestEmail({ to, name, clientName, company }) {
+  const portalUrl = `${getAppPublicUrl()}/portal#portfolio-requests`;
+  const clientLabel = portfolioChatNudgeLabel(clientName, company);
+  const subject = 'A client wants to see your portfolio — BYG Hires';
+  const html = buildTalentPortfolioRequestEmailHtml({ name, portalUrl, clientLabel });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Talent portfolio request',
+  });
+}
+
+function buildClientPortfolioApprovedEmailHtml({ name, talentName, portfolioUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const talentLabel = talentName ? `<strong>${talentName}</strong>` : 'the talent';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">Good news — ${talentLabel} approved your portfolio request on BYG Hires. You can view their full project storybook now.</p>
+  <p style="margin: 24px 0;">
+    ${buildEmailLinkButton(portfolioUrl, 'View portfolio')}
+  </p>
+  ${buildEmailBrowserHintHtml()}
+  <p style="margin: 0 0 8px; font-size: 13px; color: #666;">Or copy this link:</p>
+  <p style="margin: 0 0 24px; font-size: 12px; word-break: break-all; color: #444;">${portfolioUrl}</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">Sign in with your hiring client account if prompted.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendClientPortfolioApprovedEmail({ to, name, talentName, talentId }) {
+  const portfolioUrl = `${getAppPublicUrl()}/talent/${encodeURIComponent(talentId)}/portfolio`;
+  const subject = talentName
+    ? `${talentName} approved your portfolio request — BYG Hires`
+    : 'Your portfolio request was approved — BYG Hires';
+  const html = buildClientPortfolioApprovedEmailHtml({ name, talentName, portfolioUrl });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Client portfolio approved',
+  });
+}
+
+function portfolioChatNudgeLabel(clientName, company) {
+  const name = String(clientName || '').trim();
+  const co = String(company || '').trim();
+  if (name && co) return `${name} from ${co}`;
+  if (name) return name;
+  if (co) return co;
+  return 'A client';
+}
+
 const PROFILE_ISSUE_COPY = {
   photo: 'Upload a clear, professional headshot (face visible, good lighting, neutral background).',
   cv: 'Re-upload your CV as a clear PDF so we can verify your experience and role.',
@@ -586,6 +664,8 @@ module.exports = {
   sendTalentAssessmentReminderEmail,
   sendPasswordResetEmail,
   sendTalentAiInterviewRequestEmail,
+  sendTalentPortfolioRequestEmail,
+  sendClientPortfolioApprovedEmail,
   sendProfileChangesRequestedEmail,
   sendProfileApprovedEmail,
   sendProfileSubmittedAdminEmail,

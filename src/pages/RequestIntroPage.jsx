@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAccountType } from '../hooks/useAccountType';
 import IntroSlotPicker from '../components/IntroSlotPicker';
 import RequestAiInterviewPanel from '../components/RequestAiInterviewPanel';
+import RequestPortfolioPanel from '../components/RequestPortfolioPanel';
 import TalentSkillTags from '../components/TalentSkillTags';
 import ProfileVerificationBadge from '../components/ProfileVerificationBadge';
 import AiInterviewVerifiedBadge from '../components/AiInterviewVerifiedBadge';
@@ -344,6 +345,11 @@ const RequestIntroPage = () => {
                 talent={talent}
                 clientEmail={clientIdentity?.email || guestPrefillEmail}
                 canRequestAiInterview={canRequestAiInterview}
+              />
+              <RequestPortfolioPanel
+                talent={talent}
+                clientEmail={clientIdentity?.email || guestPrefillEmail}
+                canRequestPortfolio={canRequestAiInterview}
               />
               <ScheduleIntroPanel
                 talent={talent}

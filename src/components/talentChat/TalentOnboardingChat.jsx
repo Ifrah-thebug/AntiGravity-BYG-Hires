@@ -278,9 +278,12 @@ export default function TalentOnboardingChat() {
                   </p>
                   <h3 className="font-black text-base tracking-tight mt-0.5">BGuides</h3>
                   <p className="text-[11px] text-gray-400 font-medium mt-1">
-                    {context?.directoryStatus === 'approved'
-                      ? 'Profile live — let\'s get you more intros'
-                      : 'Finish your profile faster'}
+                    {context?.guideNotificationLabel
+                      || (context?.pendingPortfolioRequestCount > 0
+                        ? `${context.pendingPortfolioRequestCount} portfolio request${context.pendingPortfolioRequestCount > 1 ? 's' : ''} waiting`
+                        : context?.directoryStatus === 'approved'
+                          ? 'Profile live — let\'s get you more intros'
+                          : 'Finish your profile faster')}
                   </p>
                 </div>
                 <button
@@ -375,6 +378,11 @@ export default function TalentOnboardingChat() {
       >
         {open ? <X size={16} /> : <MessageCircle size={16} />}
         <span className="hidden sm:inline">{open ? 'Close' : 'BGuides'}</span>
+        {!open && Number(context?.guideNotificationCount) > 0 && (
+          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-red text-[9px] font-black flex items-center justify-center border-2 border-red">
+            {context.guideNotificationCount > 9 ? '9+' : context.guideNotificationCount}
+          </span>
+        )}
       </motion.button>
     </>
   );
