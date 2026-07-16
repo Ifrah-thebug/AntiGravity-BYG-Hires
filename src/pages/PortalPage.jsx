@@ -10,9 +10,15 @@ import {
 } from 'lucide-react';
 import ProfileSkillsEditor from '../components/ProfileSkillsEditor';
 import PortalPortfolioEditor from '../components/PortalPortfolioEditor';
+import PortfolioSharingSettings from '../components/PortfolioSharingSettings';
+import PortalPortfolioShareButton from '../components/PortalPortfolioShareButton';
+import TalentPortfolioRequestsPanel from '../components/TalentPortfolioRequestsPanel';
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
 import TalentGuideModal, { TALENT_GUIDE_STORAGE_KEY } from '../components/TalentGuideModal';
+import DirectoryTalentModal from '../components/DirectoryTalentModal';
 import { useAuth } from '../context/AuthContext';
+import { mapProfileToDirectoryTalent } from '../lib/liveDirectoryTalents';
+import { sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
 import { supabase } from '../lib/supabase';
 import { isProfileComplete, fetchUserProfile } from '../lib/talentAuth';
 import { fetchIsAdmin } from '../lib/adminAuth';
@@ -332,6 +338,7 @@ const PortalPage = () => {
   const justSubmitted = location.state?.justSubmitted;
   const portalUploadWarnings = location.state?.uploadWarnings;
   const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showPublicProfile, setShowPublicProfile] = useState(false);
   const [portfolioOpenAdd, setPortfolioOpenAdd] = useState(false);
 
   const connectCalendarUrl = user?.id
@@ -411,6 +418,15 @@ const PortalPage = () => {
     if (location.hash === '#client-intro-scheduling') {
       requestAnimationFrame(() => scrollToClientIntroSection());
     }
+  }, [loadingProfile, location.hash]);
+
+  // Deep links: profile sections used by onboarding chat actions
+  useEffect(() => {
+    if (loadingProfile) return;
+    if (!['#profile-photo', '#profile-pricing', '#profile-submit', '#portfolio-requests'].includes(location.hash)) return;
+    requestAnimationFrame(() => {
+      document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }, [loadingProfile, location.hash]);
 
   // Deep link: /portal#talent-portfolio or /portal?portfolio=add
@@ -786,7 +802,7 @@ const PortalPage = () => {
           <div className="relative z-10 flex flex-col gap-4 sm:gap-6">
             <div className="flex items-center gap-4 min-w-0">
             {/* Photo */}
-            <div className="relative shrink-0">
+            <div className="relative shrink-0" id="profile-photo">
               {displayPhoto ? (
                 <img src={displayPhoto} alt={form.name} className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover object-top border-2 border-white/20 shadow-xl" />
               ) : (
@@ -816,15 +832,14 @@ const PortalPage = () => {
             </div>
 
             <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3 w-full">
-            {profile?.id && directoryLive && (
-              <Link
-                to={`/talent/${profile.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
+            {profile?.id && (
+              <button
+                type="button"
+                onClick={() => setShowPublicProfile(true)}
                 className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
               >
-                View Public Profile <ExternalLink size={10} />
-              </Link>
+                View Public Profile
+              </button>
             )}
             {profile?.id && (
               <Link
@@ -836,19 +851,14 @@ const PortalPage = () => {
             )}
             {profile?.id && (
               <Link
-                to={`/talent/${profile.id}/portfolio?preview=visitor`}
-                className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
-              >
-                Preview as visitor <ExternalLink size={10} />
-              </Link>
-            )}
-            {profile?.id && (
-              <Link
                 to={`/talent/${profile.id}/portfolio?add=1#portfolio-editor`}
                 className="flex items-center justify-center sm:justify-start gap-1.5 px-3 py-2.5 sm:py-0 text-[10px] font-black text-gray-400 hover:text-white uppercase tracking-widest transition-colors rounded-xl sm:rounded-none border border-white/10 sm:border-0"
               >
                 Add chapter <ExternalLink size={10} />
               </Link>
+            )}
+            {profile?.id && directoryLive && (
+              <PortalPortfolioShareButton profileId={profile.id} />
             )}
             <button
               type="button"
@@ -943,7 +953,7 @@ const PortalPage = () => {
               className="block w-full max-w-[8rem] px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all" />
           </div>
 
-          <div className="grid sm:grid-cols-2 gap-4">
+          <div className="grid sm:grid-cols-2 gap-4" id="profile-pricing">
             <div className="space-y-1.5">
               <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest">Monthly Fee (USD)</label>
               <input
@@ -1047,7 +1057,7 @@ const PortalPage = () => {
           )}
 
           {/* Save + submit */}
-          <div className="space-y-3">
+          <div className="space-y-3" id="profile-submit">
           {showSubmitReview ? (
             <button
               type="button"
@@ -1096,6 +1106,24 @@ const PortalPage = () => {
         </motion.div>
 
         <motion.div
+          id="portfolio-requests"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.105 }}
+        >
+          <TalentPortfolioRequestsPanel />
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.108 }}
+          className="mb-6"
+        >
+          <PortfolioSharingSettings profileId={profile?.id} />
+        </motion.div>
+
+        <motion.div
           id="talent-portfolio"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1138,18 +1166,17 @@ const PortalPage = () => {
         {/* ── Quick links ── */}
         <div className="flex gap-4 flex-wrap">
           {profile?.id && (
-            <Link to={`/talent/${profile.id}`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
-              <ExternalLink size={12} /> View Public Profile
-            </Link>
+            <button
+              type="button"
+              onClick={() => setShowPublicProfile(true)}
+              className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest"
+            >
+              View Public Profile
+            </button>
           )}
           {profile?.id && (
             <Link to={`/talent/${profile.id}/portfolio`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
               <ExternalLink size={12} /> My portfolio
-            </Link>
-          )}
-          {profile?.id && (
-            <Link to={`/talent/${profile.id}/portfolio?preview=visitor`} className="flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black transition-colors uppercase tracking-widest">
-              <ExternalLink size={12} /> Preview as visitor
             </Link>
           )}
           {profile?.id && (
@@ -1176,6 +1203,30 @@ const PortalPage = () => {
         introSlotsPublished={introSlotsPublished}
         onScrollToTimings={scrollToClientIntroSection}
       />
+
+      {showPublicProfile && profile && (
+        <DirectoryTalentModal
+          talent={sanitizeTalentForPublicDisplay({
+            ...mapProfileToDirectoryTalent(profile, {}, {
+              [profile.id]: {
+                aiInterviewVerified: interviewCompleted,
+                interviewScore: null,
+              },
+            }),
+            skillScores,
+          })}
+          onClose={() => setShowPublicProfile(false)}
+          canRequestIntro={false}
+          footerExtra={
+            <Link
+              to={`/talent/${profile.id}/portfolio`}
+              className="flex-1 min-w-[10rem] py-4 bg-white border-2 border-black text-black hover:bg-black hover:text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center"
+            >
+              View Portfolio
+            </Link>
+          }
+        />
+      )}
     </div>
   );
 };

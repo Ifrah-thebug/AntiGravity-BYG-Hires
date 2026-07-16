@@ -14,6 +14,8 @@ import {
   updatePortfolioProject,
 } from '../lib/talentPortfolio';
 import { uploadPortfolioCover } from '../lib/talentStorage';
+import { fetchTalentPortfolioSharing } from '../services/portfolioAccessService';
+import { buildPortfolioShareUrl } from '../lib/portfolioShareUrl';
 
 const emptyDraft = () => ({
   title: '',
@@ -42,6 +44,7 @@ export default function PortalPortfolioEditor({
   const [coverFile, setCoverFile] = useState(null);
   const [coverPreview, setCoverPreview] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  const [shareSettings, setShareSettings] = useState({ portfolioPublicEnabled: true, shareToken: '' });
 
   const loadProjects = useCallback(async () => {
     if (!profileId) return;
@@ -60,6 +63,20 @@ export default function PortalPortfolioEditor({
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  useEffect(() => {
+    if (!profileId) return;
+    fetchTalentPortfolioSharing()
+      .then((data) => {
+        setShareSettings({
+          portfolioPublicEnabled: data.portfolioPublicEnabled !== false,
+          shareToken: data.shareToken || '',
+        });
+      })
+      .catch(() => {
+        setShareSettings({ portfolioPublicEnabled: true, shareToken: '' });
+      });
+  }, [profileId]);
 
   const notifyChange = useCallback(() => {
     onProjectsChange?.();
@@ -229,9 +246,11 @@ export default function PortalPortfolioEditor({
 
   const publishedCount = projects.filter((p) => p.published).length;
   const draftCount = projects.filter((p) => !p.published).length;
-  const portfolioUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/talent/${profileId}/portfolio`
-    : `/talent/${profileId}/portfolio`;
+  const portfolioUrl = buildPortfolioShareUrl({
+    profileId,
+    portfolioPublicEnabled: shareSettings.portfolioPublicEnabled,
+    shareToken: shareSettings.shareToken,
+  });
 
   const copyShareLink = async () => {
     try {

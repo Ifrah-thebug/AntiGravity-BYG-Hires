@@ -158,7 +158,7 @@ export default function PortfolioStoryMusic() {
       initial={{ opacity: 0, scale: 0.85 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: 0.4 }}
-      className={`fixed bottom-5 md:bottom-8 right-3 md:right-4 z-50 flex items-center gap-1.5 sm:gap-2 pl-2.5 sm:pl-3 pr-2.5 sm:pr-4 py-2 sm:py-2.5 rounded-full shadow-lg border-2 transition-all ${
+      className={`fixed z-[85] bottom-[4.75rem] sm:bottom-[5.25rem] right-4 sm:right-6 flex items-center gap-1.5 sm:gap-2 pl-2.5 sm:pl-3 pr-2.5 sm:pr-4 py-2 sm:py-2.5 rounded-full shadow-lg border-2 transition-all ${
         playing
           ? 'bg-red border-red text-white shadow-red/25'
           : 'bg-[#fffbf5] border-[#e8dcc8] text-gray-600 hover:border-red/40 hover:text-red'

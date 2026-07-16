@@ -235,6 +235,17 @@ router.get('/dashboard/overview', async (req, res) => {
       console.warn('[client/dashboard] AI interview requests:', aiErr?.message || aiErr);
     }
 
+    let portfolioAccessRequests = [];
+    try {
+      const portfolioAccessStore = require('../services/portfolioAccessRequestStore');
+      portfolioAccessRequests = await portfolioAccessStore.listRequestsForClient({
+        clientEmail: client.email,
+        clientId: client.id,
+      });
+    } catch (pfErr) {
+      console.warn('[client/dashboard] portfolio requests:', pfErr?.message || pfErr);
+    }
+
     return res.json({
       ok: true,
       profile: {
@@ -248,6 +259,7 @@ router.get('/dashboard/overview', async (req, res) => {
       discoveryBookings,
       introBookings,
       aiInterviewRequests,
+      portfolioAccessRequests,
     });
   } catch (err) {
     console.error('[client/dashboard/overview]', err?.message || err);

@@ -12,6 +12,8 @@ import { useAuth } from '../context/AuthContext';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { isDirectoryLive } from '../lib/profileReview';
 import { fetchPublicPortfolioProjects, fetchOwnPortfolioProjects } from '../lib/talentPortfolio';
+import { fetchPortfolioViewAccess, fetchTalentPortfolioSharing } from '../services/portfolioAccessService';
+import RequestPortfolioPanel from '../components/RequestPortfolioPanel';
 import { photoUrlForDisplay } from '../lib/talentStorage';
 import { getTalentDepartmentLabel } from '../lib/talentDepartments';
 import { fetchPublicSkillScores, buildTalentSkillScores } from '../services/assessmentService';
@@ -32,15 +34,6 @@ import PortfolioHighlightsStrip from '../components/portfolio/PortfolioHighlight
 import PortfolioJourneyTimeline from '../components/portfolio/PortfolioJourneyTimeline';
 import PortalPortfolioEditor from '../components/PortalPortfolioEditor';
 
-const CHAPTERS = [
-  { id: 'cover', label: 'Cover' },
-  { id: 'chapter-1', label: 'The Beginning' },
-  { id: 'chapter-2', label: 'The Craft' },
-  { id: 'chapter-journey', label: 'The Journey' },
-  { id: 'chapter-3', label: 'The Adventures' },
-  { id: 'chapter-4', label: 'The End' },
-];
-
 function scrollToChapter(id) {
   document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -55,6 +48,7 @@ const TalentPortfolioPage = () => {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const visitorPreview = searchParams.get('preview') === 'visitor';
+  const shareParam = searchParams.get('share') || searchParams.get('token') || '';
   const wantsAddChapter = searchParams.get('add') === '1' || searchParams.get('add') === 'chapter';
   const { user } = useAuth();
   const { isLoggedInTalent } = useIsLoggedInTalent();
@@ -66,9 +60,10 @@ const TalentPortfolioPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeProject, setActiveProject] = useState(null);
-  const [activeChapter, setActiveChapter] = useState('cover');
   const [addChapterSignal, setAddChapterSignal] = useState(0);
   const [draftCount, setDraftCount] = useState(0);
+  const [viewAccess, setViewAccess] = useState({ allowed: false, status: 'loading' });
+  const [sharingSettings, setSharingSettings] = useState({ portfolioPublicEnabled: true, shareToken: '' });
 
   const refreshDisplayProjects = useCallback(async () => {
     if (!profile?.id) return;
@@ -90,21 +85,7 @@ const TalentPortfolioPage = () => {
   useEffect(() => {
     window.scrollTo(0, 0);
     fetchPageData();
-  }, [id, user?.id, visitorPreview]);
-
-  useEffect(() => {
-    const observers = CHAPTERS.map(({ id: chapterId }) => {
-      const el = document.getElementById(chapterId);
-      if (!el) return null;
-      const obs = new IntersectionObserver(
-        ([entry]) => { if (entry.isIntersecting) setActiveChapter(chapterId); },
-        { rootMargin: '-30% 0px -55% 0px' }
-      );
-      obs.observe(el);
-      return obs;
-    });
-    return () => observers.forEach((o) => o?.disconnect());
-  }, [profile, loading]);
+  }, [id, user?.id, visitorPreview, shareParam]);
 
   useEffect(() => {
     if (loading) return;
@@ -112,6 +93,22 @@ const TalentPortfolioPage = () => {
       requestAnimationFrame(() => scrollToPortfolioEditor());
     }
   }, [loading, location.hash, wantsAddChapter]);
+
+  // While waiting on talent approval, poll so the portfolio unlocks automatically.
+  useEffect(() => {
+    if (loading || viewAccess.status !== 'pending') return undefined;
+    const timer = setInterval(() => {
+      fetchPageData();
+    }, 8000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchPageData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loading, viewAccess.status, id, user?.id, shareParam]);
 
   const fetchPageData = async () => {
     setLoading(true);
@@ -147,13 +144,51 @@ const TalentPortfolioPage = () => {
         const items = await fetchOwnPortfolioProjects(profileData.id);
         setProjects(items.filter((p) => p.published));
         setDraftCount(items.filter((p) => !p.published).length);
+        setViewAccess({ allowed: true, status: 'owner', asOwner: true });
+        try {
+          const sharing = await fetchTalentPortfolioSharing();
+          setSharingSettings({
+            portfolioPublicEnabled: sharing.portfolioPublicEnabled !== false,
+            shareToken: sharing.shareToken || '',
+          });
+        } catch {
+          setSharingSettings({ portfolioPublicEnabled: true, shareToken: '' });
+        }
+      } else if (profileIsOwner && visitorPreview) {
+        // Owner "Preview as visitor": show published work without access gating.
+        // (Share/public APIs can return empty for a logged-in talent.)
+        const items = await fetchOwnPortfolioProjects(profileData.id);
+        const published = items.filter((p) => p.published);
+        setProjects(published);
+        setDraftCount(0);
+        setViewAccess({ allowed: true, status: 'visitor_preview', asOwner: false });
+        try {
+          const sharing = await fetchTalentPortfolioSharing();
+          setSharingSettings({
+            portfolioPublicEnabled: sharing.portfolioPublicEnabled !== false,
+            shareToken: sharing.shareToken || '',
+          });
+        } catch {
+          setSharingSettings({ portfolioPublicEnabled: true, shareToken: '' });
+        }
       } else {
-        setProjects(await fetchPublicPortfolioProjects(profileData.id));
+        const access = await fetchPortfolioViewAccess(profileData.id, shareParam);
+        setViewAccess({
+          allowed: Boolean(access.allowed),
+          status: access.status || access.reason || 'none',
+          asOwner: false,
+        });
+        if (access.allowed && Array.isArray(access.projects)) {
+          setProjects(access.projects);
+        } else {
+          setProjects([]);
+        }
         setDraftCount(0);
       }
     } catch {
       setProjects([]);
       setDraftCount(0);
+      setViewAccess({ allowed: false, status: 'error', asOwner: false });
     }
 
     setLoading(false);
@@ -208,7 +243,62 @@ const TalentPortfolioPage = () => {
 
   const isOwner = Boolean(user?.id && profile.user_id === user.id);
   const showOwnerEditor = isOwner && !visitorPreview;
-  const showPreviewBanner = isOwner && !isDirectoryLive(profile.directory_status) && !visitorPreview;
+  const directoryLive = isDirectoryLive(profile.directory_status);
+  const canViewPortfolio = showOwnerEditor || viewAccess.allowed;
+
+  if (!canViewPortfolio && directoryLive) {
+    return (
+      <div className="min-h-screen bg-[#f5ebe0] pt-24 pb-20 px-4">
+        <div className="max-w-lg mx-auto">
+          <button
+            type="button"
+            onClick={() => navigate(`/talent/${profile.id}`)}
+            className="inline-flex items-center gap-2 text-xs font-black text-gray-500 hover:text-black uppercase tracking-widest mb-8"
+          >
+            <ArrowLeft size={13} /> Back to profile
+          </button>
+          <div className="bg-white rounded-[2rem] border border-gray-200 shadow-sm p-6 sm:p-8 space-y-6">
+            <div className="text-center space-y-2">
+              <BookOpen size={32} className="mx-auto text-red/70" />
+              <h1 className="font-black text-xl text-gray-900">{formatDisplayName(profile.name)}&apos;s portfolio</h1>
+              <p className="text-sm text-gray-500 font-medium leading-relaxed">
+                {viewAccess.status === 'pending'
+                  ? 'Your request is pending. This page updates automatically when the talent approves — you do not need to reopen it.'
+                  : viewAccess.status === 'share_required'
+                    ? 'This portfolio uses a private link. Ask the talent for their share URL, or request access as a BYG client below.'
+                    : viewAccess.status === 'login_required'
+                      ? 'Sign in with your activated hiring client account to request portfolio access, or use the talent\'s public share link if they sent you one.'
+                      : 'Request access to view this talent\'s portfolio storybook. Each client is approved individually.'}
+              </p>
+            </div>
+            {canRequestIntro && user?.email && (
+              <RequestPortfolioPanel
+                talent={{ id: profile.id, isReal: true }}
+                clientEmail={user.email}
+                canRequestPortfolio={viewAccess.status !== 'login_required'}
+              />
+            )}
+            {viewAccess.status === 'login_required' && (
+              <Link
+                to={`/login?redirect=${encodeURIComponent(`/talent/${profile.id}/portfolio`)}`}
+                className="block w-full py-4 bg-black hover:bg-red text-white font-black text-sm uppercase tracking-widest rounded-2xl text-center transition-colors"
+              >
+                Sign in as client
+              </Link>
+            )}
+            <Link
+              to={`/request-intro?id=${profile.id}`}
+              className="block w-full py-3 text-center text-xs font-black uppercase tracking-widest text-gray-500 hover:text-red transition-colors"
+            >
+              Go to intro &amp; portfolio request
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const showPreviewBanner = isOwner && !directoryLive && !visitorPreview;
   const showOwnerBar = showOwnerEditor;
   const departmentLabel = getTalentDepartmentLabel(profile.department);
   const skills = profile.skills || [];
@@ -242,10 +332,10 @@ const TalentPortfolioPage = () => {
       />
       <PortfolioPageDecor />
 
-      <div className="relative z-10 pb-24 md:pb-10">
-      {/* Desktop: fixed nav (breadcrumbs + chapters) — avoids overlap with content */}
+      <div className="relative z-10 pb-16 md:pb-10">
+      {/* Desktop sticky bar */}
       <div className="hidden md:block fixed top-[4.5rem] left-0 right-0 z-40 bg-[#fffbf5]/95 backdrop-blur-md border-b-2 border-[#e8dcc8] shadow-[0_4px_20px_rgba(0,0,0,0.06)]">
-        <div className="max-w-6xl mx-auto px-6 py-2 flex items-center justify-between gap-4 border-b border-[#e8dcc8]/50">
+        <div className="max-w-6xl mx-auto px-6 py-2.5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <button
               type="button"
@@ -262,27 +352,33 @@ const TalentPortfolioPage = () => {
               <User size={12} className="shrink-0" /> Hire Profile
             </Link>
           </div>
-          <PortfolioShareBar profileId={profile.id} displayName={displayName} />
-        </div>
-        <div className="max-w-6xl mx-auto px-6 py-2.5 flex items-center gap-1.5 overflow-x-auto">
-          <BookOpen size={14} className="text-red shrink-0 mr-1" />
-          {CHAPTERS.map((ch) => (
-            <button
-              key={ch.id}
-              type="button"
-              onClick={() => scrollToChapter(ch.id)}
-              className={`shrink-0 px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${
-                activeChapter === ch.id
-                  ? 'bg-red text-white shadow-md shadow-red/25'
-                  : 'text-gray-500 hover:text-black hover:bg-black/5'
-              }`}
-            >
-              {ch.label}
-            </button>
-          ))}
+          <div className="flex items-center gap-2 shrink-0">
+            {isOwner && !visitorPreview && (
+              <Link
+                to={`/talent/${profile.id}/portfolio?preview=visitor`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-[#e8dcc8] hover:border-red text-gray-700 font-black text-[10px] uppercase tracking-widest rounded-lg transition-colors"
+              >
+                <Eye size={12} /> Preview as visitor
+              </Link>
+            )}
+            {isOwner && visitorPreview && (
+              <Link
+                to={`/talent/${profile.id}/portfolio`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-black hover:bg-red text-white font-black text-[10px] uppercase tracking-widest rounded-lg transition-colors"
+              >
+                <Pencil size={12} /> Exit preview
+              </Link>
+            )}
+            <PortfolioShareBar
+              profileId={profile.id}
+              displayName={displayName}
+              portfolioPublicEnabled={sharingSettings.portfolioPublicEnabled}
+              shareToken={sharingSettings.shareToken}
+            />
+          </div>
         </div>
       </div>
-      <div className="hidden md:block h-[7.25rem]" aria-hidden />
+      <div className="hidden md:block h-[3.75rem]" aria-hidden />
 
       {/* Mobile top links */}
       <div className="md:hidden max-w-6xl mx-auto px-3 sm:px-6 pt-20 pb-2 flex flex-wrap items-center justify-between gap-2 relative z-10">
@@ -302,7 +398,31 @@ const TalentPortfolioPage = () => {
             <User size={12} className="shrink-0" /> Hire Profile
           </Link>
         </div>
-        <PortfolioShareBar profileId={profile.id} displayName={displayName} compact />
+        <div className="flex items-center gap-2 shrink-0">
+          {isOwner && !visitorPreview && (
+            <Link
+              to={`/talent/${profile.id}/portfolio?preview=visitor`}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-[#e8dcc8] text-gray-700 font-black text-[9px] uppercase tracking-widest rounded-lg"
+            >
+              <Eye size={11} /> Preview
+            </Link>
+          )}
+          {isOwner && visitorPreview && (
+            <Link
+              to={`/talent/${profile.id}/portfolio`}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-black text-white font-black text-[9px] uppercase tracking-widest rounded-lg"
+            >
+              <Pencil size={11} /> Exit
+            </Link>
+          )}
+          <PortfolioShareBar
+            profileId={profile.id}
+            displayName={displayName}
+            compact
+            portfolioPublicEnabled={sharingSettings.portfolioPublicEnabled}
+            shareToken={sharingSettings.shareToken}
+          />
+        </div>
       </div>
 
       {visitorPreview && isOwner && (
@@ -355,12 +475,6 @@ const TalentPortfolioPage = () => {
               >
                 <Pencil size={12} /> Manage chapters
               </button>
-              <Link
-                to={`/talent/${profile.id}/portfolio?preview=visitor`}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-200 hover:border-red text-gray-700 font-black text-[10px] uppercase tracking-widest rounded-lg transition-colors"
-              >
-                <Eye size={12} /> Preview as visitor
-              </Link>
             </div>
           </div>
         </div>
@@ -686,7 +800,13 @@ const TalentPortfolioPage = () => {
           {closingQuote && <StoryQuote text={closingQuote.text} attribution={closingQuote.attribution} />}
 
           <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-6 sm:mt-8 w-full">
-            <PortfolioShareBar profileId={profile.id} displayName={displayName} className="w-full sm:w-auto justify-center" />
+            <PortfolioShareBar
+              profileId={profile.id}
+              displayName={displayName}
+              className="w-full sm:w-auto justify-center"
+              portfolioPublicEnabled={sharingSettings.portfolioPublicEnabled}
+              shareToken={sharingSettings.shareToken}
+            />
             <Link
               to={`/talent/${profile.id}`}
               className="inline-flex items-center justify-center gap-2 px-5 py-3 bg-white border-2 border-black text-black font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-black hover:text-white transition-colors w-full sm:w-auto"
@@ -714,21 +834,6 @@ const TalentPortfolioPage = () => {
           The End · Powered by{' '}
           <Link to="/" className="text-red hover:text-black transition-colors">BYG Hires</Link>
         </motion.p>
-      </div>
-
-      {/* Mobile chapter dots — sit left of music control */}
-      <div className="fixed bottom-5 left-4 right-[4.5rem] z-40 flex gap-1.5 md:hidden bg-black/80 backdrop-blur-md px-3 py-2 rounded-full overflow-x-auto justify-start sm:justify-center">
-        {CHAPTERS.map((ch) => (
-          <button
-            key={ch.id}
-            type="button"
-            onClick={() => scrollToChapter(ch.id)}
-            aria-label={ch.label}
-            className={`shrink-0 h-2 rounded-full transition-all ${
-              activeChapter === ch.id ? 'bg-red w-5' : 'bg-white/40 w-2'
-            }`}
-          />
-        ))}
       </div>
 
       <PortfolioProjectDetail project={activeProject} onClose={() => setActiveProject(null)} />

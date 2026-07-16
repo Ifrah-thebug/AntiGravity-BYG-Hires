@@ -1,12 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link2, Check } from 'lucide-react';
+import { buildPortfolioShareUrl } from '../../lib/portfolioShareUrl';
 
-export default function PortfolioShareBar({ profileId, displayName, compact = false, className = '' }) {
+export default function PortfolioShareBar({
+  profileId,
+  displayName,
+  compact = false,
+  className = '',
+  portfolioPublicEnabled = true,
+  shareToken = '',
+}) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window !== 'undefined'
-    ? `${window.location.origin}/talent/${profileId}/portfolio`
-    : `/talent/${profileId}/portfolio`;
+  const url = buildPortfolioShareUrl({
+    profileId,
+    portfolioPublicEnabled,
+    shareToken,
+  });
 
   const handleCopy = async () => {
     try {

@@ -243,8 +243,88 @@ async function callOpenRouterText(
   return parse(text);
 }
 
+/**
+ * Multi-turn chat completions.
+ * @param {{ role: 'system'|'user'|'assistant', content: string }[]} messages
+ */
+async function callOpenRouterChat(
+  messages,
+  {
+    model,
+    temperature = 0.35,
+    maxOutputTokens = 1200,
+    timeoutMs = getDefaultTimeoutMs(),
+  } = {}
+) {
+  const apiKey = getOpenRouterApiKey();
+  if (!apiKey) {
+    const err = new Error('OpenRouter API key not configured');
+    err.status = 503;
+    throw err;
+  }
+  const resolvedModel = model || getDefaultModel();
+  if (!resolvedModel) {
+    const err = new Error('OpenRouter model not configured');
+    err.status = 503;
+    throw err;
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+  let response;
+  try {
+    response = await fetch(`${getBaseUrl()}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': getSiteUrl(),
+        'X-Title': getAppName(),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: resolvedModel,
+        messages,
+        temperature,
+        max_tokens: maxOutputTokens,
+      }),
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const timeoutErr = new Error(`OpenRouter API timed out after ${timeoutMs}ms`);
+      timeoutErr.status = 504;
+      throw timeoutErr;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  const responseText = await response.text();
+  if (!response.ok) {
+    const apiErr = new Error(`OpenRouter API error ${response.status}: ${responseText.slice(0, 300)}`);
+    apiErr.status = response.status;
+    throw apiErr;
+  }
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    const err = new Error('Invalid JSON from OpenRouter API');
+    err.status = 502;
+    throw err;
+  }
+
+  const text = extractOpenRouterText(data);
+  if (!text) throw buildEmptyResponseError(data);
+  return text.trim();
+}
+
 module.exports = {
   callOpenRouterText,
+  callOpenRouterChat,
   getOpenRouterApiKey,
   isOpenRouterEnabled,
   getGenerateModelChain,
