@@ -7,6 +7,7 @@ import { formatDisplayName } from '../lib/formatDisplayName';
 import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
 import ProfileVerificationBadge from './ProfileVerificationBadge';
 import AiInterviewVerifiedBadge from './AiInterviewVerifiedBadge';
+import AmbassadorReferredBadge from './AmbassadorReferredBadge';
 import TalentModalSkillTags from './TalentModalSkillTags';
 import { SHOW_ASSESSMENT_SCORE } from '../lib/talentVerification';
 
@@ -80,6 +81,11 @@ export default function DirectoryTalentModal({
           <div>
             <ProfileVerificationBadge talent={talent} variant="dark" />
             <AiInterviewVerifiedBadge talent={talent} variant="dark" />
+            {talent.ambassadorReferred ? (
+              <div className="mb-2">
+                <AmbassadorReferredBadge variant="dark" />
+              </div>
+            ) : null}
             <h2 className="text-2xl font-black tracking-tight" title={talent.name}>
               {formatDisplayName(talent.name)}
             </h2>

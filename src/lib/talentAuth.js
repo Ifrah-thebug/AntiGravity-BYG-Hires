@@ -2,6 +2,7 @@ import { supabase } from './supabase';
 import { loadPendingSetup } from './talentStorage';
 import { fetchIsAdmin } from './adminAuth';
 import { fetchIsClient } from './clientAuth';
+import { fetchIsAmbassador } from './ambassadorApi';
 
 export const ACCOUNT_PROFILE_UPDATED = 'byg-account-profile-updated';
 
@@ -62,6 +63,11 @@ export async function routeAfterAuth(navigate) {
 
   if (await fetchIsAdmin()) {
     navigate('/admin/dashboard');
+    return;
+  }
+
+  if (await fetchIsAmbassador(user.id)) {
+    navigate('/ambassador/hub');
     return;
   }
 

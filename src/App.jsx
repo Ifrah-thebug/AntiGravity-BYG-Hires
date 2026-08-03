@@ -46,6 +46,7 @@ import TalentVoiceInterviewPage from './pages/TalentVoiceInterviewPage';
 import StatusPage from './pages/StatusPage';
 import AdminProfileReviewsPage from './pages/AdminProfileReviewsPage';
 import AdminTalentImportPage from './pages/AdminTalentImportPage';
+import AdminAmbassadorsPage from './pages/AdminAmbassadorsPage';
 import TalentActivatePage from './pages/TalentActivatePage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
 import ResetPasswordPage from './pages/ResetPasswordPage';
@@ -67,6 +68,8 @@ import AdminClientsPage from './pages/AdminClientsPage';
 import ClientActivatePage from './pages/ClientActivatePage';
 import ClientLoginPage from './pages/ClientLoginPage';
 import ClientDashboardPage from './pages/ClientDashboardPage';
+import AmbassadorGatePage from './pages/AmbassadorGatePage';
+import AmbassadorHubPage from './pages/AmbassadorHubPage';
 import NotFoundPage from './pages/NotFoundPage';
 import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
@@ -99,7 +102,8 @@ const AppContent = () => {
     location.pathname.startsWith('/talent/setup') ||
     location.pathname === '/talent/activate' ||
     location.pathname === '/client' ||
-    location.pathname.startsWith('/client/');
+    location.pathname.startsWith('/client/') ||
+    location.pathname.startsWith('/ambassador');
   const isPortfolioPage = /\/talent\/[^/]+\/portfolio$/.test(location.pathname);
 
   // One-time cleanup: remove any test/Ifrah profiles from localStorage
@@ -163,6 +167,14 @@ const AppContent = () => {
               </AdminRoute>
             )}
           />
+          <Route
+            path="/admin/ambassadors"
+            element={(
+              <AdminRoute>
+                <AdminAmbassadorsPage />
+              </AdminRoute>
+            )}
+          />
           <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
           <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
@@ -183,6 +195,8 @@ const AppContent = () => {
           <Route path="/client/activate" element={<ClientActivatePage />} />
           <Route path="/client/login" element={<Navigate to="/login" replace />} />
           <Route path="/client" element={<ClientDashboardPage />} />
+          <Route path="/ambassador" element={<AmbassadorGatePage />} />
+          <Route path="/ambassador/hub" element={<AmbassadorHubPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>

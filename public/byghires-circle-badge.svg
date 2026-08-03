@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="2048" viewBox="0 0 2048 2048" role="img" aria-label="Byghires Circle Verified Ambassador">
+  <!-- HD vector badge: gold ring · navy field · white B -->
+  <circle cx="1024" cy="1024" r="960" fill="#C9A227"/>
+  <circle cx="1024" cy="1024" r="896" fill="#0B1B3A"/>
+  <text
+    x="1024"
+    y="1190"
+    text-anchor="middle"
+    fill="#FFFFFF"
+    font-family="Arial Black, Helvetica Neue, Arial, sans-serif"
+    font-size="1080"
+    font-weight="900"
+  >B</text>
+</svg>

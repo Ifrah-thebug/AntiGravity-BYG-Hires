@@ -18,6 +18,7 @@ import { formatAvailabilityLabel } from '../lib/profileContentPolicy';
 import { fetchLiveDirectoryTalents, pickFeaturedTalents } from '../lib/liveDirectoryTalents';
 import TalentSkillTags from '../components/TalentSkillTags';
 import DirectoryTalentModal from '../components/DirectoryTalentModal';
+import AmbassadorReferredBadge from '../components/AmbassadorReferredBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 
@@ -108,6 +109,12 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'from_month' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
           <span>{formatAvailabilityLabel(talent.availability)}</span>
         </div>
+
+        {talent.ambassadorReferred ? (
+          <div className="absolute top-3 left-3">
+            <AmbassadorReferredBadge compact />
+          </div>
+        ) : null}
 
         {/* Match Score Badge (Only show if > 0) */}
         {showMatchBadge && (

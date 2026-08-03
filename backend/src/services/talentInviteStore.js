@@ -28,6 +28,7 @@ function mapInviteRow(row) {
     profileReminderSentAt: row.profile_reminder_sent_at || null,
     userId: row.user_id || null,
     invitedBy: row.invited_by || null,
+    ambassadorId: row.ambassador_id || null,
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -190,7 +191,7 @@ async function findProfileByEmail(email) {
   if (!normalized) return null;
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select('user_id, email, name')
+    .select('user_id, email, name, ambassador_id')
     .ilike('email', normalized)
     .maybeSingle();
   if (error) throw error;

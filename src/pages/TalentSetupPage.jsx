@@ -89,6 +89,9 @@ const TalentSetupPage = () => {
   const [cvParseError, setCvParseError] = useState('');
   const [reuploadingCv, setReuploadingCv] = useState(false);
   const [inviteCvFileName, setInviteCvFileName] = useState('');
+  const [ambassadorId, setAmbassadorId] = useState(
+    stateData.ambassadorId || pending?.ambassadorId || null
+  );
 
   const applyParsedToForm = (parsed, nameOverride) => {
     if (!parsed) return;
@@ -163,6 +166,16 @@ const TalentSetupPage = () => {
         const status = await fetchInviteSetupStatus();
         if (cancelled || !status.hasInvite) return;
 
+        if (status.ambassadorId) setAmbassadorId(status.ambassadorId);
+
+        if (status.hasInvite && status.hasCv === false) {
+          setInviteFlow(true);
+          if (status.name) {
+            setForm((f) => ({ ...f, name: status.name || f.name }));
+          }
+          return;
+        }
+
         setInviteFlow(true);
         if (status.cvUrl) setCvUrl(status.cvUrl);
         if (status.originalFilename) setInviteCvFileName(status.originalFilename);
@@ -181,6 +194,10 @@ const TalentSetupPage = () => {
         setParsingInvite(true);
         const result = await parseInviteCvOnSetup();
         if (cancelled) return;
+        if (result.skipped) {
+          if (status.name) setForm((f) => ({ ...f, name: status.name || f.name }));
+          return;
+        }
         if (result.parsed) {
           applyParsedToForm(result.parsed, result.name || status.name);
         }
@@ -311,6 +328,9 @@ const TalentSetupPage = () => {
         department: prepared.data.department,
         photo_url: finalPhoto || '',
         cv_url: finalCv || '',
+        ...(ambassadorId || stateData.ambassadorId
+          ? { ambassador_id: ambassadorId || stateData.ambassadorId }
+          : {}),
       }, { onConflict: 'user_id' });
 
       if (dbErr) throw dbErr;

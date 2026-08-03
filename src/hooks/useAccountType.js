@@ -3,10 +3,11 @@ import { useLocation } from 'react-router-dom';
 import { fetchIsAdmin } from '../lib/adminAuth';
 import { fetchIsClient } from '../lib/clientAuth';
 import { fetchUserProfile, ACCOUNT_PROFILE_UPDATED } from '../lib/talentAuth';
+import { fetchIsAmbassador } from '../lib/ambassadorApi';
 import { loadPendingSetup } from '../lib/talentStorage';
 
 /**
- * @returns {'admin' | 'client' | 'talent' | 'guest' | 'loading'}
+ * @returns {'admin' | 'ambassador' | 'client' | 'talent' | 'guest' | 'loading'}
  */
 export function useAccountType(user) {
   const { pathname } = useLocation();
@@ -28,12 +29,15 @@ export function useAccountType(user) {
         return;
       }
 
-      // Avoid flashing "Log In" / hiding My Portal on background re-checks.
       setAccountType((prev) => (prev === 'guest' || prev === 'loading' ? 'loading' : prev));
 
       try {
         if (await fetchIsAdmin()) {
           if (!cancelled) setAccountType('admin');
+          return;
+        }
+        if (await fetchIsAmbassador(user.id)) {
+          if (!cancelled) setAccountType('ambassador');
           return;
         }
         if (loadPendingSetup()) {

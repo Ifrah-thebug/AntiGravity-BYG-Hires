@@ -213,13 +213,33 @@ function buildTalentActivationEmailHtml({
   reminder = false,
   tokenHours = 72,
   secondReminder = false,
+  ambassadorCode = null,
+  ambassadorName = null,
 }) {
   const greeting = name ? `Hi ${name},` : 'Hi,';
+  const hasAmbassador = Boolean(ambassadorCode);
   let intro;
   if (secondReminder) {
-    intro = `<p style="margin: 0 0 12px;">We still haven't seen your BYG Hires talent profile activation. Please set your password to join the <strong>BYG Hires Talent Pool</strong> and complete your profile.</p>`;
+    intro = hasAmbassador
+      ? `<p style="margin: 0 0 12px;">We still haven't seen your BYG Hires activation. You were invited through the <strong>Byghires Circle</strong> ambassador program${ambassadorName ? ` by <strong>${ambassadorName}</strong>` : ''}. Please set your password to complete your profile.</p>`
+      : `<p style="margin: 0 0 12px;">We still haven't seen your BYG Hires talent profile activation. Please set your password to join the <strong>BYG Hires Talent Pool</strong> and complete your profile.</p>`;
   } else if (reminder) {
-    intro = `<p style="margin: 0 0 12px;">This is a friendly reminder — you were invited to join the <strong>BYG Hires Talent Pool</strong> but haven't activated your account yet. Set your password to continue.</p>`;
+    intro = hasAmbassador
+      ? `<p style="margin: 0 0 12px;">Friendly reminder — you were invited to BYG Hires through the <strong>Byghires Circle</strong> ambassador program${ambassadorName ? ` by <strong>${ambassadorName}</strong>` : ''}. Activate your account to finish your profile.</p>`
+      : `<p style="margin: 0 0 12px;">This is a friendly reminder — you were invited to join the <strong>BYG Hires Talent Pool</strong> but haven't activated your account yet. Set your password to continue.</p>`;
+  } else if (hasAmbassador) {
+    intro = `
+      <p style="margin: 0 0 12px;">You've been invited to <strong>BYG Hires</strong> through the <strong>Byghires Circle</strong> ambassador program${ambassadorName ? ` by <strong>${ambassadorName}</strong>` : ''}.</p>
+      <p style="margin: 0 0 12px;">Activate your account to create your talent profile. Your CV is already on file when one was uploaded — you'll review and complete your profile after signing in.</p>
+      <p style="margin: 0 0 8px;"><strong>After your profile is set up, complete these steps:</strong></p>
+      <ol style="margin: 0 0 12px; padding-left: 20px;">
+        <li style="margin-bottom: 6px;">Submit your profile for admin review so you can go live on the talent directory</li>
+        <li style="margin-bottom: 6px;">Connect your calendar and publish intro availability so clients can book calls</li>
+        <li style="margin-bottom: 6px;">Take at least one skills assessment to show verified expertise</li>
+        <li style="margin-bottom: 6px;">Add portfolio projects (optional, but helps you stand out)</li>
+      </ol>
+      <p style="margin: 0 0 12px;">You can do all of this from your talent portal after activation.</p>
+    `;
   } else {
     intro = `<p style="margin: 0 0 12px;">You've been invited to join the <strong>BYG Hires Talent Pool</strong>. Activate your account to set up your profile and get started.</p>`;
   }
@@ -298,18 +318,35 @@ async function sendTransactionalEmail({ to, subject, html, logLabel }) {
   };
 }
 
-async function sendTalentActivationEmail({ to, name, token, tokenHours = 72 }) {
+async function sendTalentActivationEmail({
+  to,
+  name,
+  token,
+  tokenHours = 72,
+  ambassadorCode = null,
+  ambassadorName = null,
+}) {
   const copyUrl = buildTalentActivationAppUrl(token);
   const buttonUrl = buildTalentActivationEmailButtonUrl(token);
-  const subject = 'Activate your BYG Hires talent profile';
+  const hasAmbassador = Boolean(ambassadorCode);
+  const subject = hasAmbassador
+    ? 'Activate your BYG Hires profile (Ambassador invite)'
+    : 'Activate your BYG Hires talent profile';
   const html = buildTalentActivationEmailHtml({
     name,
     buttonUrl,
     copyUrl,
     reminder: false,
     tokenHours,
+    ambassadorCode,
+    ambassadorName,
   });
-  const result = await sendTransactionalEmail({ to, subject, html, logLabel: 'Talent activation' });
+  const result = await sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: hasAmbassador ? 'Talent activation (ambassador)' : 'Talent activation',
+  });
   return { ...result, activationUrl: copyUrl };
 }
 
@@ -319,12 +356,19 @@ async function sendTalentActivationReminderEmail({
   token,
   tokenHours = 72,
   secondReminder = false,
+  ambassadorCode = null,
+  ambassadorName = null,
 }) {
   const copyUrl = buildTalentActivationAppUrl(token);
   const buttonUrl = buildTalentActivationEmailButtonUrl(token);
+  const hasAmbassador = Boolean(ambassadorCode);
   const subject = secondReminder
-    ? 'Second reminder: activate your BYG Hires talent profile'
-    : 'Reminder: activate your BYG Hires talent profile';
+    ? hasAmbassador
+      ? 'Second reminder: activate your Ambassador invite'
+      : 'Second reminder: activate your BYG Hires talent profile'
+    : hasAmbassador
+      ? 'Reminder: activate your Ambassador invite'
+      : 'Reminder: activate your BYG Hires talent profile';
   const html = buildTalentActivationEmailHtml({
     name,
     buttonUrl,
@@ -332,12 +376,20 @@ async function sendTalentActivationReminderEmail({
     reminder: true,
     tokenHours,
     secondReminder,
+    ambassadorCode,
+    ambassadorName,
   });
   const result = await sendTransactionalEmail({
     to,
     subject,
     html,
-    logLabel: secondReminder ? 'Talent activation reminder (2nd)' : 'Talent activation reminder',
+    logLabel: secondReminder
+      ? hasAmbassador
+        ? 'Talent activation reminder (2nd, ambassador)'
+        : 'Talent activation reminder (2nd)'
+      : hasAmbassador
+        ? 'Talent activation reminder (ambassador)'
+        : 'Talent activation reminder',
   });
   return { ...result, activationUrl: copyUrl };
 }

@@ -1,10 +1,10 @@
 // src/pages/TalentSignupPage.jsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import {
   UploadCloud, Camera, FileText, X, AlertTriangle,
-  CheckCircle2, ChevronRight, Mail, Lock, User, Sparkles
+  CheckCircle2, ChevronRight, Mail, Lock, User, Sparkles, KeyRound
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { parseCV, readFileAsBase64 } from '../lib/geminiCV';
@@ -20,12 +20,19 @@ import {
 } from '../lib/profileContentPolicy';
 import ProfilePhotoGeneratingLoader from '../components/ProfilePhotoGeneratingLoader';
 import CvParseRetryScreen from '../components/CvParseRetryScreen';
+import { verifyAmbassadorCode } from '../lib/ambassadorApi';
 
 const TalentSignupPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { signUp } = useAuth();
 
   const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [ambassadorCode, setAmbassadorCode] = useState(
+    () => String(searchParams.get('code') || '').trim().toUpperCase()
+  );
+  const [ambassadorId, setAmbassadorId] = useState(null);
+  const [ambassadorHint, setAmbassadorHint] = useState('');
   const [agreementChecked, setAgreementChecked] = useState(false);
   const [showAgreementModal, setShowAgreementModal] = useState(false);
   const [cvFile, setCvFile] = useState(null);
@@ -48,6 +55,36 @@ const TalentSignupPage = () => {
 
   const handleInput = (e) => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
 
+  useEffect(() => {
+    const code = String(ambassadorCode || '').trim().toUpperCase();
+    if (!code) {
+      setAmbassadorId(null);
+      setAmbassadorHint('');
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      try {
+        const data = await verifyAmbassadorCode(code);
+        if (cancelled) return;
+        setAmbassadorId(data.ambassador?.id || null);
+        setAmbassadorHint(
+          data.ambassador?.name
+            ? `Linked to ambassador ${data.ambassador.name} (${data.ambassador.code})`
+            : `Code ${data.ambassador?.code || code} accepted`
+        );
+      } catch {
+        if (cancelled) return;
+        setAmbassadorId(null);
+        setAmbassadorHint('Code not recognized — you can still sign up without it.');
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [ambassadorCode]);
+
   const handleCV = (e) => {
     const f = e.target.files?.[0];
     if (f) { setCvFile(f); setError(''); }
@@ -64,6 +101,8 @@ const TalentSignupPage = () => {
       photoUrl: photoBase64,
       cvUrl: '',
       uploadWarnings: [],
+      ambassadorId: ambassadorId || null,
+      ambassadorCode: ambassadorCode || null,
     };
 
     if (!session) {
@@ -92,6 +131,7 @@ const TalentSignupPage = () => {
         cvFile: activeCvFile,
         photoFile,
         uploadWarnings: warnings,
+        ambassadorId: ambassadorId || null,
       },
     });
   };
@@ -426,6 +466,29 @@ const TalentSignupPage = () => {
                       placeholder="Min. 6 characters"
                       className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all placeholder:text-gray-400"
                       required />
+                  </div>
+
+                  {/* Optional ambassador code — never blocks signup */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                      <KeyRound size={10} /> Ambassador code <span className="text-gray-400 font-semibold normal-case tracking-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={ambassadorCode}
+                      onChange={(e) => setAmbassadorCode(e.target.value.toUpperCase())}
+                      placeholder="e.g. BYG-STAR-01"
+                      className="w-full px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold text-gray-800 focus:border-red focus:bg-white outline-none transition-all placeholder:text-gray-400 uppercase tracking-wider"
+                    />
+                    {ambassadorHint ? (
+                      <p className={`text-[11px] font-semibold ${ambassadorId ? 'text-emerald-700' : 'text-gray-500'}`}>
+                        {ambassadorHint}
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-gray-400 font-medium">
+                        Have a referral code? Add it here — signup works the same without one.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>

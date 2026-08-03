@@ -107,6 +107,8 @@ router.post('/activate/set-password', async (req, res) => {
       name: result.name,
       cvUrl: result.cvUrl,
       inviteSetup: true,
+      ambassadorId: result.ambassadorId || null,
+      hasCv: Boolean(result.cvUrl),
     });
   } catch (err) {
     const code = err.code || 'ACTIVATION_FAILED';

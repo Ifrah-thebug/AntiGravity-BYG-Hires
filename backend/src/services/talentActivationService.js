@@ -173,18 +173,43 @@ async function completeTalentActivation({ token, password }) {
     existingUserId,
   });
 
-  const userCvPath = await copyCvToUserFolder(invite, userId);
-  const cvUrl = getPublicCvUrl(userCvPath);
-  const now = new Date().toISOString();
+  let cvUrl = '';
+  let userCvPath = invite.cvStoragePath || null;
+  if (invite.cvStoragePath) {
+    userCvPath = await copyCvToUserFolder(invite, userId);
+    cvUrl = getPublicCvUrl(userCvPath);
+  }
 
-  await store.updateInvite(invite.id, {
+  const now = new Date().toISOString();
+  const invitePatch = {
     user_id: userId,
     activated_at: now,
     status: 'activated',
     invite_token: null,
     token_expires_at: null,
-    cv_storage_path: userCvPath,
-  });
+  };
+  if (userCvPath) invitePatch.cv_storage_path = userCvPath;
+
+  await store.updateInvite(invite.id, invitePatch);
+
+  // Attribute talent profile to ambassador when present.
+  if (invite.ambassadorId) {
+    try {
+      const { data: profile } = await supabaseAdmin
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (profile) {
+        await supabaseAdmin
+          .from('profiles')
+          .update({ ambassador_id: invite.ambassadorId, updated_at: now })
+          .eq('user_id', userId);
+      }
+    } catch (attrErr) {
+      console.warn('[talent-invite] ambassador attribution:', attrErr?.message || attrErr);
+    }
+  }
 
   return {
     email: invite.email,
@@ -192,11 +217,28 @@ async function completeTalentActivation({ token, password }) {
     userId,
     cvUrl,
     inviteId: invite.id,
+    ambassadorId: invite.ambassadorId || null,
   };
 }
 
 function inviteNameForEmail(invite) {
   return String(invite?.name || '').trim();
+}
+
+async function resolveAmbassadorEmailContext(invite) {
+  if (!invite?.ambassadorId) return { ambassadorCode: null, ambassadorName: null };
+  try {
+    const ambassadorStore = require('./ambassadorStore');
+    const ambassador = await ambassadorStore.getById(invite.ambassadorId);
+    if (!ambassador) return { ambassadorCode: null, ambassadorName: null };
+    return {
+      ambassadorCode: ambassador.code || null,
+      ambassadorName: ambassador.name || null,
+    };
+  } catch (err) {
+    console.warn('[talent-invite] ambassador email context:', err?.message || err);
+    return { ambassadorCode: null, ambassadorName: null };
+  }
 }
 
 async function sendInviteEmail(invite) {
@@ -213,11 +255,14 @@ async function sendInviteEmail(invite) {
   const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id, { setFirstInvitedAt: !invite.firstInvitedAt });
   const tokenHours = getTokenTtlHours();
+  const { ambassadorCode, ambassadorName } = await resolveAmbassadorEmailContext(invite);
   const mailResult = await sendTalentActivationEmail({
     to: invite.email,
     name: displayName,
     token,
     tokenHours,
+    ambassadorCode,
+    ambassadorName,
   });
 
   return {
@@ -250,12 +295,15 @@ async function sendActivationReminderEmail(invite) {
   const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id);
   const tokenHours = getTokenTtlHours();
+  const { ambassadorCode, ambassadorName } = await resolveAmbassadorEmailContext(invite);
   const mailResult = await sendTalentActivationReminderEmail({
     to: invite.email,
     name: displayName,
     token,
     tokenHours,
     secondReminder: (invite.activationReminderCount || 0) >= 1,
+    ambassadorCode,
+    ambassadorName,
   });
 
   const now = new Date().toISOString();
@@ -294,11 +342,14 @@ async function sendActivationFullResendEmail(invite) {
   const displayName = inviteNameForEmail(invite);
   const token = await issueInviteToken(invite.id);
   const tokenHours = getTokenTtlHours();
+  const { ambassadorCode, ambassadorName } = await resolveAmbassadorEmailContext(invite);
   const mailResult = await sendTalentActivationEmail({
     to: invite.email,
     name: displayName,
     token,
     tokenHours,
+    ambassadorCode,
+    ambassadorName,
   });
 
   const now = new Date().toISOString();
@@ -319,17 +370,20 @@ async function getSetupStatusForUser(userId) {
   const invite = await store.getInviteByUserId(userId);
   if (!invite) return { hasInvite: false };
 
-  const cvUrl = getPublicCvUrl(invite.cvStoragePath);
+  const hasCv = Boolean(invite.cvStoragePath);
+  const cvUrl = hasCv ? getPublicCvUrl(invite.cvStoragePath) : '';
   return {
     hasInvite: true,
     inviteId: invite.id,
     name: invite.name,
     email: invite.email,
+    hasCv,
     cvUrl,
     originalFilename: invite.originalFilename,
     parseStatus: invite.parseStatus,
     parsed: invite.parsedJson,
     parseError: invite.parseError,
+    ambassadorId: invite.ambassadorId || null,
   };
 }
 
@@ -337,6 +391,17 @@ async function parseInviteCvForUser(userId) {
   const invite = await store.getInviteByUserId(userId);
   if (!invite) {
     return { ok: false, error: 'No invite found for this account.' };
+  }
+
+  if (!invite.cvStoragePath) {
+    return {
+      ok: true,
+      parsed: null,
+      cvUrl: '',
+      name: invite.name,
+      skipped: true,
+      reason: 'no_cv',
+    };
   }
 
   if (invite.parseStatus === 'parsed' && invite.parsedJson) {

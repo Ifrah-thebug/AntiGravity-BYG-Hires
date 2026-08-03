@@ -82,7 +82,9 @@ export default function TalentActivatePage() {
             inviteSetup: true,
             name: data.name,
             email: data.email,
-            cvUrl: data.cvUrl,
+            cvUrl: data.cvUrl || '',
+            ambassadorId: data.ambassadorId || null,
+            skipInviteCv: !data.hasCv && !data.cvUrl,
           },
         });
       }, 1200);

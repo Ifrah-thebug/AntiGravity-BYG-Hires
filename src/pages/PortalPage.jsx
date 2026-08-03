@@ -16,6 +16,7 @@ import TalentPortfolioRequestsPanel from '../components/TalentPortfolioRequestsP
 import TalentIntroAvailability from '../components/TalentIntroAvailability';
 import TalentGuideModal, { TALENT_GUIDE_STORAGE_KEY } from '../components/TalentGuideModal';
 import DirectoryTalentModal from '../components/DirectoryTalentModal';
+import AmbassadorReferredBadge from '../components/AmbassadorReferredBadge';
 import { useAuth } from '../context/AuthContext';
 import { mapProfileToDirectoryTalent } from '../lib/liveDirectoryTalents';
 import { sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
@@ -828,6 +829,11 @@ const PortalPage = () => {
               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Logged in as</p>
               <h2 className="text-lg sm:text-xl font-black text-white truncate">{form.name || user.email}</h2>
               <p className="text-red font-bold text-sm mt-0.5 truncate">{form.job_title || 'No title set yet'}</p>
+              {profile?.ambassador_id ? (
+                <div className="mt-2">
+                  <AmbassadorReferredBadge variant="dark" />
+                </div>
+              ) : null}
             </div>
             </div>
 

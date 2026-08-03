@@ -8,7 +8,7 @@ import { isDirectoryStatusColumnMissing } from './profileDirectoryCompat';
 import { photoUrlForDisplay } from './talentStorage';
 
 export const LIVE_PROFILE_COLUMNS =
-  'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, created_at, updated_at';
+  'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, ambassador_id, created_at, updated_at';
 
 export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap = {}) {
   const skills = profile.skills || [];
@@ -21,6 +21,7 @@ export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap =
     verified: false,
     aiInterviewVerified: Boolean(aiMeta.aiInterviewVerified),
     aiInterviewScore: aiMeta.interviewScore ?? null,
+    ambassadorReferred: Boolean(profile.ambassador_id),
     role: profile.job_title || 'Professional',
     experience: profile.experience_years ? `${profile.experience_years} yrs` : 'Flexible',
     tags: skills,

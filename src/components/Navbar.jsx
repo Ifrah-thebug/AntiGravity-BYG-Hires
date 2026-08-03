@@ -1,5 +1,5 @@
 // src/components/Navbar.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Menu, X, ChevronDown, LogOut, LayoutDashboard, Sparkles } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
@@ -13,14 +13,32 @@ const PUBLIC_NAV_LINKS = [
   { name: 'About', href: '/about' },
 ];
 
+const AMBASSADOR_NAV_LINKS = [
+  { name: 'Invite', href: '/ambassador/hub#invite' },
+  { name: 'Candidates', href: '/ambassador/hub#candidates' },
+  { name: 'Rewards', href: '/ambassador/hub#rewards' },
+  { name: 'Share', href: '/ambassador/hub#share' },
+];
+
 const ADMIN_NAV_LINKS = [
   { name: 'Browse Candidates', href: '/admin/dashboard' },
   { name: 'Bulk CV Import', href: '/admin/talent/import' },
+  { name: 'Ambassadors', href: '/admin/ambassadors' },
   { name: 'Browse Clients', href: '/admin/clients' },
   { name: 'Profile reviews', href: '/admin/profile-reviews' },
 ];
 
-function isNavLinkActive(pathname, href) {
+function sectionFromHash(hash) {
+  const raw = String(hash || '').replace(/^#/, '');
+  if (['invite', 'candidates', 'rewards', 'share'].includes(raw)) return raw;
+  return 'invite';
+}
+
+function isNavLinkActive(pathname, href, hash = '') {
+  if (href.includes('#')) {
+    const [path, section] = href.split('#');
+    return pathname === path && sectionFromHash(hash) === section;
+  }
   if (href === '/talent') {
     if (
       pathname === '/talent/login' ||
@@ -46,33 +64,50 @@ function isNavLinkActive(pathname, href) {
   if (href === '/admin/talent/import') {
     return pathname === '/admin/talent/import';
   }
+  if (href === '/admin/ambassadors') {
+    return pathname === '/admin/ambassadors';
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pathname } = location;
+  const { pathname, hash } = location;
   const { user, signOut } = useAuth();
   const accountType = useAccountType(user);
   const isAdminUser = accountType === 'admin';
   const isClientUser = accountType === 'client';
   const isTalentUser = accountType === 'talent';
+  const onAmbassadorRoute = pathname.startsWith('/ambassador');
+  const isAmbassadorUser =
+    accountType === 'ambassador' ||
+    (accountType === 'loading' && Boolean(user) && onAmbassadorRoute);
   const [isOpen, setIsOpen] = useState(false);
   const [isScaleOpen, setIsScaleOpen] = useState(false);
 
-  const baseNavLinks = isAdminUser ? ADMIN_NAV_LINKS : PUBLIC_NAV_LINKS;
+  const baseNavLinks = isAdminUser
+    ? ADMIN_NAV_LINKS
+    : isAmbassadorUser
+      ? AMBASSADOR_NAV_LINKS
+      : PUBLIC_NAV_LINKS;
   const navLinks = baseNavLinks.filter(
     (link) =>
-      link.href !== '/talent/signup' || (!isClientUser && !isTalentUser)
+      link.href !== '/talent/signup' || (!isClientUser && !isTalentUser && !isAmbassadorUser)
   );
-  const homeHref = isAdminUser ? '/admin/dashboard' : isClientUser ? '/client' : '/';
+  const homeHref = isAdminUser
+    ? '/admin/dashboard'
+    : isAmbassadorUser
+      ? '/ambassador/hub'
+      : isClientUser
+        ? '/client'
+        : '/';
 
   const isScaleSectionActive = (dropdown) =>
-    dropdown?.some((item) => isNavLinkActive(pathname, item.href));
+    dropdown?.some((item) => isNavLinkActive(pathname, item.href, hash));
 
   const desktopLinkClass = (href, isCta = false) => {
-    const active = isNavLinkActive(pathname, href);
+    const active = isNavLinkActive(pathname, href, hash);
     if (isCta) {
       return `font-bold transition-colors duration-200 border-b-2 pb-0.5 ${
         active
@@ -88,7 +123,7 @@ const Navbar = () => {
   };
 
   const mobileLinkClass = (href, isCta = false) => {
-    const active = isNavLinkActive(pathname, href);
+    const active = isNavLinkActive(pathname, href, hash);
     if (isCta) {
       return `block px-3 py-3 text-base font-medium rounded-md ${
         active
@@ -109,7 +144,7 @@ const Navbar = () => {
     } catch (e) {
       // swallow
     }
-    navigate('/');
+    navigate(isAmbassadorUser ? '/ambassador' : '/');
     setIsOpen(false);
   };
 
@@ -141,7 +176,7 @@ const Navbar = () => {
                   to={subItem.href}
                   onClick={onNavigate}
                   className={`block px-4 py-2 text-sm transition-colors ${
-                    isNavLinkActive(pathname, subItem.href)
+                    isNavLinkActive(pathname, subItem.href, hash)
                       ? 'text-red bg-red/5 font-bold'
                       : 'text-black hover:bg-gray-50 hover:text-red'
                   }`}
