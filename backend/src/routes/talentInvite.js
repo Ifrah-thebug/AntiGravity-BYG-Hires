@@ -28,15 +28,10 @@ const activateLimiter = rateLimit({
 
 router.use(activateLimiter);
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/** Plain HTML bridge for Gmail in-app browsers → opens React activation in a real tab. */
+/**
+ * Legacy bridge for emails already sent with /activate/open links.
+ * Redirects to the React page (same URL as the working copy-link).
+ */
 router.get('/activate/open', (req, res) => {
   const token = String(req.query.token || '').trim();
   if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
@@ -47,28 +42,17 @@ router.get('/activate/open', (req, res) => {
   const appBase = (
     process.env.CLIENT_URI ||
     process.env.FRONTEND_URL ||
-    'http://localhost:5173'
+    process.env.SITE_URL ||
+    'https://byghires.com'
   ).replace(/\/$/, '');
   const appUrl = `${appBase}/talent/activate?token=${encodeURIComponent(token)}`;
-  const safeAppUrl = escapeHtml(appUrl);
 
-  res.type('html').send(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Activate your BYG Hires account</title>
-</head>
-<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 480px; margin: 0 auto; padding: 32px 20px; text-align: center;">
-  <p style="font-size: 11px; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #ff3d3d; margin: 0 0 20px;">BYG Hires</p>
-  <h1 style="font-size: 1.5rem; margin: 0 0 12px;">Activate your talent account</h1>
-  <p style="color: #555; font-size: 15px; margin: 0 0 28px;">Tap below to open activation in your browser and set your password.</p>
-  <p style="margin: 0 0 24px;">
-    <a href="${safeAppUrl}" target="_blank" rel="noopener noreferrer" style="display: inline-block; background: #000; color: #fff; text-decoration: none; padding: 14px 28px; border-radius: 12px; font-weight: 800; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;">Continue to activation</a>
-  </p>
-  <p style="font-size: 12px; color: #888; margin: 0;">If nothing happens, copy this link into Chrome or Safari:<br /><span style="word-break: break-all; color: #444;">${safeAppUrl}</span></p>
-</body>
-</html>`);
+  res.removeHeader('X-Frame-Options');
+  res.setHeader(
+    'Content-Security-Policy',
+    "frame-ancestors *; default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'"
+  );
+  return res.redirect(302, appUrl);
 });
 
 router.get('/activate/verify', async (req, res) => {

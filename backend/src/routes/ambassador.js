@@ -106,11 +106,12 @@ router.post('/upload-cvs', requireUser, upload.array('cvs', 20), async (req, res
   }
 });
 
-router.patch('/invites/:id/email', requireUser, async (req, res) => {
+router.patch('/invites/:id', requireUser, async (req, res) => {
   try {
-    const result = await ambassadorService.updateInviteEmailForUser(req.user.id, {
+    const result = await ambassadorService.updateInviteForUser(req.user.id, {
       inviteId: req.params.id,
       email: req.body?.email,
+      name: req.body?.name,
       send: req.body?.send !== false,
     });
     return res.json(result);
@@ -122,7 +123,38 @@ router.patch('/invites/:id/email', requireUser, async (req, res) => {
           ? 404
           : err.code === 'INVALID_EMAIL' ||
               err.code === 'NOT_EDITABLE' ||
-              err.code === 'ALREADY_REGISTERED'
+              err.code === 'ALREADY_REGISTERED' ||
+              err.code === 'NO_CHANGES'
+            ? 400
+            : 500;
+    console.error('[ambassador/invites PATCH]', err?.message || err);
+    return res.status(status).json({
+      error: err.message || 'Could not update invite.',
+      code: err.code,
+    });
+  }
+});
+
+/** @deprecated prefer PATCH /invites/:id */
+router.patch('/invites/:id/email', requireUser, async (req, res) => {
+  try {
+    const result = await ambassadorService.updateInviteForUser(req.user.id, {
+      inviteId: req.params.id,
+      email: req.body?.email,
+      name: req.body?.name,
+      send: req.body?.send !== false,
+    });
+    return res.json(result);
+  } catch (err) {
+    const status =
+      err.code === 'NOT_AMBASSADOR'
+        ? 403
+        : err.code === 'INVITE_NOT_FOUND'
+          ? 404
+          : err.code === 'INVALID_EMAIL' ||
+              err.code === 'NOT_EDITABLE' ||
+              err.code === 'ALREADY_REGISTERED' ||
+              err.code === 'NO_CHANGES'
             ? 400
             : 500;
     console.error('[ambassador/invites email]', err?.message || err);

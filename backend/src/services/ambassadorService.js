@@ -524,7 +524,7 @@ async function updateProfileForUser(userId, { name }) {
   return { ambassador: publicAmbassador(updated) };
 }
 
-async function updateInviteEmailForUser(userId, { inviteId, email, send = true }) {
+async function updateInviteForUser(userId, { inviteId, email, name, send = true }) {
   const ambassador = await store.getByUserId(userId);
   if (!ambassador || !ambassador.active) {
     const err = new Error('Ambassador account not found.');
@@ -540,37 +540,56 @@ async function updateInviteEmailForUser(userId, { inviteId, email, send = true }
   }
 
   if (['activated', 'skipped', 'expired'].includes(invite.status)) {
-    const err = new Error('This invite can no longer have its email changed.');
+    const err = new Error('This invite can no longer be edited.');
     err.code = 'NOT_EDITABLE';
     throw err;
   }
 
-  const cleanEmail = store.normalizeEmail(email);
-  if (!cleanEmail || !cleanEmail.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
-    const err = new Error('Enter a valid email address.');
+  const patch = {};
+
+  if (email !== undefined) {
+    const cleanEmail = store.normalizeEmail(email);
+    if (!cleanEmail || !cleanEmail.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      const err = new Error('Enter a valid email address.');
+      err.code = 'INVALID_EMAIL';
+      throw err;
+    }
+
+    const existingProfile = await inviteStore.findProfileByEmail(cleanEmail);
+    if (existingProfile) {
+      const err = new Error('That email already has a BYG Hires talent profile.');
+      err.code = 'ALREADY_REGISTERED';
+      throw err;
+    }
+
+    patch.email = cleanEmail;
+    patch.email_extract_status = 'manual';
+    if (!['invited', 'activated', 'skipped', 'expired'].includes(invite.status)) {
+      patch.status = 'ready';
+    }
+  }
+
+  if (name !== undefined) {
+    patch.name = String(name || '').trim() || null;
+  }
+
+  if (!Object.keys(patch).length && !send) {
+    const err = new Error('No changes provided.');
+    err.code = 'NO_CHANGES';
+    throw err;
+  }
+
+  let updated = Object.keys(patch).length
+    ? await inviteStore.updateInvite(invite.id, patch)
+    : invite;
+
+  if (send && !updated.email) {
+    const err = new Error('Add an email address before sending.');
     err.code = 'INVALID_EMAIL';
     throw err;
   }
 
-  const existingProfile = await inviteStore.findProfileByEmail(cleanEmail);
-  if (existingProfile) {
-    const err = new Error('That email already has a BYG Hires talent profile.');
-    err.code = 'ALREADY_REGISTERED';
-    throw err;
-  }
-
-  const patch = {
-    email: cleanEmail,
-    email_extract_status: 'manual',
-  };
-  // Only move pre-send rows to ready — never downgrade invited+.
-  if (!['invited', 'activated', 'skipped', 'expired'].includes(invite.status)) {
-    patch.status = 'ready';
-  }
-
-  let updated = await inviteStore.updateInvite(invite.id, patch);
   let sendResult = null;
-
   if (send) {
     sendResult = await sendInviteEmail(updated);
     updated = await inviteStore.getInviteById(invite.id);
@@ -598,7 +617,9 @@ module.exports = {
   listHiresForAdmin,
   listHireableTalentForAdmin,
   updateProfileForUser,
-  updateInviteEmailForUser,
+  updateInviteForUser,
+  /** @deprecated use updateInviteForUser */
+  updateInviteEmailForUser: (userId, opts) => updateInviteForUser(userId, opts),
   inviteTalent,
   uploadTalentCvs,
   publicAmbassador,

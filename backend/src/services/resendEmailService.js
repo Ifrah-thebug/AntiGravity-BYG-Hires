@@ -36,9 +36,13 @@ function buildTalentActivationAppUrl(token) {
   return `${getAppPublicUrl()}/talent/activate?token=${encodeURIComponent(token)}`;
 }
 
-/** Email button → plain HTML bridge (works in Gmail in-app browsers). */
+/**
+ * Button + copy link must use the same frontend URL.
+ * The old /api/.../activate/open bridge is blocked by Helmet (X-Frame-Options)
+ * inside Gmail/Outlook → ERR_BLOCKED_BY_RESPONSE, while the plain copy link worked.
+ */
 function buildTalentActivationEmailButtonUrl(token) {
-  return `${getBackendPublicUrl()}/api/talent-invite/activate/open?token=${encodeURIComponent(token)}`;
+  return buildTalentActivationAppUrl(token);
 }
 
 function buildEmailLinkButton(href, label) {

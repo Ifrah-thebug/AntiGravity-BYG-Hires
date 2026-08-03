@@ -52,13 +52,21 @@ export async function updateAmbassadorProfile({ name }) {
   return parseJson(res);
 }
 
-export async function updateAmbassadorInviteEmail(inviteId, { email, send = true }) {
-  const res = await fetch(`${BASE}/api/ambassador/invites/${inviteId}/email`, {
+export async function updateAmbassadorInvite(inviteId, { email, name, send = true }) {
+  const body = { send };
+  if (email !== undefined) body.email = email;
+  if (name !== undefined) body.name = name;
+  const res = await fetch(`${BASE}/api/ambassador/invites/${inviteId}`, {
     method: 'PATCH',
     headers: await authHeaders(),
-    body: JSON.stringify({ email, send }),
+    body: JSON.stringify(body),
   });
   return parseJson(res);
+}
+
+/** @deprecated use updateAmbassadorInvite */
+export async function updateAmbassadorInviteEmail(inviteId, { email, send = true }) {
+  return updateAmbassadorInvite(inviteId, { email, send });
 }
 
 export async function inviteTalentAsAmbassador({ email, name }) {

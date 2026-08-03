@@ -12,7 +12,7 @@ import {
   inviteTalentAsAmbassador,
   uploadTalentCvsAsAmbassador,
   updateAmbassadorProfile,
-  updateAmbassadorInviteEmail,
+  updateAmbassadorInvite,
 } from '../lib/ambassadorApi';
 
 const SECTIONS = [
@@ -141,6 +141,7 @@ export default function AmbassadorHubPage() {
   const [uploadResults, setUploadResults] = useState([]);
   const [editingInviteId, setEditingInviteId] = useState(null);
   const [editEmailDraft, setEditEmailDraft] = useState('');
+  const [editNameDraft, setEditNameDraft] = useState('');
   const [savingInviteId, setSavingInviteId] = useState(null);
 
   const load = useCallback(async () => {
@@ -291,39 +292,50 @@ export default function AmbassadorHubPage() {
     }
   };
 
-  const startEditInviteEmail = (inv) => {
+  const startEditInvite = (inv) => {
     setEditingInviteId(inv.id);
     setEditEmailDraft(inv.email || '');
+    setEditNameDraft(inv.name || '');
   };
 
-  const cancelEditInviteEmail = () => {
+  const cancelEditInvite = () => {
     setEditingInviteId(null);
     setEditEmailDraft('');
+    setEditNameDraft('');
   };
 
-  const saveInviteEmail = async (inviteId, { send = true } = {}) => {
+  const saveInviteDetails = async (inviteId, { send = true } = {}) => {
     const email = editEmailDraft.trim();
-    if (!email) {
-      setToast('Enter an email address.');
+    const name = editNameDraft.trim();
+    if (send && !email) {
+      setToast('Enter an email address before sending.');
+      return;
+    }
+    if (!email && !name) {
+      setToast('Enter a name or email to save.');
       return;
     }
     setSavingInviteId(inviteId);
     setToast('');
     try {
-      const result = await updateAmbassadorInviteEmail(inviteId, { email, send });
-      cancelEditInviteEmail();
+      const payload = { send };
+      if (email) payload.email = email;
+      payload.name = name;
+      const result = await updateAmbassadorInvite(inviteId, payload);
+      cancelEditInvite();
       setUploadResults((prev) =>
         prev.map((row) =>
           row.inviteId === inviteId
             ? {
                 ...row,
-                email: result.invite?.email || email,
+                email: result.invite?.email || email || row.email,
+                name: result.invite?.name ?? name,
                 status: result.invite?.status || row.status,
                 detail: result.sendResult?.sent
                   ? 'Invite sent'
                   : result.sendResult?.reason === 'already_registered'
                     ? 'Already registered — invite not sent'
-                    : 'Email updated',
+                    : 'Details updated',
               }
             : row
         )
@@ -333,12 +345,12 @@ export default function AmbassadorHubPage() {
           ? `Invite sent to ${result.invite?.email || email}`
           : result.sendResult?.reason === 'already_registered'
             ? 'That email is already registered as talent.'
-            : 'Email updated.'
+            : 'Candidate details updated.'
       );
       await load();
       if (send) setSection('candidates');
     } catch (err) {
-      setToast(err.message || 'Could not update email.');
+      setToast(err.message || 'Could not update candidate.');
     } finally {
       setSavingInviteId(null);
     }
@@ -685,6 +697,13 @@ export default function AmbassadorHubPage() {
                                 {row.inviteId && editingInviteId === row.inviteId ? (
                                   <div className="mt-2 space-y-2">
                                     <input
+                                      type="text"
+                                      value={editNameDraft}
+                                      onChange={(e) => setEditNameDraft(e.target.value)}
+                                      placeholder="Candidate name"
+                                      className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold outline-none focus:border-red"
+                                    />
+                                    <input
                                       type="email"
                                       value={editEmailDraft}
                                       onChange={(e) => setEditEmailDraft(e.target.value)}
@@ -696,7 +715,7 @@ export default function AmbassadorHubPage() {
                                       <button
                                         type="button"
                                         disabled={savingInviteId === row.inviteId || !editEmailDraft.trim()}
-                                        onClick={() => saveInviteEmail(row.inviteId, { send: true })}
+                                        onClick={() => saveInviteDetails(row.inviteId, { send: true })}
                                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
                                       >
                                         {savingInviteId === row.inviteId ? (
@@ -709,7 +728,7 @@ export default function AmbassadorHubPage() {
                                       <button
                                         type="button"
                                         disabled={savingInviteId === row.inviteId}
-                                        onClick={cancelEditInviteEmail}
+                                        onClick={cancelEditInvite}
                                         className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-500"
                                       >
                                         Cancel
@@ -739,15 +758,16 @@ export default function AmbassadorHubPage() {
                                   <button
                                     type="button"
                                     onClick={() =>
-                                      startEditInviteEmail({
+                                      startEditInvite({
                                         id: row.inviteId,
                                         email: row.email,
+                                        name: row.name,
                                       })
                                     }
                                     className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red"
                                   >
                                     <Pencil size={10} />
-                                    {row.email ? 'Edit' : 'Add email'}
+                                    Edit
                                   </button>
                                 ) : null}
                                 <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 text-right max-w-[7rem]">
@@ -796,6 +816,13 @@ export default function AmbassadorHubPage() {
                         {editingInviteId === inv.id ? (
                           <div className="mt-2 space-y-2 max-w-sm">
                             <input
+                              type="text"
+                              value={editNameDraft}
+                              onChange={(e) => setEditNameDraft(e.target.value)}
+                              placeholder="Candidate name"
+                              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold outline-none focus:border-red"
+                            />
+                            <input
                               type="email"
                               value={editEmailDraft}
                               onChange={(e) => setEditEmailDraft(e.target.value)}
@@ -807,7 +834,7 @@ export default function AmbassadorHubPage() {
                               <button
                                 type="button"
                                 disabled={savingInviteId === inv.id || !editEmailDraft.trim()}
-                                onClick={() => saveInviteEmail(inv.id, { send: true })}
+                                onClick={() => saveInviteDetails(inv.id, { send: true })}
                                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
                               >
                                 {savingInviteId === inv.id ? (
@@ -815,12 +842,12 @@ export default function AmbassadorHubPage() {
                                 ) : (
                                   <Send size={11} />
                                 )}
-                                Save & send
+                                {inv.status === 'invited' ? 'Save & resend' : 'Save & send'}
                               </button>
                               <button
                                 type="button"
-                                disabled={savingInviteId === inv.id || !editEmailDraft.trim()}
-                                onClick={() => saveInviteEmail(inv.id, { send: false })}
+                                disabled={savingInviteId === inv.id}
+                                onClick={() => saveInviteDetails(inv.id, { send: false })}
                                 className="px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-600 disabled:opacity-40"
                               >
                                 Save only
@@ -828,7 +855,7 @@ export default function AmbassadorHubPage() {
                               <button
                                 type="button"
                                 disabled={savingInviteId === inv.id}
-                                onClick={cancelEditInviteEmail}
+                                onClick={cancelEditInvite}
                                 className="px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-400"
                               >
                                 Cancel
@@ -862,11 +889,48 @@ export default function AmbassadorHubPage() {
                         {canEditInviteEmail(inv.status) && editingInviteId !== inv.id ? (
                           <button
                             type="button"
-                            onClick={() => startEditInviteEmail(inv)}
+                            onClick={() => startEditInvite(inv)}
                             className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red hover:text-black"
                           >
                             <Pencil size={10} />
-                            {inv.email ? 'Edit email' : 'Add email'}
+                            {inv.email ? 'Edit' : 'Add details'}
+                          </button>
+                        ) : null}
+                        {inv.status === 'invited' &&
+                        inv.email &&
+                        editingInviteId !== inv.id ? (
+                          <button
+                            type="button"
+                            disabled={savingInviteId === inv.id}
+                            onClick={async () => {
+                              setSavingInviteId(inv.id);
+                              setToast('');
+                              try {
+                                const result = await updateAmbassadorInvite(inv.id, {
+                                  email: inv.email,
+                                  name: inv.name || undefined,
+                                  send: true,
+                                });
+                                setToast(
+                                  result.sendResult?.sent
+                                    ? `Invite resent to ${inv.email}`
+                                    : result.sendResult?.reason || 'Could not resend.'
+                                );
+                                await load();
+                              } catch (err) {
+                                setToast(err.message || 'Could not resend invite.');
+                              } finally {
+                                setSavingInviteId(null);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-gray-500 hover:text-black"
+                          >
+                            {savingInviteId === inv.id ? (
+                              <Loader2 size={10} className="animate-spin" />
+                            ) : (
+                              <Send size={10} />
+                            )}
+                            Resend
                           </button>
                         ) : null}
                       </div>

@@ -33,9 +33,27 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Middleware
-app.use(helmet());
+// Allow the legacy activation bridge (/api/talent-invite/activate/open) to load
+// inside mail-client link previews; other routes keep Helmet defaults.
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    frameguard: false,
+  })
+);
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/talent-invite/activate/open')) {
+    return next();
+  }
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  return next();
+});
 const corsOrigins = [
   process.env.CLIENT_URI,
+  process.env.FRONTEND_URL,
+  process.env.SITE_URL,
+  'https://byghires.com',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ].filter(Boolean);
