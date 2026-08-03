@@ -52,6 +52,15 @@ export async function updateAmbassadorProfile({ name }) {
   return parseJson(res);
 }
 
+export async function updateAmbassadorInviteEmail(inviteId, { email, send = true }) {
+  const res = await fetch(`${BASE}/api/ambassador/invites/${inviteId}/email`, {
+    method: 'PATCH',
+    headers: await authHeaders(),
+    body: JSON.stringify({ email, send }),
+  });
+  return parseJson(res);
+}
+
 export async function inviteTalentAsAmbassador({ email, name }) {
   const res = await fetch(`${BASE}/api/ambassador/invite`, {
     method: 'POST',

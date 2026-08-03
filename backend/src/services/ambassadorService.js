@@ -524,6 +524,72 @@ async function updateProfileForUser(userId, { name }) {
   return { ambassador: publicAmbassador(updated) };
 }
 
+async function updateInviteEmailForUser(userId, { inviteId, email, send = true }) {
+  const ambassador = await store.getByUserId(userId);
+  if (!ambassador || !ambassador.active) {
+    const err = new Error('Ambassador account not found.');
+    err.code = 'NOT_AMBASSADOR';
+    throw err;
+  }
+
+  const invite = await inviteStore.getInviteById(inviteId);
+  if (!invite || invite.ambassadorId !== ambassador.id) {
+    const err = new Error('Invite not found for this ambassador.');
+    err.code = 'INVITE_NOT_FOUND';
+    throw err;
+  }
+
+  if (['activated', 'skipped', 'expired'].includes(invite.status)) {
+    const err = new Error('This invite can no longer have its email changed.');
+    err.code = 'NOT_EDITABLE';
+    throw err;
+  }
+
+  const cleanEmail = store.normalizeEmail(email);
+  if (!cleanEmail || !cleanEmail.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+    const err = new Error('Enter a valid email address.');
+    err.code = 'INVALID_EMAIL';
+    throw err;
+  }
+
+  const existingProfile = await inviteStore.findProfileByEmail(cleanEmail);
+  if (existingProfile) {
+    const err = new Error('That email already has a BYG Hires talent profile.');
+    err.code = 'ALREADY_REGISTERED';
+    throw err;
+  }
+
+  const patch = {
+    email: cleanEmail,
+    email_extract_status: 'manual',
+  };
+  // Only move pre-send rows to ready — never downgrade invited+.
+  if (!['invited', 'activated', 'skipped', 'expired'].includes(invite.status)) {
+    patch.status = 'ready';
+  }
+
+  let updated = await inviteStore.updateInvite(invite.id, patch);
+  let sendResult = null;
+
+  if (send) {
+    sendResult = await sendInviteEmail(updated);
+    updated = await inviteStore.getInviteById(invite.id);
+  }
+
+  return {
+    invite: {
+      id: updated.id,
+      email: updated.email,
+      name: updated.name,
+      status: updated.status,
+      originalFilename: updated.originalFilename,
+      invitedAt: updated.invitedAt,
+      activatedAt: updated.activatedAt,
+    },
+    sendResult,
+  };
+}
+
 module.exports = {
   verifyCode,
   claimWithPassword,
@@ -532,6 +598,7 @@ module.exports = {
   listHiresForAdmin,
   listHireableTalentForAdmin,
   updateProfileForUser,
+  updateInviteEmailForUser,
   inviteTalent,
   uploadTalentCvs,
   publicAmbassador,

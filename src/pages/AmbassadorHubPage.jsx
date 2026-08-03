@@ -12,6 +12,7 @@ import {
   inviteTalentAsAmbassador,
   uploadTalentCvsAsAmbassador,
   updateAmbassadorProfile,
+  updateAmbassadorInviteEmail,
 } from '../lib/ambassadorApi';
 
 const SECTIONS = [
@@ -27,6 +28,7 @@ const statusStyles = {
   activated: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   skipped: 'bg-gray-100 text-gray-600 border-gray-200',
   expired: 'bg-red/5 text-red border-red/20',
+  uploaded: 'bg-amber-50 text-amber-800 border-amber-200',
 };
 
 function sectionFromHash(hash) {
@@ -47,9 +49,13 @@ function statusLabel(status) {
     activated: 'Activated',
     skipped: 'Skipped',
     expired: 'Expired',
-    uploaded: 'Uploaded',
+    uploaded: 'No email',
   };
   return map[status] || status || 'Unknown';
+}
+
+function canEditInviteEmail(status) {
+  return !['activated', 'skipped', 'expired'].includes(status);
 }
 
 function CopyButton({ text, label = 'Copy', className = '' }) {
@@ -132,6 +138,10 @@ export default function AmbassadorHubPage() {
   const [editingName, setEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [uploadResults, setUploadResults] = useState([]);
+  const [editingInviteId, setEditingInviteId] = useState(null);
+  const [editEmailDraft, setEditEmailDraft] = useState('');
+  const [savingInviteId, setSavingInviteId] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -219,25 +229,118 @@ export default function AmbassadorHubPage() {
     }
     setUploading(true);
     setToast('');
+    setUploadResults([]);
     try {
       const result = await uploadTalentCvsAsAmbassador(cvFiles, { autoSend: true });
-      const ok = (result.results || []).filter((r) => r.ok);
-      const sent = ok.filter((r) => r.sendResult?.sent).length;
-      const skipped = ok.filter((r) => r.skipReason === 'already_registered').length;
-      const failed = (result.results || []).filter((r) => !r.ok).length;
+      const rows = (result.results || []).map((r) => {
+        if (!r.ok) {
+          return {
+            ok: false,
+            filename: r.filename || 'PDF',
+            email: null,
+            status: 'failed',
+            detail: r.error || 'Upload failed',
+          };
+        }
+        const email = r.invite?.email || null;
+        const filename = r.invite?.originalFilename || 'PDF';
+        let status = r.invite?.status || 'uploaded';
+        let detail = '';
+        if (r.skipReason === 'already_registered') {
+          detail = 'Already registered — invite not sent';
+        } else if (r.sendResult?.sent) {
+          detail = 'Invite sent';
+        } else if (!email) {
+          detail = 'No email found in PDF — invite not sent';
+          status = 'no_email';
+        } else {
+          detail = r.sendResult?.reason
+            ? `Saved · ${r.sendResult.reason}`
+            : 'Saved';
+        }
+        return {
+          ok: true,
+          inviteId: r.invite?.id || null,
+          filename,
+          email,
+          name: r.invite?.name || null,
+          status,
+          detail,
+        };
+      });
+
+      const sent = rows.filter((r) => r.detail === 'Invite sent').length;
+      const noEmail = rows.filter((r) => r.status === 'no_email').length;
+      const skipped = rows.filter((r) => /already registered/i.test(r.detail)).length;
+      const failed = rows.filter((r) => !r.ok).length;
+
       setCvFiles([]);
+      setUploadResults(rows);
       setToast(
-        `Uploaded ${ok.length} CV${ok.length === 1 ? '' : 's'}` +
+        `Processed ${rows.length} PDF${rows.length === 1 ? '' : 's'}` +
           (sent ? ` · ${sent} invite${sent === 1 ? '' : 's'} sent` : '') +
+          (noEmail ? ` · ${noEmail} missing email` : '') +
           (skipped ? ` · ${skipped} already registered` : '') +
           (failed ? ` · ${failed} failed` : '')
       );
       await load();
-      setSection('candidates');
     } catch (err) {
       setToast(err.message || 'Upload failed.');
     } finally {
       setUploading(false);
+    }
+  };
+
+  const startEditInviteEmail = (inv) => {
+    setEditingInviteId(inv.id);
+    setEditEmailDraft(inv.email || '');
+  };
+
+  const cancelEditInviteEmail = () => {
+    setEditingInviteId(null);
+    setEditEmailDraft('');
+  };
+
+  const saveInviteEmail = async (inviteId, { send = true } = {}) => {
+    const email = editEmailDraft.trim();
+    if (!email) {
+      setToast('Enter an email address.');
+      return;
+    }
+    setSavingInviteId(inviteId);
+    setToast('');
+    try {
+      const result = await updateAmbassadorInviteEmail(inviteId, { email, send });
+      cancelEditInviteEmail();
+      setUploadResults((prev) =>
+        prev.map((row) =>
+          row.inviteId === inviteId
+            ? {
+                ...row,
+                email: result.invite?.email || email,
+                status: result.invite?.status || row.status,
+                detail: result.sendResult?.sent
+                  ? 'Invite sent'
+                  : result.sendResult?.reason === 'already_registered'
+                    ? 'Already registered — invite not sent'
+                    : 'Email updated',
+              }
+            : row
+        )
+      );
+      setToast(
+        result.sendResult?.sent
+          ? `Invite sent to ${result.invite?.email || email}`
+          : result.sendResult?.reason === 'already_registered'
+            ? 'That email is already registered as talent.'
+            : 'Email updated.'
+      );
+      await load();
+      if (send) setSection('candidates');
+    } catch (err) {
+      setToast(err.message || 'Could not update email.');
+    } finally {
+      setSavingInviteId(null);
     }
   };
 
@@ -549,6 +652,114 @@ export default function AmbassadorHubPage() {
                   >
                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <><UserPlus size={14} /> Upload & invite</>}
                   </button>
+
+                  {uploadResults.length > 0 && (
+                    <div className="mt-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                          Extracted from PDFs
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setSection('candidates')}
+                          className="text-[10px] font-black uppercase tracking-widest text-red"
+                        >
+                          View candidates
+                        </button>
+                      </div>
+                      <ul className="space-y-1.5 max-h-56 overflow-y-auto">
+                        {uploadResults.map((row, i) => (
+                          <li
+                            key={`${row.filename}-${i}`}
+                            className={`rounded-xl border px-3 py-2.5 text-xs ${
+                              row.status === 'no_email' || !row.ok
+                                ? 'border-amber-200 bg-amber-50'
+                                : 'border-gray-100 bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-black text-black truncate">
+                                  {row.name || row.filename}
+                                </p>
+                                {row.inviteId && editingInviteId === row.inviteId ? (
+                                  <div className="mt-2 space-y-2">
+                                    <input
+                                      type="email"
+                                      value={editEmailDraft}
+                                      onChange={(e) => setEditEmailDraft(e.target.value)}
+                                      placeholder="name@example.com"
+                                      autoFocus
+                                      className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-xs font-semibold outline-none focus:border-red"
+                                    />
+                                    <div className="flex flex-wrap gap-1.5">
+                                      <button
+                                        type="button"
+                                        disabled={savingInviteId === row.inviteId || !editEmailDraft.trim()}
+                                        onClick={() => saveInviteEmail(row.inviteId, { send: true })}
+                                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                                      >
+                                        {savingInviteId === row.inviteId ? (
+                                          <Loader2 size={10} className="animate-spin" />
+                                        ) : (
+                                          <Send size={10} />
+                                        )}
+                                        Save & send
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={savingInviteId === row.inviteId}
+                                        onClick={cancelEditInviteEmail}
+                                        className="px-2.5 py-1.5 rounded-lg border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-500"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-[11px] font-semibold mt-0.5 truncate">
+                                    {row.email ? (
+                                      <span className="text-emerald-700">{row.email}</span>
+                                    ) : (
+                                      <span className="text-amber-800">No email extracted</span>
+                                    )}
+                                  </p>
+                                )}
+                                {row.filename && row.name ? (
+                                  <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                                    {row.filename}
+                                  </p>
+                                ) : null}
+                              </div>
+                              <div className="shrink-0 flex flex-col items-end gap-1">
+                                {row.inviteId &&
+                                row.ok &&
+                                canEditInviteEmail(row.status === 'no_email' ? 'uploaded' : row.status) &&
+                                editingInviteId !== row.inviteId ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      startEditInviteEmail({
+                                        id: row.inviteId,
+                                        email: row.email,
+                                      })
+                                    }
+                                    className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red"
+                                  >
+                                    <Pencil size={10} />
+                                    {row.email ? 'Edit' : 'Add email'}
+                                  </button>
+                                ) : null}
+                                <span className="text-[9px] font-black uppercase tracking-wider text-gray-500 text-right max-w-[7rem]">
+                                  {row.detail}
+                                </span>
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </form>
               )}
             </SectionShell>
@@ -576,24 +787,89 @@ export default function AmbassadorHubPage() {
                   {data.invites.map((inv) => (
                     <div
                       key={inv.id}
-                      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border border-gray-100 bg-[#fafafa]"
+                      className="flex items-start justify-between gap-3 p-3.5 rounded-2xl border border-gray-100 bg-[#fafafa]"
                     >
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <p className="font-black text-sm text-black truncate">
                           {inv.name || inv.email || inv.originalFilename || 'Candidate'}
                         </p>
-                        <p className="text-[11px] text-gray-400 font-medium truncate">
-                          {inv.email || inv.originalFilename || 'No email yet'}
-                        </p>
+                        {editingInviteId === inv.id ? (
+                          <div className="mt-2 space-y-2 max-w-sm">
+                            <input
+                              type="email"
+                              value={editEmailDraft}
+                              onChange={(e) => setEditEmailDraft(e.target.value)}
+                              placeholder="name@example.com"
+                              autoFocus
+                              className="w-full px-3 py-2 rounded-xl border border-gray-200 bg-white text-xs font-semibold outline-none focus:border-red"
+                            />
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                disabled={savingInviteId === inv.id || !editEmailDraft.trim()}
+                                onClick={() => saveInviteEmail(inv.id, { send: true })}
+                                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                              >
+                                {savingInviteId === inv.id ? (
+                                  <Loader2 size={11} className="animate-spin" />
+                                ) : (
+                                  <Send size={11} />
+                                )}
+                                Save & send
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingInviteId === inv.id || !editEmailDraft.trim()}
+                                onClick={() => saveInviteEmail(inv.id, { send: false })}
+                                className="px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-600 disabled:opacity-40"
+                              >
+                                Save only
+                              </button>
+                              <button
+                                type="button"
+                                disabled={savingInviteId === inv.id}
+                                onClick={cancelEditInviteEmail}
+                                className="px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-400"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] font-medium truncate mt-0.5">
+                            {inv.email ? (
+                              <span className="text-emerald-700">{inv.email}</span>
+                            ) : (
+                              <span className="text-amber-700">No email extracted</span>
+                            )}
+                          </p>
+                        )}
+                        {inv.originalFilename ? (
+                          <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
+                            PDF: {inv.originalFilename}
+                          </p>
+                        ) : null}
                       </div>
-                      <span
-                        className={`shrink-0 inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider ${
-                          statusStyles[inv.status] || statusStyles.ready
-                        }`}
-                      >
-                        {inv.status === 'activated' ? <CheckCircle2 size={10} /> : null}
-                        {statusLabel(inv.status)}
-                      </span>
+                      <div className="shrink-0 flex flex-col items-end gap-2">
+                        <span
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-[9px] font-black uppercase tracking-wider ${
+                            statusStyles[inv.status] || statusStyles.ready
+                          }`}
+                        >
+                          {inv.status === 'activated' ? <CheckCircle2 size={10} /> : null}
+                          {statusLabel(inv.status)}
+                        </span>
+                        {canEditInviteEmail(inv.status) && editingInviteId !== inv.id ? (
+                          <button
+                            type="button"
+                            onClick={() => startEditInviteEmail(inv)}
+                            className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-red hover:text-black"
+                          >
+                            <Pencil size={10} />
+                            {inv.email ? 'Edit email' : 'Add email'}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
                   ))}
                 </div>
