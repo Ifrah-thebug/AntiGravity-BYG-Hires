@@ -20,6 +20,18 @@ export default function TalentActivatePage() {
   const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const [framed, setFramed] = useState(false);
+
+  useEffect(() => {
+    try {
+      if (window.top !== window.self) {
+        setFramed(true);
+        window.top.location.replace(window.location.href);
+      }
+    } catch {
+      setFramed(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -98,6 +110,21 @@ export default function TalentActivatePage() {
   return (
     <div className="bg-white min-h-screen pt-20 pb-24 px-4 font-sans flex items-center justify-center">
       <div className="w-full max-w-md">
+        {framed ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-center">
+            <p className="text-sm font-semibold text-amber-900 mb-3">
+              This page opened inside your mail app. Open it in your browser to continue.
+            </p>
+            <a
+              href={typeof window !== 'undefined' ? window.location.href : '#'}
+              target="_top"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-5 py-3 rounded-xl bg-black text-white text-[10px] font-black uppercase tracking-widest"
+            >
+              Continue to activation
+            </a>
+          </div>
+        ) : null}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

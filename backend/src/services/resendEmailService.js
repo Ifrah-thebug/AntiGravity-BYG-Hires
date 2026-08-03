@@ -37,12 +37,12 @@ function buildTalentActivationAppUrl(token) {
 }
 
 /**
- * Button + copy link must use the same frontend URL.
- * The old /api/.../activate/open bridge is blocked by Helmet (X-Frame-Options)
- * inside Gmail/Outlook → ERR_BLOCKED_BY_RESPONSE, while the plain copy link worked.
+ * Button → static HTML bridge (no JS). Mail apps often sandbox the first click;
+ * the bridge uses target="_top" so Continue opens the React app outside the iframe.
+ * Copy-paste link still goes straight to the SPA for top-level browser tabs.
  */
 function buildTalentActivationEmailButtonUrl(token) {
-  return buildTalentActivationAppUrl(token);
+  return `${getBackendPublicUrl()}/api/talent-invite/activate/open?token=${encodeURIComponent(token)}`;
 }
 
 function buildEmailLinkButton(href, label) {
@@ -50,7 +50,7 @@ function buildEmailLinkButton(href, label) {
 }
 
 function buildEmailBrowserHintHtml() {
-  return `<p style="margin: 0 0 16px; font-size: 12px; color: #666; line-height: 1.5;">If the button shows a blank page in Gmail or your mail app, copy the link below and open it in <strong>Chrome</strong> or <strong>Safari</strong>.</p>`;
+  return `<p style="margin: 0 0 16px; font-size: 12px; color: #666; line-height: 1.5;">If the button opens a blank page inside Gmail, tap <strong>Continue to activation</strong> or copy the link below into <strong>Chrome</strong> / <strong>Safari</strong>.</p>`;
 }
 
 function getEmailLogoUrl() {

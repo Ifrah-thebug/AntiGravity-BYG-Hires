@@ -44,6 +44,24 @@
     <link rel="dns-prefetch" href="https://assets.calendly.com" />
   </head>
   <body>
+    <!-- Break out of sandboxed mail-client iframes when scripts are allowed -->
+    <script>
+      (function () {
+        try {
+          if (window.top !== window.self) {
+            window.top.location.replace(window.location.href);
+          }
+        } catch (e) {
+          /* cross-origin or sandbox without allow-top-navigation */
+        }
+      })();
+    </script>
+    <noscript>
+      <div style="font-family: Arial, sans-serif; max-width: 420px; margin: 48px auto; padding: 24px; text-align: center;">
+        <p style="font-weight: 700;">JavaScript is required for BYG Hires.</p>
+        <p style="color: #555;">If this page opened inside Gmail or another mail app, copy the link from your email and paste it into Chrome or Safari.</p>
+      </div>
+    </noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
