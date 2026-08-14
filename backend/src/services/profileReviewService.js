@@ -34,7 +34,7 @@ const ISSUE_LABELS = {
 };
 
 const PROFILE_REVIEW_COLUMNS =
-  'id, user_id, email, name, job_title, about, skills, best_skill, experience_years, photo_url, cv_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, directory_status, review_notes, review_issues, submitted_at, reviewed_at, reviewed_by, approved_at, created_at, updated_at';
+  'id, user_id, email, name, job_title, about, skills, best_skill, experience_years, photo_url, cv_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, directory_status, review_notes, review_issues, submitted_at, reviewed_at, reviewed_by, approved_at, ambassador_id, created_at, updated_at';
 
 function normalizeIssues(issues) {
   if (!Array.isArray(issues)) return [];

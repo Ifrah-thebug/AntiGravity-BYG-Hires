@@ -712,6 +712,74 @@ async function sendProfileSubmittedAdminEmail({ talentName, talentEmail, profile
   });
 }
 
+function buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const from = ambassadorName ? ` by <strong>${ambassadorName}</strong>` : '';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">Your BYG Hires ambassador${from} asked you to <strong>publish intro availability</strong> so a screening call can be booked.</p>
+  <p style="margin: 0 0 12px;">In your talent portal: connect Cal.com if you have not already, then publish at least one intro slot.</p>
+  <p style="margin: 24px 0;">
+    ${buildEmailLinkButton(portalUrl, 'Publish intro slots')}
+  </p>
+  <p style="margin: 0; font-size: 12px; color: #888;">If you already published slots, you can ignore this email.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendPublishSlotsNudgeEmail({ to, name, ambassadorName }) {
+  const portalUrl = `${getAppPublicUrl()}/portal`;
+  const subject = 'Please publish intro slots — BYG Hires';
+  const html = buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'Publish slots nudge (ambassador)',
+  });
+}
+
+function buildHrScreenBookedEmailHtml({ name, ambassadorName, whenLabel, meetingUrl, portalUrl }) {
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const who = ambassadorName ? `<strong>${ambassadorName}</strong> (BYG Hires)` : 'BYG Hires';
+  return `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
+  ${buildEmailLogoHtml()}
+  <p style="margin: 0 0 12px;">${greeting}</p>
+  <p style="margin: 0 0 12px;">${who} booked a <strong>screening call</strong> with you on one of your published intro times.</p>
+  ${whenLabel ? `<p style="margin: 0 0 12px;"><strong>When:</strong> ${whenLabel}</p>` : ''}
+  <p style="margin: 24px 0;">
+    ${meetingUrl ? buildEmailLinkButton(meetingUrl, 'Join screening call') : buildEmailLinkButton(portalUrl, 'Open talent portal')}
+  </p>
+  <p style="margin: 0; font-size: 12px; color: #888;">This is a BYG screening, not a client intro. A calendar invite should also arrive from Cal.com.</p>
+</body>
+</html>`.trim();
+}
+
+async function sendHrScreenBookedEmail({ to, name, ambassadorName, whenLabel, meetingUrl }) {
+  const portalUrl = `${getAppPublicUrl()}/portal`;
+  const subject = 'BYG Hires booked a screening call with you';
+  const html = buildHrScreenBookedEmailHtml({
+    name,
+    ambassadorName,
+    whenLabel,
+    meetingUrl,
+    portalUrl,
+  });
+  return sendTransactionalEmail({
+    to,
+    subject,
+    html,
+    logLabel: 'HR screen booked',
+  });
+}
+
 module.exports = {
   sendClientActivationEmail,
   sendTalentActivationEmail,
@@ -725,6 +793,8 @@ module.exports = {
   sendProfileChangesRequestedEmail,
   sendProfileApprovedEmail,
   sendProfileSubmittedAdminEmail,
+  sendPublishSlotsNudgeEmail,
+  sendHrScreenBookedEmail,
   getAppPublicUrl,
   useConsoleProvider,
 };

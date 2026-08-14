@@ -1,10 +1,11 @@
 // src/components/Navbar.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, X, ChevronDown, LogOut, LayoutDashboard, Sparkles } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import logo from '../assets/BYG Hires Logo.png';
 import { useAuth } from '../context/AuthContext';
 import { useAccountType } from '../hooks/useAccountType';
+import { fetchAmbassadorMeta } from '../lib/ambassadorApi';
 
 const PUBLIC_NAV_LINKS = [
   { name: 'Talent Directory', href: '/talent' },
@@ -16,6 +17,8 @@ const PUBLIC_NAV_LINKS = [
 const AMBASSADOR_NAV_LINKS = [
   { name: 'Invite', href: '/ambassador/hub#invite' },
   { name: 'Candidates', href: '/ambassador/hub#candidates' },
+  { name: 'Review', href: '/ambassador/hub#review', internalOnly: true },
+  { name: 'Screens', href: '/ambassador/hub#screens', internalOnly: true },
   { name: 'Rewards', href: '/ambassador/hub#rewards' },
   { name: 'Share', href: '/ambassador/hub#share' },
 ];
@@ -30,7 +33,7 @@ const ADMIN_NAV_LINKS = [
 
 function sectionFromHash(hash) {
   const raw = String(hash || '').replace(/^#/, '');
-  if (['invite', 'candidates', 'rewards', 'share'].includes(raw)) return raw;
+  if (['invite', 'candidates', 'review', 'screens', 'rewards', 'share'].includes(raw)) return raw;
   return 'invite';
 }
 
@@ -85,11 +88,30 @@ const Navbar = () => {
     (accountType === 'loading' && Boolean(user) && onAmbassadorRoute);
   const [isOpen, setIsOpen] = useState(false);
   const [isScaleOpen, setIsScaleOpen] = useState(false);
+  const [isInternalAmbassador, setIsInternalAmbassador] = useState(false);
+
+  useEffect(() => {
+    if (!isAmbassadorUser || !user) {
+      setIsInternalAmbassador(false);
+      return;
+    }
+    let cancelled = false;
+    fetchAmbassadorMeta()
+      .then((meta) => {
+        if (!cancelled) setIsInternalAmbassador(Boolean(meta.isInternal));
+      })
+      .catch(() => {
+        if (!cancelled) setIsInternalAmbassador(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isAmbassadorUser, user]);
 
   const baseNavLinks = isAdminUser
     ? ADMIN_NAV_LINKS
     : isAmbassadorUser
-      ? AMBASSADOR_NAV_LINKS
+      ? AMBASSADOR_NAV_LINKS.filter((link) => !link.internalOnly || isInternalAmbassador)
       : PUBLIC_NAV_LINKS;
   const navLinks = baseNavLinks.filter(
     (link) =>

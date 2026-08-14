@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Send, Loader2, Users, UserPlus, CheckCircle2, Clock, Mail,
-  Copy, Check, Upload, FileText, X, DollarSign, Linkedin, Download, Link2, ExternalLink, Pencil,
+  Copy, Check, Upload, FileText, X, DollarSign, Linkedin, Download, Link2, ExternalLink, Pencil, Calendar,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -13,11 +13,26 @@ import {
   uploadTalentCvsAsAmbassador,
   updateAmbassadorProfile,
   updateAmbassadorInvite,
+  fetchAmbassadorReviews,
+  approveAmbassadorReview,
+  requestAmbassadorReviewChanges,
+  nudgeAmbassadorTalentSlots,
+  fetchAmbassadorScreenSlots,
+  bookAmbassadorScreen,
 } from '../lib/ambassadorApi';
 
-const SECTIONS = [
+const BASE_SECTIONS = [
   { id: 'invite', label: 'Invite' },
   { id: 'candidates', label: 'Candidates' },
+  { id: 'rewards', label: 'Rewards' },
+  { id: 'share', label: 'Share' },
+];
+
+const INTERNAL_SECTIONS = [
+  { id: 'invite', label: 'Invite' },
+  { id: 'candidates', label: 'Candidates' },
+  { id: 'review', label: 'Review' },
+  { id: 'screens', label: 'Screens' },
   { id: 'rewards', label: 'Rewards' },
   { id: 'share', label: 'Share' },
 ];
@@ -31,9 +46,10 @@ const statusStyles = {
   uploaded: 'bg-amber-50 text-amber-800 border-amber-200',
 };
 
-function sectionFromHash(hash) {
+function sectionFromHash(hash, isInternal) {
   const raw = String(hash || '').replace(/^#/, '');
-  if (SECTIONS.some((s) => s.id === raw)) return raw;
+  const sections = isInternal ? INTERNAL_SECTIONS : BASE_SECTIONS;
+  if (sections.some((s) => s.id === raw)) return raw;
   return 'invite';
 }
 
@@ -122,7 +138,6 @@ export default function AmbassadorHubPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const section = sectionFromHash(location.hash);
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -143,6 +158,16 @@ export default function AmbassadorHubPage() {
   const [editEmailDraft, setEditEmailDraft] = useState('');
   const [editNameDraft, setEditNameDraft] = useState('');
   const [savingInviteId, setSavingInviteId] = useState(null);
+  const [reviewTab, setReviewTab] = useState('pending_review');
+  const [reviewRows, setReviewRows] = useState([]);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewActingId, setReviewActingId] = useState('');
+  const [changesNotes, setChangesNotes] = useState('');
+  const [changesForId, setChangesForId] = useState('');
+  const [screenTalent, setScreenTalent] = useState(null);
+  const [screenSlots, setScreenSlots] = useState([]);
+  const [screenLoading, setScreenLoading] = useState(false);
+  const [bookingSlotId, setBookingSlotId] = useState('');
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -177,6 +202,125 @@ export default function AmbassadorHubPage() {
 
   const setSection = (id) => {
     navigate(`/ambassador/hub#${id}`, { replace: true });
+  };
+
+  const isInternal = Boolean(data?.ambassador?.isInternal || data?.ambassador?.kind === 'internal');
+  const sections = isInternal ? INTERNAL_SECTIONS : BASE_SECTIONS;
+  const section = sectionFromHash(location.hash, isInternal);
+
+  const loadReviews = useCallback(async (status) => {
+    if (!isInternal) return;
+    setReviewLoading(true);
+    try {
+      const result = await fetchAmbassadorReviews(status || reviewTab);
+      setReviewRows(result.profiles || []);
+    } catch (err) {
+      setToast(err.message || 'Could not load reviews.');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [isInternal, reviewTab]);
+
+  useEffect(() => {
+    if (!isInternal) return;
+    if (section === 'review' || section === 'screens') {
+      loadReviews(section === 'screens' ? 'all' : reviewTab);
+    }
+  }, [isInternal, section, reviewTab, loadReviews]);
+
+  const formatSlotWhen = (iso) => {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    } catch {
+      return iso;
+    }
+  };
+
+  const handleApprove = async (row) => {
+    setReviewActingId(row.userId || row.id);
+    setToast('');
+    try {
+      const result = await approveAmbassadorReview(row.userId || row.id);
+      setToast(result.alreadyApproved ? 'Already approved.' : `Approved ${row.name || 'talent'}.`);
+      await loadReviews(reviewTab);
+    } catch (err) {
+      setToast(err.message || 'Could not approve.');
+    } finally {
+      setReviewActingId('');
+    }
+  };
+
+  const handleRequestChanges = async (row) => {
+    if (!changesNotes.trim()) {
+      setToast('Add a short note before requesting changes.');
+      return;
+    }
+    setReviewActingId(row.userId || row.id);
+    setToast('');
+    try {
+      await requestAmbassadorReviewChanges(row.userId || row.id, {
+        issues: ['other'],
+        notes: changesNotes.trim(),
+      });
+      setChangesForId('');
+      setChangesNotes('');
+      setToast('Change request sent.');
+      await loadReviews(reviewTab);
+    } catch (err) {
+      setToast(err.message || 'Could not request changes.');
+    } finally {
+      setReviewActingId('');
+    }
+  };
+
+  const handleNudgeSlots = async (row) => {
+    setReviewActingId(row.userId || row.id);
+    setToast('');
+    try {
+      await nudgeAmbassadorTalentSlots(row.userId || row.id);
+      setToast(`Asked ${row.name || 'talent'} to publish intro slots.`);
+      await loadReviews(section === 'screens' ? 'all' : reviewTab);
+    } catch (err) {
+      setToast(err.message || 'Could not send email.');
+    } finally {
+      setReviewActingId('');
+    }
+  };
+
+  const openScreenSlots = async (row) => {
+    setScreenTalent(row);
+    setScreenSlots([]);
+    setScreenLoading(true);
+    setToast('');
+    try {
+      const result = await fetchAmbassadorScreenSlots(row.userId || row.id);
+      setScreenSlots(result.slots || []);
+      if (result.upcomingScreen) {
+        setToast('A screening is already booked with this talent.');
+      }
+    } catch (err) {
+      setToast(err.message || 'Could not load slots.');
+    } finally {
+      setScreenLoading(false);
+    }
+  };
+
+  const handleBookScreen = async (slotId) => {
+    if (!screenTalent) return;
+    setBookingSlotId(slotId);
+    setToast('');
+    try {
+      const result = await bookAmbassadorScreen(screenTalent.userId || screenTalent.id, slotId);
+      setToast(result.alreadyBooked ? 'Screening already booked.' : 'Screening booked — calendar invite sent.');
+      setScreenTalent(null);
+      setScreenSlots([]);
+      await loadReviews('all');
+    } catch (err) {
+      setToast(err.message || 'Could not book screening.');
+    } finally {
+      setBookingSlotId('');
+    }
   };
 
   const handleInvite = async (e) => {
@@ -451,7 +595,7 @@ export default function AmbassadorHubPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div className="min-w-0 flex-1">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-red mb-1">
-              Ambassador
+              {isInternal ? 'Internal ambassador' : 'Ambassador'}
             </p>
             {editingName ? (
               <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -493,7 +637,9 @@ export default function AmbassadorHubPage() {
               </div>
             )}
             <p className="text-sm text-gray-500 font-medium mt-1">
-              Invite people from your network — BYG handles the rest. This name appears on invite emails.
+              {isInternal
+                ? 'Invite your network, review their profiles, and book screening calls on published slots. Rewards still apply.'
+                : 'Invite people from your network — BYG handles the rest. This name appears on invite emails.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -532,13 +678,13 @@ export default function AmbassadorHubPage() {
         </div>
 
         {/* Mobile section switcher (desktop uses navbar) */}
-        <div className="md:hidden flex gap-1 p-1 mb-5 bg-white border border-black/5 rounded-2xl">
-          {SECTIONS.map((s) => (
+        <div className="md:hidden flex gap-1 p-1 mb-5 bg-white border border-black/5 rounded-2xl overflow-x-auto">
+          {sections.map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => setSection(s.id)}
-              className={`flex-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
+              className={`flex-1 min-w-[4.5rem] py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors ${
                 section === s.id ? 'bg-black text-white' : 'text-gray-500'
               }`}
             >
@@ -934,6 +1080,249 @@ export default function AmbassadorHubPage() {
                           </button>
                         ) : null}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionShell>
+          )}
+
+          {section === 'review' && isInternal && (
+            <SectionShell
+              title="Review your talent"
+              subtitle="Only people you invited. Approve waitlist profiles, request changes, and ask them to publish intro slots when needed."
+            >
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {[
+                  { id: 'pending_review', label: 'Pending' },
+                  { id: 'changes_requested', label: 'Changes sent' },
+                  { id: 'approved', label: 'Approved' },
+                  { id: 'draft', label: 'Draft' },
+                  { id: 'all', label: 'All' },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setReviewTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-full border text-[9px] font-black uppercase tracking-wider ${
+                      reviewTab === tab.id
+                        ? 'bg-black text-white border-black'
+                        : 'border-gray-200 text-gray-500'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              {reviewLoading ? (
+                <Loader2 className="animate-spin text-gray-300" size={22} />
+              ) : !reviewRows.length ? (
+                <p className="text-sm text-gray-400 font-medium">
+                  No talent in this tab yet. They appear after they activate and submit a profile.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {reviewRows.map((row) => (
+                    <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
+                          <p className="text-[11px] text-gray-500 font-medium truncate">
+                            {row.jobTitle ? `${row.jobTitle} · ` : ''}
+                            {row.email}
+                          </p>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-white text-gray-600">
+                              {statusLabel(row.directoryStatus) === row.directoryStatus
+                                ? row.directoryStatus.replace(/_/g, ' ')
+                                : row.directoryStatus.replace(/_/g, ' ')}
+                            </span>
+                            {row.slotsPublished ? (
+                              <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border-emerald-200">
+                                Slots published{row.openSlotCount ? ` · ${row.openSlotCount}` : ''}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border-amber-200">
+                                {row.calConnected ? 'No slots published' : 'Calendar not connected'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {row.directoryStatus === 'pending_review' ? (
+                          <button
+                            type="button"
+                            disabled={Boolean(reviewActingId)}
+                            onClick={() => handleApprove(row)}
+                            className="px-3 py-2 rounded-xl bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                          >
+                            {reviewActingId === (row.userId || row.id) ? (
+                              <Loader2 size={11} className="animate-spin" />
+                            ) : (
+                              'Approve'
+                            )}
+                          </button>
+                        ) : null}
+                        {['pending_review', 'approved'].includes(row.directoryStatus) ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setChangesForId(row.userId || row.id);
+                              setChangesNotes('');
+                            }}
+                            className="px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-600"
+                          >
+                            Request changes
+                          </button>
+                        ) : null}
+                        {!row.slotsPublished ? (
+                          <button
+                            type="button"
+                            disabled={Boolean(reviewActingId)}
+                            onClick={() => handleNudgeSlots(row)}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
+                          >
+                            <Mail size={11} /> Ask to publish slots
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSection('screens');
+                              openScreenSlots(row);
+                            }}
+                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-700"
+                          >
+                            <Calendar size={11} /> Book screen
+                          </button>
+                        )}
+                      </div>
+                      {changesForId === (row.userId || row.id) ? (
+                        <div className="mt-3 space-y-2">
+                          <textarea
+                            value={changesNotes}
+                            onChange={(e) => setChangesNotes(e.target.value)}
+                            placeholder="What should they fix?"
+                            rows={2}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-medium outline-none focus:border-red resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={Boolean(reviewActingId) || !changesNotes.trim()}
+                              onClick={() => handleRequestChanges(row)}
+                              className="px-3 py-2 rounded-xl bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                            >
+                              Send request
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setChangesForId('')}
+                              className="px-3 py-2 rounded-xl text-[9px] font-black uppercase tracking-wider text-gray-400"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </SectionShell>
+          )}
+
+          {section === 'screens' && isInternal && (
+            <SectionShell
+              title="Screening calls"
+              subtitle="Book a BYG screening on a slot the talent already published. You only see people you invited. Client intros stay separate."
+            >
+              {reviewLoading ? (
+                <Loader2 className="animate-spin text-gray-300" size={22} />
+              ) : !reviewRows.length ? (
+                <p className="text-sm text-gray-400 font-medium">No invited talent with profiles yet.</p>
+              ) : (
+                <div className="space-y-3">
+                  {reviewRows.map((row) => (
+                    <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
+                          <p className="text-[11px] text-gray-500 font-medium truncate">{row.email}</p>
+                          {row.upcomingScreen ? (
+                            <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                              Screen booked · {formatSlotWhen(row.upcomingScreen.start)}
+                            </p>
+                          ) : row.slotsPublished ? (
+                            <p className="text-[11px] text-emerald-700 font-medium mt-1">
+                              {row.openSlotCount} open slot{row.openSlotCount === 1 ? '' : 's'}
+                              {row.nextSlotStart ? ` · next ${formatSlotWhen(row.nextSlotStart)}` : ''}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-amber-700 font-medium mt-1">
+                              {row.calConnected ? 'No slots published yet' : 'Calendar not connected'}
+                            </p>
+                          )}
+                        </div>
+                        {row.slotsPublished && !row.upcomingScreen ? (
+                          <button
+                            type="button"
+                            onClick={() => openScreenSlots(row)}
+                            className="shrink-0 px-3 py-2 rounded-xl bg-black text-white text-[9px] font-black uppercase tracking-wider"
+                          >
+                            Pick slot
+                          </button>
+                        ) : !row.slotsPublished ? (
+                          <button
+                            type="button"
+                            disabled={Boolean(reviewActingId)}
+                            onClick={() => handleNudgeSlots(row)}
+                            className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
+                          >
+                            <Mail size={11} /> Ask to publish
+                          </button>
+                        ) : null}
+                      </div>
+                      {screenTalent && (screenTalent.userId || screenTalent.id) === (row.userId || row.id) ? (
+                        <div className="mt-3 border-t border-gray-100 pt-3">
+                          {screenLoading ? (
+                            <Loader2 className="animate-spin text-gray-300" size={18} />
+                          ) : !screenSlots.length ? (
+                            <p className="text-xs text-gray-400">No open slots right now.</p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {screenSlots.map((slot) => (
+                                <li
+                                  key={slot.id}
+                                  className="flex items-center justify-between gap-2 rounded-xl bg-white border border-gray-100 px-3 py-2"
+                                >
+                                  <span className="text-xs font-semibold text-black">{formatSlotWhen(slot.start)}</span>
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(bookingSlotId)}
+                                    onClick={() => handleBookScreen(slot.id)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                                  >
+                                    {bookingSlotId === slot.id ? (
+                                      <Loader2 size={10} className="animate-spin" />
+                                    ) : (
+                                      'Book'
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setScreenTalent(null); setScreenSlots([]); }}
+                            className="mt-2 text-[9px] font-black uppercase tracking-wider text-gray-400"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>
