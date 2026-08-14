@@ -74,6 +74,39 @@ function canEditInviteEmail(status) {
   return !['activated', 'skipped', 'expired'].includes(status);
 }
 
+function directoryStatusLabel(status) {
+  const map = {
+    draft: 'Draft',
+    pending_review: 'Pending review',
+    changes_requested: 'Changes requested',
+    approved: 'Approved',
+    rejected: 'Rejected',
+  };
+  return map[status] || String(status || 'unknown').replace(/_/g, ' ');
+}
+
+function TalentPhoto({ name, photoUrl, size = 56 }) {
+  if (photoUrl) {
+    return (
+      <img
+        src={photoUrl}
+        alt=""
+        className="rounded-2xl object-cover object-top shrink-0 border border-black/10"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  const initial = String(name || 'T').charAt(0).toUpperCase();
+  return (
+    <div
+      className="rounded-2xl bg-black text-white font-black flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.36 }}
+    >
+      {initial}
+    </div>
+  );
+}
+
 function CopyButton({ text, label = 'Copy', className = '' }) {
   const [copied, setCopied] = useState(false);
   const onCopy = async () => {
@@ -1124,18 +1157,26 @@ export default function AmbassadorHubPage() {
                 <div className="space-y-3">
                   {reviewRows.map((row) => (
                     <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <div className="flex items-start gap-3">
+                        <TalentPhoto name={row.name} photoUrl={row.photoUrl} size={64} />
+                        <div className="min-w-0 flex-1">
                           <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
-                          <p className="text-[11px] text-gray-500 font-medium truncate">
-                            {row.jobTitle ? `${row.jobTitle} · ` : ''}
-                            {row.email}
+                          <p className="text-[11px] text-red font-bold uppercase tracking-wide truncate">
+                            {row.jobTitle || 'Role not set'}
                           </p>
+                          <p className="text-[11px] text-gray-500 font-medium truncate mt-0.5">
+                            {row.email}
+                            {row.experienceYears != null && row.experienceYears !== ''
+                              ? ` · ${row.experienceYears} yrs`
+                              : ''}
+                            {row.monthlyFeeUsd != null ? ` · $${row.monthlyFeeUsd}/mo` : ''}
+                          </p>
+                          {row.availability ? (
+                            <p className="text-[11px] text-gray-400 font-medium mt-0.5">{row.availability}</p>
+                          ) : null}
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-white text-gray-600">
-                              {statusLabel(row.directoryStatus) === row.directoryStatus
-                                ? row.directoryStatus.replace(/_/g, ' ')
-                                : row.directoryStatus.replace(/_/g, ' ')}
+                              {directoryStatusLabel(row.directoryStatus)}
                             </span>
                             {row.slotsPublished ? (
                               <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border-emerald-200">
@@ -1147,6 +1188,38 @@ export default function AmbassadorHubPage() {
                               </span>
                             )}
                           </div>
+                          {row.slotsPublished && row.nextSlotStart ? (
+                            <p className="text-[11px] text-emerald-700 font-medium mt-1">
+                              Next open: {formatSlotWhen(row.nextSlotStart)}
+                            </p>
+                          ) : null}
+                          {row.about ? (
+                            <p className="text-[12px] text-gray-600 font-medium mt-2 leading-relaxed line-clamp-3">
+                              {row.about}
+                            </p>
+                          ) : null}
+                          {(row.skills || []).length ? (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {row.skills.slice(0, 8).map((tag) => (
+                                <span
+                                  key={tag}
+                                  className="px-2 py-0.5 rounded-lg bg-red/5 border border-red/10 text-red text-[9px] font-black uppercase"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          ) : null}
+                          {row.cvUrl ? (
+                            <a
+                              href={row.cvUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 mt-2 text-[10px] font-black uppercase tracking-wider text-gray-600 hover:text-red"
+                            >
+                              <FileText size={11} /> View CV
+                            </a>
+                          ) : null}
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1247,7 +1320,9 @@ export default function AmbassadorHubPage() {
                   {reviewRows.map((row) => (
                     <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <TalentPhoto name={row.name} photoUrl={row.photoUrl} size={48} />
+                          <div className="min-w-0">
                           <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
                           <p className="text-[11px] text-gray-500 font-medium truncate">{row.email}</p>
                           {row.upcomingScreen ? (
@@ -1264,6 +1339,7 @@ export default function AmbassadorHubPage() {
                               {row.calConnected ? 'No slots published yet' : 'Calendar not connected'}
                             </p>
                           )}
+                          </div>
                         </div>
                         {row.slotsPublished && !row.upcomingScreen ? (
                           <button

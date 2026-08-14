@@ -60,7 +60,9 @@ function mapReviewRow(row, slotMeta = {}) {
     nextSlotStart: slotMeta.nextStart || null,
     upcomingScreen: slotMeta.upcomingScreen || null,
     canNudgeSlots: !slotMeta.openCount,
-    lastSlotNudgeAt: row.intro_slot_nudge_at || null,
+    monthlyFeeUsd: row.monthly_fee_usd ?? null,
+    availability: row.availability || '',
+    experienceYears: row.experience_years ?? null,
   };
 }
 
@@ -135,10 +137,31 @@ async function getOwnedProfile(ambassador, profileKey) {
   return { ...(data || profile), ambassador_id: ambassadorId };
 }
 
-async function slotMetaForTalent(talentKey) {
+async function resolveSlotTalentKey(profileOrKey) {
+  const key =
+    typeof profileOrKey === 'object' && profileOrKey
+      ? String(profileOrKey.id || profileOrKey.user_id || '')
+      : String(profileOrKey || '');
+  if (!key) return null;
+  try {
+    const ctx = await introSlots.resolveTalentContext(key);
+    // Slots are stored on profiles.id, not auth user_id.
+    return ctx?.talentKey || key;
+  } catch (err) {
+    console.warn('[ambassador-internal] talent key:', err?.message || err);
+    return key;
+  }
+}
+
+async function slotMetaForTalent(profileOrKey) {
+  const talentKey = await resolveSlotTalentKey(profileOrKey);
+  if (!talentKey) {
+    return { openCount: 0, nextStart: null, upcomingScreen: null };
+  }
+
   let open = [];
   try {
-    open = await introSlots.listSlotsForTalent(talentKey, { statuses: ['open'] });
+    open = await introSlots.listSlotsForTalent(talentKey, { statuses: ['open', 'held'] });
   } catch (err) {
     console.warn('[ambassador-internal] slots:', err?.message || err);
   }
@@ -178,8 +201,7 @@ async function listReviewsForUser(userId, { status = 'pending_review' } = {}) {
 
   const items = [];
   for (const row of filtered) {
-    const talentKey = row.user_id || row.id;
-    const meta = await slotMetaForTalent(talentKey);
+    const meta = await slotMetaForTalent(row);
     items.push(mapReviewRow(row, meta));
   }
 
@@ -200,7 +222,7 @@ async function approveReviewForUser(userId, profileKey) {
   const status = profile.directory_status || 'draft';
 
   if (status === 'approved') {
-    return { alreadyApproved: true, profile: mapReviewRow(profile, await slotMetaForTalent(profile.user_id)) };
+    return { alreadyApproved: true, profile: mapReviewRow(profile, await slotMetaForTalent(profile)) };
   }
   if (status !== 'pending_review') {
     throw deny(
@@ -291,8 +313,7 @@ async function listScreensForUser(userId) {
   const rows = await listAttributedProfiles(ambassador.id);
   const items = [];
   for (const row of rows) {
-    const talentKey = row.user_id || row.id;
-    const meta = await slotMetaForTalent(talentKey);
+    const meta = await slotMetaForTalent(row);
     items.push({
       ...mapReviewRow(row, meta),
       canBookScreen: meta.openCount > 0 && !meta.upcomingScreen,
