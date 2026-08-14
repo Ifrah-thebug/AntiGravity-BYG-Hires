@@ -23,6 +23,7 @@ router.post('/', async (req, res) => {
       code: req.body?.code,
       name: req.body?.name,
       email: req.body?.email,
+      kind: req.body?.kind,
       promoTitle: req.body?.promoTitle,
       promoDescription: req.body?.promoDescription,
       promoReward: req.body?.promoReward,
@@ -41,6 +42,7 @@ router.patch('/:id', async (req, res) => {
     const ambassador = await store.updateAmbassador(req.params.id, {
       name: req.body?.name,
       email: req.body?.email,
+      kind: req.body?.kind,
       promoTitle: req.body?.promoTitle,
       promoDescription: req.body?.promoDescription,
       promoReward: req.body?.promoReward,
@@ -62,7 +64,7 @@ router.patch('/:id', async (req, res) => {
     return res.json({ ambassador });
   } catch (err) {
     const status =
-      err.code === 'INVALID_NAME' || err.code === 'INVALID_ID'
+      err.code === 'INVALID_NAME' || err.code === 'INVALID_ID' || err.code === 'KIND_COLUMN_MISSING'
         ? 400
         : err.code === 'NOT_FOUND'
           ? 404

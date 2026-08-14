@@ -32,11 +32,13 @@ export default function AdminAmbassadorsPage() {
   const [copied, setCopied] = useState('');
   const [editingId, setEditingId] = useState('');
   const [editName, setEditName] = useState('');
+  const [editKind, setEditKind] = useState('circle');
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState('');
   const [form, setForm] = useState({
     code: '',
     name: '',
+    kind: 'circle',
     promoTitle: 'Founding Ambassador perk',
     promoDescription: 'When talent you invite activate, you unlock this perk — plus decaying cash rewards on placements.',
     promoReward: 'Up to $50 on 1st placement · lifetime residual floor $10',
@@ -132,6 +134,7 @@ export default function AdminAmbassadorsPage() {
   const startEdit = (a) => {
     setEditingId(a.id);
     setEditName(a.name || '');
+    setEditKind(a.kind === 'internal' ? 'internal' : 'circle');
     setError('');
   };
 
@@ -142,10 +145,10 @@ export default function AdminAmbassadorsPage() {
       const res = await fetch(`${BASE}/api/admin/ambassadors/${id}`, {
         method: 'PATCH',
         headers: await authHeaders(),
-        body: JSON.stringify({ name: editName }),
+        body: JSON.stringify({ name: editName, kind: editKind }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Could not update name');
+      if (!res.ok) throw new Error(data.error || 'Could not update ambassador');
       setEditingId('');
       await load();
     } catch (err) {
@@ -288,6 +291,17 @@ export default function AdminAmbassadorsPage() {
             placeholder="Display name"
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold outline-none focus:border-red"
           />
+          <label className="block">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 block">Role</span>
+            <select
+              value={form.kind}
+              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+              className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm font-semibold outline-none focus:border-red bg-white"
+            >
+              <option value="circle">Circle — invite &amp; rewards only</option>
+              <option value="internal">Internal — BYG HR (review + screens, own talent only)</option>
+            </select>
+          </label>
           <input
             value={form.promoTitle}
             onChange={(e) => setForm((f) => ({ ...f, promoTitle: e.target.value }))}
@@ -334,14 +348,25 @@ export default function AdminAmbassadorsPage() {
                   className="p-3 rounded-2xl border border-gray-100 bg-gray-50 space-y-2"
                 >
                   {editingId === a.id ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold outline-none focus:border-red"
-                        placeholder="Display name"
-                        autoFocus
-                      />
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 text-sm font-semibold outline-none focus:border-red"
+                          placeholder="Display name"
+                          autoFocus
+                        />
+                      </div>
+                      <select
+                        value={editKind}
+                        onChange={(e) => setEditKind(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-200 text-xs font-semibold outline-none focus:border-red bg-white"
+                      >
+                        <option value="circle">Circle</option>
+                        <option value="internal">Internal (BYG HR)</option>
+                      </select>
+                      <div className="flex items-center gap-2">
                       <button
                         type="button"
                         disabled={savingEdit || !editName.trim()}
@@ -357,6 +382,7 @@ export default function AdminAmbassadorsPage() {
                       >
                         Cancel
                       </button>
+                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-between gap-3">
@@ -365,6 +391,15 @@ export default function AdminAmbassadorsPage() {
                         <p className="text-[11px] text-gray-400 font-medium">
                           {a.code} · {a.userId ? 'claimed' : 'unclaimed'}
                         </p>
+                        <span
+                          className={`mt-1 inline-flex px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider ${
+                            a.kind === 'internal'
+                              ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                              : 'bg-gray-100 text-gray-600 border-gray-200'
+                          }`}
+                        >
+                          {a.kind === 'internal' ? 'Internal' : 'Circle'}
+                        </span>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
                         <button

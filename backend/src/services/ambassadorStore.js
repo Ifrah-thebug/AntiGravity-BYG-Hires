@@ -11,14 +11,26 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+function normalizeKind(kind) {
+  return String(kind || 'circle').trim().toLowerCase() === 'internal' ? 'internal' : 'circle';
+}
+
+function isMissingKindColumn(error) {
+  const msg = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`;
+  return /column .*kind/i.test(msg) || /ambassadors\.kind/i.test(msg);
+}
+
 function mapAmbassador(row) {
   if (!row) return null;
+  const kind = normalizeKind(row.kind);
   return {
     id: row.id,
     code: row.code,
     name: row.name || '',
     email: row.email ? normalizeEmail(row.email) : null,
     userId: row.user_id || null,
+    kind,
+    isInternal: kind === 'internal',
     promoTitle: row.promo_title || 'Ambassador perk',
     promoDescription: row.promo_description || '',
     promoReward: row.promo_reward || '',
@@ -77,6 +89,7 @@ async function createAmbassador({
   code,
   name,
   email,
+  kind,
   promoTitle,
   promoDescription,
   promoReward,
@@ -89,25 +102,29 @@ async function createAmbassador({
     throw err;
   }
 
-  const { data, error } = await supabaseAdmin
-    .from('ambassadors')
-    .insert({
-      code: normalized,
-      name: String(name || '').trim() || 'Ambassador',
-      email: email ? normalizeEmail(email) : null,
-      promo_title: String(promoTitle || 'Ambassador perk').trim(),
-      promo_description: String(
-        promoDescription || 'Earn rewards when talent you invite join BYG Hires.'
-      ).trim(),
-      promo_reward: String(
-        promoReward || 'Exclusive ambassador recognition + priority support'
-      ).trim(),
-      notes: notes || null,
-      active: true,
-      updated_at: new Date().toISOString(),
-    })
-    .select('*')
-    .single();
+  const row = {
+    code: normalized,
+    name: String(name || '').trim() || 'Ambassador',
+    email: email ? normalizeEmail(email) : null,
+    kind: normalizeKind(kind),
+    promo_title: String(promoTitle || 'Ambassador perk').trim(),
+    promo_description: String(
+      promoDescription || 'Earn rewards when talent you invite join BYG Hires.'
+    ).trim(),
+    promo_reward: String(
+      promoReward || 'Exclusive ambassador recognition + priority support'
+    ).trim(),
+    notes: notes || null,
+    active: true,
+    updated_at: new Date().toISOString(),
+  };
+
+  let { data, error } = await supabaseAdmin.from('ambassadors').insert(row).select('*').single();
+
+  if (error && isMissingKindColumn(error)) {
+    delete row.kind;
+    ({ data, error } = await supabaseAdmin.from('ambassadors').insert(row).select('*').single());
+  }
 
   if (error) {
     if (/duplicate|unique/i.test(error.message || '')) {
@@ -179,13 +196,24 @@ async function updateAmbassador(ambassadorId, patch = {}) {
   if (patch.active !== undefined) {
     updates.active = Boolean(patch.active);
   }
+  if (patch.kind !== undefined) {
+    updates.kind = normalizeKind(patch.kind);
+  }
 
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('ambassadors')
     .update(updates)
     .eq('id', ambassadorId)
     .select('*')
     .maybeSingle();
+
+  if (error && isMissingKindColumn(error) && updates.kind !== undefined) {
+    const err = new Error(
+      'Ambassador role column is missing. Run supabase/ambassadors_internal.sql in Supabase, then try again.'
+    );
+    err.code = 'KIND_COLUMN_MISSING';
+    throw err;
+  }
 
   if (error) throw error;
   if (!data) {
@@ -356,6 +384,7 @@ async function findLatestAmbassadorInviteByEmail(email) {
 module.exports = {
   normalizeCode,
   normalizeEmail,
+  normalizeKind,
   mapAmbassador,
   getByCode,
   getByUserId,

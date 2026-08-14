@@ -98,13 +98,85 @@ export async function uploadTalentCvsAsAmbassador(files, { autoSend = true } = {
 export async function fetchIsAmbassador(userId) {
   if (!userId) return false;
   try {
-    const res = await fetch(`${BASE}/api/ambassador/is-ambassador`, {
-      headers: await authHeaders(),
-    });
-    if (!res.ok) return false;
-    const data = await res.json();
-    return Boolean(data.isAmbassador);
+    const meta = await fetchAmbassadorMeta();
+    return Boolean(meta.isAmbassador);
   } catch {
     return false;
   }
+}
+
+export async function fetchAmbassadorMeta() {
+  try {
+    const res = await fetch(`${BASE}/api/ambassador/is-ambassador`, {
+      headers: await authHeaders(),
+    });
+    if (!res.ok) return { isAmbassador: false, isInternal: false, kind: 'circle' };
+    const data = await res.json();
+    return {
+      isAmbassador: Boolean(data.isAmbassador),
+      isInternal: Boolean(data.isInternal),
+      kind: data.kind || 'circle',
+      code: data.code || null,
+    };
+  } catch {
+    return { isAmbassador: false, isInternal: false, kind: 'circle' };
+  }
+}
+
+export async function fetchAmbassadorReviews(status = 'pending_review') {
+  const qs = new URLSearchParams({ status });
+  const res = await fetch(`${BASE}/api/ambassador/reviews?${qs}`, {
+    headers: await authHeaders(),
+  });
+  return parseJson(res);
+}
+
+export async function approveAmbassadorReview(profileKey) {
+  const res = await fetch(`${BASE}/api/ambassador/reviews/${profileKey}/approve`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({}),
+  });
+  return parseJson(res);
+}
+
+export async function requestAmbassadorReviewChanges(profileKey, { issues, notes }) {
+  const res = await fetch(`${BASE}/api/ambassador/reviews/${profileKey}/request-changes`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ issues, notes }),
+  });
+  return parseJson(res);
+}
+
+export async function nudgeAmbassadorTalentSlots(profileKey) {
+  const res = await fetch(`${BASE}/api/ambassador/reviews/${profileKey}/nudge-slots`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({}),
+  });
+  return parseJson(res);
+}
+
+export async function fetchAmbassadorScreens() {
+  const res = await fetch(`${BASE}/api/ambassador/screens`, {
+    headers: await authHeaders(),
+  });
+  return parseJson(res);
+}
+
+export async function fetchAmbassadorScreenSlots(talentKey) {
+  const res = await fetch(`${BASE}/api/ambassador/screens/${talentKey}/slots`, {
+    headers: await authHeaders(),
+  });
+  return parseJson(res);
+}
+
+export async function bookAmbassadorScreen(talentKey, slotId) {
+  const res = await fetch(`${BASE}/api/ambassador/screens/${talentKey}/book`, {
+    method: 'POST',
+    headers: await authHeaders(),
+    body: JSON.stringify({ slotId }),
+  });
+  return parseJson(res);
 }

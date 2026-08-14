@@ -211,9 +211,10 @@ async function createCalIntroBooking({
   startIso,
   name,
   email,
+  title,
 }) {
   const eventSlug = normalizeEventSlug(process.env.CAL_EVENT_SLUG);
-  const bookingTitle = String(process.env.CAL_BOOKING_TITLE || 'Intro Interview').trim();
+  const bookingTitle = String(title || process.env.CAL_BOOKING_TITLE || 'Intro Interview').trim();
   const dynamicUsername = `${hrUsername}+${talentUsername}`;
   const clientEmail = String(email).trim().toLowerCase();
   const talentEmailNorm = String(talentEmail || '').trim().toLowerCase();

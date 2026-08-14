@@ -71,6 +71,8 @@ function publicAmbassador(ambassador, extras = {}) {
     name: ambassador.name,
     email: ambassador.email,
     claimed: Boolean(ambassador.userId),
+    kind: ambassador.kind || 'circle',
+    isInternal: ambassador.kind === 'internal' || ambassador.isInternal === true,
     promoTitle: ambassador.promoTitle,
     promoDescription: ambassador.promoDescription,
     promoReward: ambassador.promoReward,
