@@ -202,7 +202,7 @@ export default function LoginPage() {
             </p>
             <h2 className="text-lg font-black tracking-tight mb-1">Have a secret code?</h2>
             <p className="text-[12px] text-white/50 font-medium mb-4 leading-relaxed">
-              Enter your unique ambassador code to open the lounge — separate from talent and client login.
+              First time? Enter your code below. Already claimed? Use email & password at the top of this page — you&apos;ll land in your hub automatically.
             </p>
             <form onSubmit={handleAmbassadorCode} className="space-y-3">
               <div className="flex flex-col sm:flex-row gap-2">
@@ -231,6 +231,13 @@ export default function LoginPage() {
                   {ambassadorError}
                 </p>
               )}
+              <p className="text-[11px] text-white/40 font-medium">
+                Returning ambassador?{' '}
+                <Link to="/ambassador" className="text-white font-bold hover:text-red underline-offset-2 hover:underline">
+                  Open ambassador portal
+                </Link>
+                {' '}or use email & password above.
+              </p>
             </form>
           </div>
         </motion.div>

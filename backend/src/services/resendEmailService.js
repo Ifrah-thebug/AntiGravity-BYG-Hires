@@ -712,34 +712,46 @@ async function sendProfileSubmittedAdminEmail({ talentName, talentEmail, profile
   });
 }
 
-function buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl }) {
+function buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl, mode = 'slots' }) {
   const greeting = name ? `Hi ${name},` : 'Hi,';
   const from = ambassadorName ? ` by <strong>${ambassadorName}</strong>` : '';
+  const isCalendar = mode === 'calendar';
+  const body = isCalendar
+    ? `<p style="margin: 0 0 12px;">Your BYG Hires ambassador${from} asked you to <strong>connect your calendar</strong> in the talent portal so intro times can be published and a screening call can be booked.</p>
+  <p style="margin: 0 0 12px;">Open your portal → connect Cal.com → then publish at least one intro slot.</p>`
+    : `<p style="margin: 0 0 12px;">Your BYG Hires ambassador${from} asked you to <strong>publish intro availability</strong> so a screening call can be booked.</p>
+  <p style="margin: 0 0 12px;">In your talent portal: connect Cal.com if you have not already, then publish at least one intro slot.</p>`;
+  const cta = isCalendar ? 'Connect calendar' : 'Publish intro slots';
+  const footer = isCalendar
+    ? 'If you already connected your calendar, you can ignore this email.'
+    : 'If you already published slots, you can ignore this email.';
   return `
 <!DOCTYPE html>
 <html>
 <body style="font-family: Montserrat, Arial, sans-serif; line-height: 1.6; color: #111; max-width: 560px; margin: 0 auto; padding: 24px;">
   ${buildEmailLogoHtml()}
   <p style="margin: 0 0 12px;">${greeting}</p>
-  <p style="margin: 0 0 12px;">Your BYG Hires ambassador${from} asked you to <strong>publish intro availability</strong> so a screening call can be booked.</p>
-  <p style="margin: 0 0 12px;">In your talent portal: connect Cal.com if you have not already, then publish at least one intro slot.</p>
+  ${body}
   <p style="margin: 24px 0;">
-    ${buildEmailLinkButton(portalUrl, 'Publish intro slots')}
+    ${buildEmailLinkButton(portalUrl, cta)}
   </p>
-  <p style="margin: 0; font-size: 12px; color: #888;">If you already published slots, you can ignore this email.</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">${footer}</p>
 </body>
 </html>`.trim();
 }
 
-async function sendPublishSlotsNudgeEmail({ to, name, ambassadorName }) {
+async function sendPublishSlotsNudgeEmail({ to, name, ambassadorName, mode = 'slots' }) {
   const portalUrl = `${getAppPublicUrl()}/portal`;
-  const subject = 'Please publish intro slots — BYG Hires';
-  const html = buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl });
+  const isCalendar = mode === 'calendar';
+  const subject = isCalendar
+    ? 'Please connect your calendar — BYG Hires'
+    : 'Please publish intro slots — BYG Hires';
+  const html = buildPublishSlotsNudgeEmailHtml({ name, ambassadorName, portalUrl, mode });
   return sendTransactionalEmail({
     to,
     subject,
     html,
-    logLabel: 'Publish slots nudge (ambassador)',
+    logLabel: isCalendar ? 'Connect calendar nudge (ambassador)' : 'Publish slots nudge (ambassador)',
   });
 }
 

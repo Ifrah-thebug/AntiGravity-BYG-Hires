@@ -255,22 +255,74 @@ async function countInvitesByAmbassador(ambassadorId) {
     .order('created_at', { ascending: false });
   if (error) throw error;
   const rows = data || [];
+
+  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))];
+  const profileByUserId = {};
+  if (userIds.length) {
+    const { data: profiles, error: pErr } = await supabaseAdmin
+      .from('profiles')
+      .select(
+        'id, user_id, name, email, job_title, about, skills, photo_url, experience_years, monthly_fee_usd, directory_fee_usd, availability, role_type, directory_status, cv_url, cal_username, updated_at, created_at, ambassador_id'
+      )
+      .in('user_id', userIds);
+    if (pErr) {
+      console.warn('[ambassador] invite profile enrich:', pErr.message);
+    } else {
+      for (const p of profiles || []) {
+        if (p.user_id) profileByUserId[p.user_id] = p;
+      }
+    }
+  }
+
   return {
-    invites: rows.map((r) => ({
-      id: r.id,
-      email: r.email,
-      name: r.name,
-      status: r.status,
-      userId: r.user_id || null,
-      originalFilename: r.original_filename || null,
-      invitedAt: r.invited_at,
-      activatedAt: r.activated_at,
-      createdAt: r.created_at,
-    })),
+    invites: rows.map((r) => {
+      const profile = r.user_id ? profileByUserId[r.user_id] || null : null;
+      return {
+        id: r.id,
+        email: r.email,
+        name: r.name || profile?.name || null,
+        status: r.status,
+        userId: r.user_id || null,
+        originalFilename: r.original_filename || null,
+        invitedAt: r.invited_at,
+        activatedAt: r.activated_at,
+        createdAt: r.created_at,
+        profile: profile
+          ? {
+              id: profile.id,
+              userId: profile.user_id,
+              name: profile.name || '',
+              email: profile.email || r.email || '',
+              jobTitle: profile.job_title || '',
+              about: profile.about || '',
+              skills: Array.isArray(profile.skills) ? profile.skills : [],
+              photoUrl: profile.photo_url || null,
+              experienceYears: profile.experience_years ?? null,
+              monthlyFeeUsd: profile.monthly_fee_usd ?? null,
+              directoryFeeUsd: profile.directory_fee_usd ?? null,
+              availability: profile.availability || '',
+              roleType: profile.role_type || '',
+              directoryStatus: profile.directory_status || 'draft',
+              cvUrl: profile.cv_url || '',
+              calConnected: Boolean(profile.cal_username),
+              updatedAt: profile.updated_at || null,
+              createdAt: profile.created_at || null,
+              ambassadorReferred: Boolean(profile.ambassador_id),
+            }
+          : null,
+      };
+    }),
     totals: {
-      invited: rows.filter((r) => ['invited', 'activated'].includes(r.status)).length,
-      activated: rows.filter((r) => r.status === 'activated' || r.activated_at).length,
-      pending: rows.filter((r) => r.status === 'invited' && !r.activated_at).length,
+      // Pipeline totals — include ready/uploaded CV rows, not only emailed invites
+      invited: rows.filter((r) => !['skipped', 'expired'].includes(r.status)).length,
+      // Activated = completed signup with a linked auth user (not status-only orphans)
+      activated: rows.filter(
+        (r) => (r.status === 'activated' || r.activated_at) && r.user_id
+      ).length,
+      pending: rows.filter(
+        (r) =>
+          ['ready', 'invited', 'uploaded'].includes(r.status) && !r.activated_at && !r.user_id
+      ).length,
       total: rows.length,
     },
   };

@@ -1,10 +1,11 @@
 // Ambassador hub — sectioned: Invite · Candidates · Rewards · Share
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Send, Loader2, Users, UserPlus, CheckCircle2, Clock, Mail,
   Copy, Check, Upload, FileText, X, DollarSign, Linkedin, Download, Link2, ExternalLink, Pencil, Calendar,
+  ChevronRight, Search, HelpCircle,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -17,15 +18,21 @@ import {
   approveAmbassadorReview,
   requestAmbassadorReviewChanges,
   nudgeAmbassadorTalentSlots,
+  fetchAmbassadorScreens,
   fetchAmbassadorScreenSlots,
   bookAmbassadorScreen,
 } from '../lib/ambassadorApi';
+import DirectoryTalentModal from '../components/DirectoryTalentModal';
+import { formatDisplayName } from '../lib/formatDisplayName';
+import { photoUrlForDisplay } from '../lib/talentStorage';
+import { DEFAULT_MONTHLY_FEE_USD } from '../lib/profileContentPolicy';
 
 const BASE_SECTIONS = [
   { id: 'invite', label: 'Invite' },
   { id: 'candidates', label: 'Candidates' },
   { id: 'rewards', label: 'Rewards' },
   { id: 'share', label: 'Share' },
+  { id: 'help', label: 'Help' },
 ];
 
 const INTERNAL_SECTIONS = [
@@ -35,6 +42,7 @@ const INTERNAL_SECTIONS = [
   { id: 'screens', label: 'Screens' },
   { id: 'rewards', label: 'Rewards' },
   { id: 'share', label: 'Share' },
+  { id: 'help', label: 'Help' },
 ];
 
 const statusStyles = {
@@ -70,8 +78,96 @@ function statusLabel(status) {
   return map[status] || status || 'Unknown';
 }
 
+/** Snapshot strip filters → Candidates list */
+const CANDIDATE_FILTERS = [
+  { id: 'all', label: 'All' },
+  { id: 'invited', label: 'Invited' },
+  { id: 'waiting', label: 'Waiting' },
+  { id: 'activated', label: 'Activated' },
+];
+
+function normalizeCandidateFilter(raw) {
+  const v = String(raw || '').toLowerCase();
+  if (CANDIDATE_FILTERS.some((f) => f.id === v)) return v;
+  return 'all';
+}
+
+function inviteMatchesFilter(inv, filter) {
+  const status = inv?.status;
+  const activated =
+    (status === 'activated' || Boolean(inv?.activatedAt)) && Boolean(inv?.userId);
+  if (filter === 'waiting') {
+    return ['ready', 'invited', 'uploaded'].includes(status) && !activated;
+  }
+  if (filter === 'activated') return activated;
+  if (filter === 'invited') return !['skipped', 'expired'].includes(status);
+  return true;
+}
+
+function filterEmptyCopy(filter) {
+  const map = {
+    waiting: 'No one is waiting on activation right now.',
+    activated: 'No activated candidates yet.',
+    invited: 'No invites sent yet.',
+    all: 'No candidates yet',
+  };
+  return map[filter] || map.all;
+}
+
 function canEditInviteEmail(status) {
   return !['activated', 'skipped', 'expired'].includes(status);
+}
+
+function mapInviteProfileToModalTalent(profile) {
+  if (!profile) return null;
+  const skills = profile.skills || [];
+  const fee =
+    Number(profile.directoryFeeUsd) ||
+    Math.round((Number(profile.monthlyFeeUsd) || DEFAULT_MONTHLY_FEE_USD) * 1.1);
+  return {
+    id: profile.id,
+    name: formatDisplayName(profile.name) || 'Candidate',
+    photo: photoUrlForDisplay(profile.photoUrl, profile.updatedAt || profile.createdAt) || null,
+    score: 0,
+    verified: false,
+    aiInterviewVerified: false,
+    ambassadorReferred: Boolean(profile.ambassadorReferred),
+    role: profile.jobTitle || 'Professional',
+    experience: profile.experienceYears != null ? `${profile.experienceYears} yrs` : 'Flexible',
+    tags: skills,
+    bestSkill: skills[0] || '',
+    skillScores: {},
+    fee,
+    availability: profile.availability || 'immediate',
+    roleType: profile.roleType || 'flexible',
+    bio: profile.about || 'No bio provided yet.',
+    period: '/mo',
+  };
+}
+
+function mapReviewRowToModalTalent(row) {
+  if (!row) return null;
+  const skills = row.skills || [];
+  const fee = Math.round((Number(row.monthlyFeeUsd) || DEFAULT_MONTHLY_FEE_USD) * 1.1);
+  return {
+    id: row.id,
+    name: formatDisplayName(row.name) || 'Talent',
+    photo: photoUrlForDisplay(row.photoUrl) || null,
+    score: 0,
+    verified: false,
+    aiInterviewVerified: false,
+    ambassadorReferred: true,
+    role: row.jobTitle || 'Professional',
+    experience: row.experienceYears != null ? `${row.experienceYears} yrs` : 'Flexible',
+    tags: skills,
+    bestSkill: skills[0] || '',
+    skillScores: {},
+    fee,
+    availability: row.availability || 'immediate',
+    roleType: 'flexible',
+    bio: row.about || 'No bio provided yet.',
+    period: '/mo',
+  };
 }
 
 function directoryStatusLabel(status) {
@@ -171,6 +267,7 @@ export default function AmbassadorHubPage() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -201,6 +298,11 @@ export default function AmbassadorHubPage() {
   const [screenSlots, setScreenSlots] = useState([]);
   const [screenLoading, setScreenLoading] = useState(false);
   const [bookingSlotId, setBookingSlotId] = useState('');
+  const [profileModalTalent, setProfileModalTalent] = useState(null);
+  const [candidateQuery, setCandidateQuery] = useState('');
+  const [talentQuery, setTalentQuery] = useState('');
+
+  const candidateFilter = normalizeCandidateFilter(searchParams.get('filter'));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -233,13 +335,57 @@ export default function AmbassadorHubPage() {
     }
   }, [location.hash, navigate]);
 
-  const setSection = (id) => {
-    navigate(`/ambassador/hub#${id}`, { replace: true });
+  const setSection = (id, opts = {}) => {
+    const next = new URLSearchParams(searchParams);
+    if (id === 'candidates' && opts.filter) {
+      next.set('filter', normalizeCandidateFilter(opts.filter));
+    } else if (id !== 'candidates') {
+      next.delete('filter');
+    }
+    const qs = next.toString();
+    navigate(`/ambassador/hub${qs ? `?${qs}` : ''}#${id}`, { replace: true });
+  };
+
+  const setCandidateFilter = (filter) => {
+    setSection('candidates', { filter: normalizeCandidateFilter(filter) });
   };
 
   const isInternal = Boolean(data?.ambassador?.isInternal || data?.ambassador?.kind === 'internal');
   const sections = isInternal ? INTERNAL_SECTIONS : BASE_SECTIONS;
   const section = sectionFromHash(location.hash, isInternal);
+
+  const filteredInvites = useMemo(() => {
+    const list = data?.invites || [];
+    const q = candidateQuery.trim().toLowerCase();
+    return list.filter((inv) => {
+      if (!inviteMatchesFilter(inv, candidateFilter)) return false;
+      if (!q) return true;
+      const hay = [
+        inv.name,
+        inv.email,
+        inv.originalFilename,
+        inv.profile?.name,
+        inv.profile?.email,
+        inv.profile?.jobTitle,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [data?.invites, candidateFilter, candidateQuery]);
+
+  const filteredReviewRows = useMemo(() => {
+    const q = talentQuery.trim().toLowerCase();
+    if (!q) return reviewRows;
+    return reviewRows.filter((row) => {
+      const hay = [row.name, row.email, row.jobTitle, ...(row.skills || [])]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [reviewRows, talentQuery]);
 
   const loadReviews = useCallback(async (status) => {
     if (!isInternal) return;
@@ -254,12 +400,24 @@ export default function AmbassadorHubPage() {
     }
   }, [isInternal, reviewTab]);
 
+  const loadScreens = useCallback(async () => {
+    if (!isInternal) return;
+    setReviewLoading(true);
+    try {
+      const result = await fetchAmbassadorScreens();
+      setReviewRows(result.profiles || []);
+    } catch (err) {
+      setToast(err.message || 'Could not load screens.');
+    } finally {
+      setReviewLoading(false);
+    }
+  }, [isInternal]);
+
   useEffect(() => {
     if (!isInternal) return;
-    if (section === 'review' || section === 'screens') {
-      loadReviews(section === 'screens' ? 'all' : reviewTab);
-    }
-  }, [isInternal, section, reviewTab, loadReviews]);
+    if (section === 'review') loadReviews(reviewTab);
+    if (section === 'screens') loadScreens();
+  }, [isInternal, section, reviewTab, loadReviews, loadScreens]);
 
   const formatSlotWhen = (iso) => {
     if (!iso) return '';
@@ -268,6 +426,11 @@ export default function AmbassadorHubPage() {
     } catch {
       return iso;
     }
+  };
+
+  const refreshTalentLists = async () => {
+    if (section === 'screens') await loadScreens();
+    else await loadReviews(reviewTab);
   };
 
   const handleApprove = async (row) => {
@@ -311,9 +474,14 @@ export default function AmbassadorHubPage() {
     setReviewActingId(row.userId || row.id);
     setToast('');
     try {
-      await nudgeAmbassadorTalentSlots(row.userId || row.id);
-      setToast(`Asked ${row.name || 'talent'} to publish intro slots.`);
-      await loadReviews(section === 'screens' ? 'all' : reviewTab);
+      const result = await nudgeAmbassadorTalentSlots(row.userId || row.id);
+      const mode = result?.mode || (row.calConnected ? 'slots' : 'calendar');
+      setToast(
+        mode === 'calendar'
+          ? `Asked ${row.name || 'talent'} to connect their calendar.`
+          : `Asked ${row.name || 'talent'} to publish intro slots.`
+      );
+      await refreshTalentLists();
     } catch (err) {
       setToast(err.message || 'Could not send email.');
     } finally {
@@ -323,7 +491,7 @@ export default function AmbassadorHubPage() {
 
   const openScreenSlots = async (row) => {
     setScreenTalent(row);
-    setScreenSlots([]);
+    setScreenSlots(Array.isArray(row.openSlots) ? row.openSlots : []);
     setScreenLoading(true);
     setToast('');
     try {
@@ -348,7 +516,7 @@ export default function AmbassadorHubPage() {
       setToast(result.alreadyBooked ? 'Screening already booked.' : 'Screening booked — calendar invite sent.');
       setScreenTalent(null);
       setScreenSlots([]);
-      await loadReviews('all');
+      await refreshTalentLists();
     } catch (err) {
       setToast(err.message || 'Could not book screening.');
     } finally {
@@ -689,24 +857,62 @@ export default function AmbassadorHubPage() {
           </div>
         </div>
 
-        {/* Snapshot strip */}
+        {/* Snapshot strip — clickable into Candidates / Rewards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
           {[
-            { icon: Mail, label: 'Invited', value: data?.stats?.invited ?? 0 },
-            { icon: Clock, label: 'Waiting', value: data?.stats?.pending ?? 0 },
-            { icon: Users, label: 'Activated', value: data?.stats?.activated ?? 0 },
-            { icon: DollarSign, label: 'Total rewards', value: money(earnings?.totals?.lifetimeEarnedUsd) },
+            {
+              icon: Mail,
+              label: 'Invited',
+              value: data?.stats?.invited ?? 0,
+              hint: 'View list',
+              onClick: () => setSection('candidates', { filter: 'invited' }),
+            },
+            {
+              icon: Clock,
+              label: 'Waiting',
+              value: data?.stats?.pending ?? 0,
+              hint: 'Awaiting activation',
+              onClick: () => setSection('candidates', { filter: 'waiting' }),
+            },
+            {
+              icon: Users,
+              label: 'Activated',
+              value: data?.stats?.activated ?? 0,
+              hint: 'Joined BYG',
+              onClick: () => setSection('candidates', { filter: 'activated' }),
+            },
+            {
+              icon: DollarSign,
+              label: 'Total rewards',
+              value: money(earnings?.totals?.lifetimeEarnedUsd),
+              hint: 'Open rewards',
+              onClick: () => setSection('rewards'),
+            },
           ].map((item) => (
-            <div
+            <button
               key={item.label}
-              className="bg-white/80 border border-black/5 rounded-2xl px-4 py-3"
+              type="button"
+              onClick={item.onClick}
+              className="group text-left bg-white/80 border border-black/5 rounded-2xl px-4 py-3 hover:border-red/40 hover:bg-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red/40"
             >
-              <div className="flex items-center gap-1.5 text-gray-400 mb-1">
-                <item.icon size={12} className="text-red" />
-                <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-1.5 text-gray-400">
+                  <item.icon size={12} className="text-red" />
+                  <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
+                </div>
+                <ChevronRight
+                  size={14}
+                  className="text-gray-300 group-hover:text-red shrink-0 transition-colors"
+                  aria-hidden
+                />
               </div>
-              <p className="text-xl font-black tabular-nums text-black">{item.value}</p>
-            </div>
+              <p className="text-xl font-black tabular-nums text-black group-hover:text-red transition-colors">
+                {item.value}
+              </p>
+              <p className="text-[9px] font-bold uppercase tracking-wider text-gray-400 mt-1 group-hover:text-gray-600">
+                {item.hint}
+              </p>
+            </button>
           ))}
         </div>
 
@@ -967,8 +1173,45 @@ export default function AmbassadorHubPage() {
           {section === 'candidates' && (
             <SectionShell
               title="Candidate status"
-              subtitle="See invite progress for people you referred. Successful hires are recorded by BYG — rewards then appear under Rewards."
+              subtitle="Tap a number above or use the filters to see who is waiting vs activated. Search by name or email. Approve / request changes stay under Review so this list stays clear."
             >
+              <div className="relative mb-3 max-w-md">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={candidateQuery}
+                  onChange={(e) => setCandidateQuery(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold outline-none focus:border-red placeholder:text-gray-400 placeholder:font-medium"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {CANDIDATE_FILTERS.map((f) => {
+                  const count =
+                    f.id === 'all'
+                      ? (data?.invites || []).length
+                      : (data?.invites || []).filter((inv) => inviteMatchesFilter(inv, f.id)).length;
+                  const active = candidateFilter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setCandidateFilter(f.id)}
+                      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-colors ${
+                        active
+                          ? 'bg-black text-white border-black'
+                          : 'bg-white text-gray-600 border-black/10 hover:border-red hover:text-red'
+                      }`}
+                    >
+                      {f.label}
+                      <span className={`tabular-nums ${active ? 'text-white/70' : 'text-gray-400'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
               {!(data?.invites || []).length ? (
                 <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-12 text-center">
                   <Mail size={22} className="mx-auto text-gray-300 mb-2" />
@@ -981,17 +1224,54 @@ export default function AmbassadorHubPage() {
                     Invite someone
                   </button>
                 </div>
+              ) : !filteredInvites.length ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-10 text-center">
+                  <p className="text-xs font-medium text-gray-500">
+                    {candidateQuery.trim()
+                      ? `No candidates match “${candidateQuery.trim()}”.`
+                      : filterEmptyCopy(candidateFilter)}
+                  </p>
+                  {candidateQuery.trim() ? (
+                    <button
+                      type="button"
+                      onClick={() => setCandidateQuery('')}
+                      className="mt-3 text-[10px] font-black uppercase tracking-widest text-red"
+                    >
+                      Clear search
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCandidateFilter('all')}
+                      className="mt-3 text-[10px] font-black uppercase tracking-widest text-red"
+                    >
+                      Show all candidates
+                    </button>
+                  )}
+                </div>
               ) : (
-                <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
-                  {data.invites.map((inv) => (
+                <div className="space-y-2 max-h-[36rem] overflow-y-auto pr-1">
+                  {filteredInvites.map((inv) => {
+                    const profile = inv.profile;
+                    const modalTalent = mapInviteProfileToModalTalent(profile);
+                    return (
                     <div
                       key={inv.id}
                       className="flex items-start justify-between gap-3 p-3.5 rounded-2xl border border-gray-100 bg-[#fafafa]"
                     >
-                      <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        {profile ? (
+                          <TalentPhoto name={profile.name || inv.name} photoUrl={profile.photoUrl} size={56} />
+                        ) : null}
+                        <div className="min-w-0 flex-1">
                         <p className="font-black text-sm text-black truncate">
-                          {inv.name || inv.email || inv.originalFilename || 'Candidate'}
+                          {profile?.name || inv.name || inv.email || inv.originalFilename || 'Candidate'}
                         </p>
+                        {profile?.jobTitle ? (
+                          <p className="text-[11px] text-red font-bold uppercase tracking-wide truncate">
+                            {profile.jobTitle}
+                          </p>
+                        ) : null}
                         {editingInviteId === inv.id ? (
                           <div className="mt-2 space-y-2 max-w-sm">
                             <input
@@ -1043,18 +1323,44 @@ export default function AmbassadorHubPage() {
                           </div>
                         ) : (
                           <p className="text-[11px] font-medium truncate mt-0.5">
-                            {inv.email ? (
-                              <span className="text-emerald-700">{inv.email}</span>
+                            {inv.email || profile?.email ? (
+                              <span className="text-emerald-700">{inv.email || profile.email}</span>
                             ) : (
                               <span className="text-amber-700">No email extracted</span>
                             )}
                           </p>
                         )}
+                        {profile ? (
+                          <p className="text-[11px] text-gray-500 font-medium mt-0.5 truncate">
+                            {directoryStatusLabel(profile.directoryStatus)}
+                            {profile.experienceYears != null ? ` · ${profile.experienceYears} yrs` : ''}
+                            {profile.monthlyFeeUsd != null ? ` · $${profile.monthlyFeeUsd}/mo` : ''}
+                            {profile.calConnected ? ' · Calendar connected' : ''}
+                          </p>
+                        ) : null}
+                        {profile?.about ? (
+                          <p className="text-[12px] text-gray-600 font-medium mt-1.5 leading-relaxed line-clamp-2">
+                            {profile.about}
+                          </p>
+                        ) : null}
+                        {(profile?.skills || []).length ? (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {profile.skills.slice(0, 6).map((tag) => (
+                              <span
+                                key={tag}
+                                className="px-2 py-0.5 rounded-lg bg-red/5 border border-red/10 text-red text-[9px] font-black uppercase"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
                         {inv.originalFilename ? (
                           <p className="text-[10px] text-gray-400 font-medium truncate mt-0.5">
                             PDF: {inv.originalFilename}
                           </p>
                         ) : null}
+                        </div>
                       </div>
                       <div className="shrink-0 flex flex-col items-end gap-2">
                         <span
@@ -1065,6 +1371,24 @@ export default function AmbassadorHubPage() {
                           {inv.status === 'activated' ? <CheckCircle2 size={10} /> : null}
                           {statusLabel(inv.status)}
                         </span>
+                        {modalTalent ? (
+                          <button
+                            type="button"
+                            onClick={() => setProfileModalTalent(modalTalent)}
+                            className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-black hover:text-red"
+                          >
+                            <ExternalLink size={10} /> View profile
+                          </button>
+                        ) : null}
+                        {isInternal && profile?.directoryStatus === 'pending_review' ? (
+                          <button
+                            type="button"
+                            onClick={() => setSection('review')}
+                            className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-amber-800 hover:text-black"
+                          >
+                            Needs review →
+                          </button>
+                        ) : null}
                         {canEditInviteEmail(inv.status) && editingInviteId !== inv.id ? (
                           <button
                             type="button"
@@ -1114,7 +1438,8 @@ export default function AmbassadorHubPage() {
                         ) : null}
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </SectionShell>
@@ -1123,8 +1448,18 @@ export default function AmbassadorHubPage() {
           {section === 'review' && isInternal && (
             <SectionShell
               title="Review your talent"
-              subtitle="Only people you invited. Approve waitlist profiles, request changes, and ask them to publish intro slots when needed."
+              subtitle="Approve profiles and book screens here — candidate slot times show on each card. Ask to connect calendar when Cal is missing; ask to publish when calendar is connected but no open times."
             >
+              <div className="relative mb-3 max-w-md">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={talentQuery}
+                  onChange={(e) => setTalentQuery(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold outline-none focus:border-red placeholder:text-gray-400 placeholder:font-medium"
+                />
+              </div>
               <div className="flex flex-wrap gap-1.5 mb-4">
                 {[
                   { id: 'pending_review', label: 'Pending' },
@@ -1149,13 +1484,15 @@ export default function AmbassadorHubPage() {
               </div>
               {reviewLoading ? (
                 <Loader2 className="animate-spin text-gray-300" size={22} />
-              ) : !reviewRows.length ? (
+              ) : !filteredReviewRows.length ? (
                 <p className="text-sm text-gray-400 font-medium">
-                  No talent in this tab yet. They appear after they activate and submit a profile.
+                  {talentQuery.trim()
+                    ? `No talent match “${talentQuery.trim()}”.`
+                    : 'No talent in this tab yet. They appear after they activate and submit a profile.'}
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {reviewRows.map((row) => (
+                  {filteredReviewRows.map((row) => (
                     <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
                       <div className="flex items-start gap-3">
                         <TalentPhoto name={row.name} photoUrl={row.photoUrl} size={64} />
@@ -1178,9 +1515,17 @@ export default function AmbassadorHubPage() {
                             <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-white text-gray-600">
                               {directoryStatusLabel(row.directoryStatus)}
                             </span>
-                            {row.slotsPublished ? (
+                            {row.upcomingScreen ? (
                               <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border-emerald-200">
-                                Slots published{row.openSlotCount ? ` · ${row.openSlotCount}` : ''}
+                                Screen booked
+                              </span>
+                            ) : row.openSlotCount > 0 ? (
+                              <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border-emerald-200">
+                                {row.openSlotCount} open slot{row.openSlotCount === 1 ? '' : 's'}
+                              </span>
+                            ) : row.slotsPublished ? (
+                              <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-blue-50 text-blue-800 border-blue-200">
+                                Slots were published
                               </span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-full border text-[8px] font-black uppercase tracking-wider bg-amber-50 text-amber-800 border-amber-200">
@@ -1188,7 +1533,54 @@ export default function AmbassadorHubPage() {
                               </span>
                             )}
                           </div>
-                          {row.slotsPublished && row.nextSlotStart ? (
+                          {row.upcomingScreen?.start ? (
+                            <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                              Screen · {formatSlotWhen(row.upcomingScreen.start)}
+                            </p>
+                          ) : null}
+                          {(row.openSlots || []).length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">
+                                Candidate times
+                              </p>
+                              <ul className="space-y-1">
+                                {(row.openSlots || []).slice(0, 5).map((slot) => (
+                                  <li
+                                    key={slot.id || slot.start}
+                                    className="text-[11px] font-semibold text-black tabular-nums"
+                                  >
+                                    {formatSlotWhen(slot.start)}
+                                    {slot.status && slot.status !== 'open' ? (
+                                      <span className="ml-1.5 text-[9px] font-black uppercase tracking-wider text-gray-400">
+                                        {slot.status}
+                                      </span>
+                                    ) : null}
+                                  </li>
+                                ))}
+                              </ul>
+                              {(row.openSlots || []).length > 5 ? (
+                                <p className="text-[10px] text-gray-400 font-medium">
+                                  +{(row.openSlots || []).length - 5} more
+                                </p>
+                              ) : null}
+                            </div>
+                          ) : (row.recentPastSlots || []).length > 0 ? (
+                            <div className="mt-2 space-y-1">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-amber-700/80">
+                                Last published (no longer bookable)
+                              </p>
+                              <ul className="space-y-1">
+                                {(row.recentPastSlots || []).slice(0, 4).map((slot) => (
+                                  <li
+                                    key={slot.id || slot.start}
+                                    className="text-[11px] font-semibold text-gray-600 tabular-nums"
+                                  >
+                                    {formatSlotWhen(slot.start)}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : row.nextSlotStart && !row.upcomingScreen ? (
                             <p className="text-[11px] text-emerald-700 font-medium mt-1">
                               Next open: {formatSlotWhen(row.nextSlotStart)}
                             </p>
@@ -1223,6 +1615,13 @@ export default function AmbassadorHubPage() {
                         </div>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setProfileModalTalent(mapReviewRowToModalTalent(row))}
+                          className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-700"
+                        >
+                          <ExternalLink size={11} /> View profile
+                        </button>
                         {row.directoryStatus === 'pending_review' ? (
                           <button
                             type="button"
@@ -1249,28 +1648,68 @@ export default function AmbassadorHubPage() {
                             Request changes
                           </button>
                         ) : null}
-                        {!row.slotsPublished ? (
+                        {row.canNudgeSlots ? (
                           <button
                             type="button"
                             disabled={Boolean(reviewActingId)}
                             onClick={() => handleNudgeSlots(row)}
                             className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
                           >
-                            <Mail size={11} /> Ask to publish slots
+                            <Mail size={11} />{' '}
+                            {row.calConnected ? 'Ask to publish slots' : 'Ask to connect calendar'}
                           </button>
-                        ) : (
+                        ) : row.canBookScreen ? (
                           <button
                             type="button"
-                            onClick={() => {
-                              setSection('screens');
-                              openScreenSlots(row);
-                            }}
+                            onClick={() => openScreenSlots(row)}
                             className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-700"
                           >
                             <Calendar size={11} /> Book screen
                           </button>
-                        )}
+                        ) : null}
                       </div>
+                      {screenTalent && (screenTalent.userId || screenTalent.id) === (row.userId || row.id) ? (
+                        <div className="mt-3 border-t border-gray-100 pt-3">
+                          <p className="text-[9px] font-black uppercase tracking-wider text-gray-400 mb-2">
+                            Pick a screening time
+                          </p>
+                          {screenLoading ? (
+                            <Loader2 className="animate-spin text-gray-300" size={18} />
+                          ) : !screenSlots.length ? (
+                            <p className="text-xs text-gray-400">No open slots right now.</p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {screenSlots.map((slot) => (
+                                <li
+                                  key={slot.id}
+                                  className="flex items-center justify-between gap-2 rounded-xl bg-white border border-gray-100 px-3 py-2"
+                                >
+                                  <span className="text-xs font-semibold text-black">{formatSlotWhen(slot.start)}</span>
+                                  <button
+                                    type="button"
+                                    disabled={Boolean(bookingSlotId)}
+                                    onClick={() => handleBookScreen(slot.id)}
+                                    className="px-2.5 py-1.5 rounded-lg bg-black text-white text-[9px] font-black uppercase tracking-wider disabled:opacity-40"
+                                  >
+                                    {bookingSlotId === slot.id ? (
+                                      <Loader2 size={10} className="animate-spin" />
+                                    ) : (
+                                      'Book'
+                                    )}
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => { setScreenTalent(null); setScreenSlots([]); }}
+                            className="mt-2 text-[9px] font-black uppercase tracking-wider text-gray-400"
+                          >
+                            Close
+                          </button>
+                        </div>
+                      ) : null}
                       {changesForId === (row.userId || row.id) ? (
                         <div className="mt-3 space-y-2">
                           <textarea
@@ -1309,15 +1748,29 @@ export default function AmbassadorHubPage() {
           {section === 'screens' && isInternal && (
             <SectionShell
               title="Screening calls"
-              subtitle="Book a BYG screening on a slot the talent already published. You only see people you invited. Client intros stay separate."
+              subtitle={`${filteredReviewRows.length} shown · ${reviewRows.length} invited talent with profiles. Search by name. Past times appear when nothing is still open.`}
             >
+              <div className="relative mb-4 max-w-md">
+                <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="search"
+                  value={talentQuery}
+                  onChange={(e) => setTalentQuery(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 bg-white text-sm font-semibold outline-none focus:border-red placeholder:text-gray-400 placeholder:font-medium"
+                />
+              </div>
               {reviewLoading ? (
                 <Loader2 className="animate-spin text-gray-300" size={22} />
-              ) : !reviewRows.length ? (
-                <p className="text-sm text-gray-400 font-medium">No invited talent with profiles yet.</p>
+              ) : !filteredReviewRows.length ? (
+                <p className="text-sm text-gray-400 font-medium">
+                  {talentQuery.trim()
+                    ? `No talent match “${talentQuery.trim()}”.`
+                    : 'No invited talent with profiles yet.'}
+                </p>
               ) : (
                 <div className="space-y-3">
-                  {reviewRows.map((row) => (
+                  {filteredReviewRows.map((row) => (
                     <div key={row.userId || row.id} className="rounded-2xl border border-gray-100 bg-[#fafafa] p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
@@ -1325,14 +1778,38 @@ export default function AmbassadorHubPage() {
                           <div className="min-w-0">
                           <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
                           <p className="text-[11px] text-gray-500 font-medium truncate">{row.email}</p>
-                          {row.upcomingScreen ? (
+                          {row.upcomingScreen?.start ? (
                             <p className="text-[11px] text-emerald-700 font-semibold mt-1">
                               Screen booked · {formatSlotWhen(row.upcomingScreen.start)}
                             </p>
+                          ) : (row.openSlots || []).length > 0 ? (
+                            <div className="mt-1.5 space-y-1">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-gray-400">
+                                {row.openSlotCount} open slot{row.openSlotCount === 1 ? '' : 's'}
+                              </p>
+                              {(row.openSlots || []).slice(0, 4).map((slot) => (
+                                <p key={slot.id || slot.start} className="text-[11px] font-semibold text-black">
+                                  {formatSlotWhen(slot.start)}
+                                </p>
+                              ))}
+                              {(row.openSlots || []).length > 4 ? (
+                                <p className="text-[10px] text-gray-400">+{(row.openSlots || []).length - 4} more</p>
+                              ) : null}
+                            </div>
+                          ) : (row.recentPastSlots || []).length > 0 ? (
+                            <div className="mt-1.5 space-y-1">
+                              <p className="text-[9px] font-black uppercase tracking-wider text-amber-700/80">
+                                Last published (expired)
+                              </p>
+                              {(row.recentPastSlots || []).slice(0, 3).map((slot) => (
+                                <p key={slot.id || slot.start} className="text-[11px] font-semibold text-gray-600">
+                                  {formatSlotWhen(slot.start)}
+                                </p>
+                              ))}
+                            </div>
                           ) : row.slotsPublished ? (
-                            <p className="text-[11px] text-emerald-700 font-medium mt-1">
-                              {row.openSlotCount} open slot{row.openSlotCount === 1 ? '' : 's'}
-                              {row.nextSlotStart ? ` · next ${formatSlotWhen(row.nextSlotStart)}` : ''}
+                            <p className="text-[11px] text-blue-700 font-medium mt-1">
+                              Slots were published — none open right now
                             </p>
                           ) : (
                             <p className="text-[11px] text-amber-700 font-medium mt-1">
@@ -1341,7 +1818,15 @@ export default function AmbassadorHubPage() {
                           )}
                           </div>
                         </div>
-                        {row.slotsPublished && !row.upcomingScreen ? (
+                        <div className="shrink-0 flex flex-col gap-2 items-end">
+                        <button
+                          type="button"
+                          onClick={() => setProfileModalTalent(mapReviewRowToModalTalent(row))}
+                          className="px-3 py-2 rounded-xl border border-gray-200 text-[9px] font-black uppercase tracking-wider text-gray-700"
+                        >
+                          Profile
+                        </button>
+                        {row.canBookScreen ? (
                           <button
                             type="button"
                             onClick={() => openScreenSlots(row)}
@@ -1349,16 +1834,18 @@ export default function AmbassadorHubPage() {
                           >
                             Pick slot
                           </button>
-                        ) : !row.slotsPublished ? (
+                        ) : row.canNudgeSlots ? (
                           <button
                             type="button"
                             disabled={Boolean(reviewActingId)}
                             onClick={() => handleNudgeSlots(row)}
                             className="shrink-0 inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
                           >
-                            <Mail size={11} /> Ask to publish
+                            <Mail size={11} />{' '}
+                            {row.calConnected ? 'Ask to publish' : 'Ask to connect calendar'}
                           </button>
                         ) : null}
+                      </div>
                       </div>
                       {screenTalent && (screenTalent.userId || screenTalent.id) === (row.userId || row.id) ? (
                         <div className="mt-3 border-t border-gray-100 pt-3">
@@ -1560,6 +2047,66 @@ export default function AmbassadorHubPage() {
               </div>
             </SectionShell>
           )}
+
+          {section === 'help' && (
+            <SectionShell
+              title="Help"
+              subtitle="Short guide to the ambassador hub — what each area is for, and what the status numbers mean."
+            >
+              <div className="space-y-4">
+                {[
+                  {
+                    title: 'Invite',
+                    body: 'Send an email invite or upload a CV. That creates a candidate in your pipeline. Screening and client intros stay with BYG.',
+                  },
+                  {
+                    title: 'The numbers (Invited / Waiting / Activated)',
+                    body: 'Click any number to open Candidates with that filter. Invited = everyone in your pipeline. Waiting = not activated yet. Activated = they joined. Total rewards opens Rewards.',
+                  },
+                  {
+                    title: 'Candidates',
+                    body: 'Your full invite list with search. Open a profile when they have one. Approve and request-changes live under Review (keeps this list uncluttered). Pending profiles show a “Needs review” shortcut.',
+                  },
+                  ...(isInternal
+                    ? [
+                        {
+                          title: 'Review',
+                          body: 'Approve waitlist profiles or request changes. See published slot times, book a screen inline, or email them to connect calendar / publish slots.',
+                        },
+                        {
+                          title: 'Screens',
+                          body: 'Focus list for booking BYG screening calls on times the talent published. If calendar is not connected, use Ask to connect calendar instead of Ask to publish.',
+                        },
+                      ]
+                    : []),
+                  {
+                    title: 'Rewards & Share',
+                    body: 'Rewards appear when BYG marks a hire. Share has your badge, signup link, and LinkedIn about copy.',
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="rounded-2xl border border-gray-100 bg-[#fafafa] px-4 py-4"
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-widest text-red mb-1.5 flex items-center gap-1.5">
+                      <HelpCircle size={11} /> {item.title}
+                    </p>
+                    <p className="text-sm text-gray-600 font-medium leading-relaxed">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            </SectionShell>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {profileModalTalent ? (
+            <DirectoryTalentModal
+              talent={profileModalTalent}
+              onClose={() => setProfileModalTalent(null)}
+              canRequestIntro={false}
+            />
+          ) : null}
         </AnimatePresence>
       </div>
     </div>
