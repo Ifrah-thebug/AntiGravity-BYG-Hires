@@ -268,9 +268,64 @@ async function createCalIntroBooking({
     title: booking?.title || bookingTitle,
     start: booking?.start,
     end: booking?.end,
-    meetingUrl: booking?.meetingUrl || booking?.location || null,
+    meetingUrl: extractMeetingUrl(booking),
     status: booking?.status,
+    raw: booking,
   };
+}
+
+/** Pull Meet/Zoom/etc. URL from Cal create/get booking payloads. */
+function extractMeetingUrl(booking) {
+  if (!booking || typeof booking !== 'object') return null;
+  const candidates = [
+    booking.meetingUrl,
+    booking.videoCallUrl,
+    typeof booking.location === 'string' ? booking.location : null,
+    booking.location?.link,
+    booking.location?.value,
+    booking.location?.joinUrl,
+    booking.videoCallData?.url,
+    booking.videoCallData?.uri,
+    booking.conferenceData?.entryPoints?.[0]?.uri,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && /^https?:\/\//i.test(c.trim())) return c.trim();
+  }
+  const refs = []
+    .concat(Array.isArray(booking.references) ? booking.references : [])
+    .concat(Array.isArray(booking.apps) ? booking.apps : []);
+  for (const r of refs) {
+    const u = r?.meetingUrl || r?.url || r?.link || r?.joinUrl;
+    if (typeof u === 'string' && /^https?:\/\//i.test(u.trim())) return u.trim();
+  }
+  return null;
+}
+
+/**
+ * Google Meet links are often attached a second after create.
+ * Poll Cal GET /v2/bookings/:uid a few times so Resend can include Join.
+ */
+async function waitForCalMeetingUrl(uid, { attempts = 5, delayMs = 1200 } = {}) {
+  const id = String(uid || '').trim();
+  if (!id || !getCalApiKey()) return null;
+
+  for (let i = 0; i < attempts; i += 1) {
+    if (i > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+    try {
+      const data = await calFetch(`/v2/bookings/${encodeURIComponent(id)}`, {
+        accessToken: getCalApiKey(),
+        apiVersion: '2024-08-13',
+      });
+      const booking = data?.data ?? data;
+      const url = extractMeetingUrl(booking);
+      if (url) return url;
+    } catch (err) {
+      console.warn('[cal] meetingUrl poll:', err?.message || err);
+    }
+  }
+  return null;
 }
 
 module.exports = {
@@ -283,5 +338,7 @@ module.exports = {
   isInstantBookable,
   normalizeSlotInstant,
   createCalIntroBooking,
+  extractMeetingUrl,
+  waitForCalMeetingUrl,
   getCalApiKey,
 };

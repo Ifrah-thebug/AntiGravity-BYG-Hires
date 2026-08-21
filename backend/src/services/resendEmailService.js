@@ -755,6 +755,47 @@ async function sendPublishSlotsNudgeEmail({ to, name, ambassadorName, mode = 'sl
   });
 }
 
+function formatEmailWhenLabel(iso, timeZone = 'Asia/Karachi') {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const tz = String(timeZone || 'Asia/Karachi').trim() || 'Asia/Karachi';
+  let local;
+  try {
+    local = d.toLocaleString('en-US', {
+      timeZone: tz,
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+  } catch {
+    local = d.toLocaleString('en-US', {
+      timeZone: 'UTC',
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+  }
+  const utc = d.toLocaleString('en-US', {
+    timeZone: 'UTC',
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZoneName: 'short',
+  });
+  return `${local} · ${utc}`;
+}
+
 function buildHrScreenBookedEmailHtml({ name, ambassadorName, whenLabel, meetingUrl, portalUrl }) {
   const greeting = name ? `Hi ${name},` : 'Hi,';
   const who = ambassadorName ? `<strong>${ambassadorName}</strong> (BYG Hires)` : 'BYG Hires';
@@ -767,9 +808,13 @@ function buildHrScreenBookedEmailHtml({ name, ambassadorName, whenLabel, meeting
   <p style="margin: 0 0 12px;">${who} booked a <strong>screening call</strong> with you on one of your published intro times.</p>
   ${whenLabel ? `<p style="margin: 0 0 12px;"><strong>When:</strong> ${whenLabel}</p>` : ''}
   <p style="margin: 24px 0;">
-    ${meetingUrl ? buildEmailLinkButton(meetingUrl, 'Join screening call') : buildEmailLinkButton(portalUrl, 'Open talent portal')}
+    ${
+      meetingUrl
+        ? buildEmailLinkButton(meetingUrl, 'Join screening call')
+        : `${buildEmailLinkButton(portalUrl, 'Open talent portal')}<br/><span style="font-size:12px;color:#888;">If the join link is not here yet, use the Cal.com calendar email — it includes the meeting link.</span>`
+    }
   </p>
-  <p style="margin: 0; font-size: 12px; color: #888;">This is a BYG screening, not a client intro. A calendar invite should also arrive from Cal.com.</p>
+  <p style="margin: 0; font-size: 12px; color: #888;">This is a BYG screening, not a client intro. Times above include your local zone and UTC.</p>
 </body>
 </html>`.trim();
 }
@@ -807,6 +852,7 @@ module.exports = {
   sendProfileSubmittedAdminEmail,
   sendPublishSlotsNudgeEmail,
   sendHrScreenBookedEmail,
+  formatEmailWhenLabel,
   getAppPublicUrl,
   useConsoleProvider,
 };

@@ -10,6 +10,7 @@ const calSchedule = require('./calScheduleHelpers');
 const {
   sendPublishSlotsNudgeEmail,
   sendHrScreenBookedEmail,
+  formatEmailWhenLabel,
 } = require('./resendEmailService');
 
 const HR_SCREEN_COMPANY = 'BYG_HR_SCREEN';
@@ -559,6 +560,16 @@ async function bookScreenForUser(userId, { talentKey, slotId }) {
 
   await introSlots.markSlotBooked(slotId);
 
+  // Meet links often arrive a beat after Cal create — wait before Resend email.
+  let meetingUrl = calSaved.meetingUrl || null;
+  if (!meetingUrl && calSaved.uid) {
+    try {
+      meetingUrl = await calSchedule.waitForCalMeetingUrl(calSaved.uid);
+    } catch (err) {
+      console.warn('[ambassador-internal] meetingUrl wait:', err?.message || err);
+    }
+  }
+
   const dbRow = await introSlots.saveBookingRecord({
     talentKey: ctx.talentKey,
     slotId,
@@ -570,25 +581,28 @@ async function bookScreenForUser(userId, { talentKey, slotId }) {
     title: calSaved.title || 'BYG Screening Call',
     start: calSaved.start || startIso,
     end: calSaved.end,
-    meetingUrl: calSaved.meetingUrl,
+    meetingUrl,
     status: 'confirmed',
   });
 
   let emailResult = { sent: false };
   if (ctx.email) {
     try {
-      const whenLabel = new Date(calSaved.start || startIso).toLocaleString(undefined, {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      });
+      let talentTz = process.env.CAL_BOOKING_TIMEZONE || 'Asia/Karachi';
+      try {
+        talentTz = await introSlots.getTalentSchedulingTimezone(ctx.talentKey);
+      } catch {
+        /* keep default */
+      }
+      const whenLabel = formatEmailWhenLabel(calSaved.start || startIso, talentTz);
       await sendHrScreenBookedEmail({
         to: ctx.email,
         name: ctx.name,
         ambassadorName: ambassador.name,
         whenLabel,
-        meetingUrl: calSaved.meetingUrl,
+        meetingUrl,
       });
-      emailResult = { sent: true };
+      emailResult = { sent: true, meetingUrl: Boolean(meetingUrl) };
     } catch (mailErr) {
       console.warn('[ambassador-internal] screen email:', mailErr?.message || mailErr);
       emailResult = { sent: false, error: mailErr?.message };
