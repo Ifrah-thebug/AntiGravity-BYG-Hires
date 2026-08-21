@@ -181,6 +181,17 @@ function directoryStatusLabel(status) {
   return map[status] || String(status || 'unknown').replace(/_/g, ' ');
 }
 
+function PendingApproveNudge({ status, className = '' }) {
+  if (status !== 'pending_review') return null;
+  return (
+    <p
+      className={`text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80 rounded-xl px-3 py-2 leading-snug ${className}`}
+    >
+      This profile is still pending approval — you can book a screen now, then approve when ready.
+    </p>
+  );
+}
+
 function TalentPhoto({ name, photoUrl, size = 56 }) {
   if (photoUrl) {
     return (
@@ -1533,6 +1544,7 @@ export default function AmbassadorHubPage() {
                               </span>
                             )}
                           </div>
+                          <PendingApproveNudge status={row.directoryStatus} className="mt-2" />
                           {row.upcomingScreen?.start ? (
                             <p className="text-[11px] text-emerald-700 font-semibold mt-1">
                               Screen · {formatSlotWhen(row.upcomingScreen.start)}
@@ -1785,6 +1797,7 @@ export default function AmbassadorHubPage() {
                           <div className="min-w-0">
                           <p className="font-black text-sm text-black truncate">{row.name || 'Talent'}</p>
                           <p className="text-[11px] text-gray-500 font-medium truncate">{row.email}</p>
+                          <PendingApproveNudge status={row.directoryStatus} className="mt-1.5" />
                           {row.upcomingScreen?.start ? (
                             <p className="text-[11px] text-emerald-700 font-semibold mt-1">
                               Screen booked · {formatSlotWhen(row.upcomingScreen.start)}
