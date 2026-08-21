@@ -38,6 +38,15 @@ async function requireInternalAmbassador(userId) {
 }
 
 function mapReviewRow(row, slotMeta = {}) {
+  const openCount = slotMeta.openCount || 0;
+  const upcomingScreen = slotMeta.upcomingScreen || null;
+  const openSlots = Array.isArray(slotMeta.openSlots) ? slotMeta.openSlots : [];
+  const recentPastSlots = Array.isArray(slotMeta.recentPastSlots)
+    ? slotMeta.recentPastSlots
+    : [];
+  const slotsPublished = Boolean(
+    openCount || upcomingScreen || slotMeta.hadPublishedSlots || recentPastSlots.length
+  );
   return {
     id: row.id,
     userId: row.user_id,
@@ -55,11 +64,14 @@ function mapReviewRow(row, slotMeta = {}) {
     reviewedAt: row.reviewed_at || null,
     approvedAt: row.approved_at || null,
     calConnected: Boolean(row.cal_username),
-    slotsPublished: Boolean(slotMeta.openCount),
-    openSlotCount: slotMeta.openCount || 0,
-    nextSlotStart: slotMeta.nextStart || null,
-    upcomingScreen: slotMeta.upcomingScreen || null,
-    canNudgeSlots: !slotMeta.openCount,
+    slotsPublished,
+    openSlotCount: openCount,
+    openSlots,
+    recentPastSlots,
+    nextSlotStart: slotMeta.nextStart || openSlots[0]?.start || null,
+    upcomingScreen,
+    canNudgeSlots: !openCount && !upcomingScreen,
+    canBookScreen: openCount > 0 && !upcomingScreen,
     monthlyFeeUsd: row.monthly_fee_usd ?? null,
     availability: row.availability || '',
     experienceYears: row.experience_years ?? null,
@@ -156,14 +168,59 @@ async function resolveSlotTalentKey(profileOrKey) {
 async function slotMetaForTalent(profileOrKey) {
   const talentKey = await resolveSlotTalentKey(profileOrKey);
   if (!talentKey) {
-    return { openCount: 0, nextStart: null, upcomingScreen: null };
+    return {
+      openCount: 0,
+      openSlots: [],
+      recentPastSlots: [],
+      nextStart: null,
+      upcomingScreen: null,
+      hadPublishedSlots: false,
+    };
   }
 
   let open = [];
+  let anyFutureOrRecent = [];
   try {
     open = await introSlots.listSlotsForTalent(talentKey, { statuses: ['open', 'held'] });
   } catch (err) {
     console.warn('[ambassador-internal] slots:', err?.message || err);
+  }
+
+  // Booked / expired / recent past still prove the talent published availability.
+  try {
+    anyFutureOrRecent = await introSlots.listSlotsForTalent(talentKey, {
+      statuses: ['open', 'held', 'booked', 'expired'],
+    });
+  } catch (err) {
+    console.warn('[ambassador-internal] slot history:', err?.message || err);
+  }
+
+  // If nothing is still bookable, surface recently published times (even if past).
+  let recentPastSlots = [];
+  if (!open.length) {
+    try {
+      if (supabaseAdmin) {
+        const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+        const { data: pastRows, error: pastErr } = await supabaseAdmin
+          .from('talent_intro_slots')
+          .select('*')
+          .eq('talent_id', talentKey)
+          .in('status', ['open', 'held', 'booked', 'expired'])
+          .gte('start_at', since)
+          .order('start_at', { ascending: false })
+          .limit(8);
+        if (!pastErr) {
+          recentPastSlots = (pastRows || []).map((row) => ({
+            id: row.id,
+            start: row.start_at || row.start,
+            end: row.end_at || row.end || null,
+            status: row.status || 'expired',
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('[ambassador-internal] past slots:', err?.message || err);
+    }
   }
 
   let upcomingScreen = null;
@@ -183,10 +240,24 @@ async function slotMetaForTalent(profileOrKey) {
     console.warn('[ambassador-internal] bookings:', err?.message || err);
   }
 
+  const openSlots = (open || []).map((s) => ({
+    id: s.id,
+    start: s.start,
+    end: s.end || null,
+    status: s.status || 'open',
+  }));
+
   return {
-    openCount: open.length,
-    nextStart: open[0]?.start || null,
+    openCount: openSlots.length,
+    openSlots,
+    recentPastSlots,
+    nextStart: openSlots[0]?.start || null,
     upcomingScreen,
+    hadPublishedSlots: Boolean(
+      (anyFutureOrRecent || []).length ||
+        recentPastSlots.length ||
+        upcomingScreen
+    ),
   };
 }
 
@@ -273,24 +344,29 @@ async function nudgePublishSlotsForUser(userId, profileKey) {
     throw deny('This talent has no email on file.', 'NO_EMAIL', 400);
   }
 
-  const meta = await slotMetaForTalent(profile.user_id);
+  const meta = await slotMetaForTalent(profile);
   if (meta.openCount > 0) {
     throw deny('This talent already has published intro slots.', 'SLOTS_ALREADY_PUBLISHED', 400);
+  }
+  if (meta.upcomingScreen) {
+    throw deny('A screening is already booked with this talent.', 'SCREEN_ALREADY_BOOKED', 400);
   }
 
   const last = profile.intro_slot_nudge_at ? new Date(profile.intro_slot_nudge_at).getTime() : 0;
   if (last && Date.now() - last < NUDGE_COOLDOWN_MS) {
     throw deny(
-      'A publish-slots email was already sent in the last 24 hours.',
+      'A reminder email was already sent in the last 24 hours.',
       'NUDGE_COOLDOWN',
       429
     );
   }
 
+  const needsCalendar = !profile.cal_username;
   const sendResult = await sendPublishSlotsNudgeEmail({
     to: profile.email,
     name: profile.name,
     ambassadorName: ambassador.name,
+    mode: needsCalendar ? 'calendar' : 'slots',
   });
 
   const now = new Date().toISOString();
@@ -304,6 +380,7 @@ async function nudgePublishSlotsForUser(userId, profileKey) {
 
   return {
     sent: Boolean(sendResult?.id || sendResult),
+    mode: needsCalendar ? 'calendar' : 'slots',
     profile: mapReviewRow({ ...profile, intro_slot_nudge_at: now }, meta),
   };
 }
@@ -314,9 +391,10 @@ async function listScreensForUser(userId) {
   const items = [];
   for (const row of rows) {
     const meta = await slotMetaForTalent(row);
+    const mapped = mapReviewRow(row, meta);
     items.push({
-      ...mapReviewRow(row, meta),
-      canBookScreen: meta.openCount > 0 && !meta.upcomingScreen,
+      ...mapped,
+      canBookScreen: Boolean(mapped.canBookScreen),
     });
   }
   return { profiles: items };

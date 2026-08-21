@@ -15,7 +15,7 @@ export default function AmbassadorGatePage() {
   const prefill = location.state || {};
   const { signIn, user } = useAuth();
   const [code, setCode] = useState(prefill.code || '');
-  const [step, setStep] = useState(prefill.step || 'code');
+  const [step, setStep] = useState(prefill.step || 'signin');
   const [ambassador, setAmbassador] = useState(prefill.ambassador || null);
   const [name, setName] = useState(prefill.ambassador?.name || '');
   const [email, setEmail] = useState('');
@@ -70,7 +70,7 @@ export default function AmbassadorGatePage() {
       await signIn(email, password);
       const ok = await fetchIsAmbassador();
       if (!ok) {
-        setError('This account is not linked to that ambassador code.');
+        setError('This account is not linked to an ambassador code.');
         return;
       }
       navigate('/ambassador/hub');
@@ -98,13 +98,13 @@ export default function AmbassadorGatePage() {
           className="text-center mb-8"
         >
           <p className="text-red font-black tracking-[0.2em] text-[10px] uppercase mb-3 inline-flex items-center gap-1.5">
-            <Sparkles size={11} /> Ambassador lounge
+            <Sparkles size={11} /> Ambassador portal
           </p>
           <h1 className="text-3xl md:text-4xl font-black text-black tracking-tight mb-3">
-            Your secret door
+            Welcome back
           </h1>
           <p className="text-gray-500 text-sm font-medium leading-relaxed">
-            Enter your unique code — invite talent, unlock LinkedIn branding tools, and track lifetime residual rewards.
+            Sign in with your email if you already claimed a code — or enter a new code to get started.
           </p>
         </motion.div>
 
@@ -114,7 +114,30 @@ export default function AmbassadorGatePage() {
           transition={{ delay: 0.08 }}
           className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-7 sm:p-8"
         >
-          {ambassador?.code && step !== 'code' && (
+          {step === 'code' || step === 'signin' ? (
+            <div className="flex gap-1 p-1 mb-5 bg-gray-50 rounded-xl border border-gray-100">
+              <button
+                type="button"
+                onClick={() => { setStep('signin'); setError(''); }}
+                className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+                  step === 'signin' ? 'bg-black text-white' : 'text-gray-500'
+                }`}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                onClick={() => { setStep('code'); setError(''); }}
+                className={`flex-1 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-colors ${
+                  step === 'code' ? 'bg-black text-white' : 'text-gray-500'
+                }`}
+              >
+                Enter code
+              </button>
+            </div>
+          ) : null}
+
+          {ambassador?.code && step !== 'code' && step !== 'signin' && (
             <div className="mb-5 flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-red/5 border border-red/15">
               <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Code</span>
               <span className="text-sm font-black text-red tracking-widest">{ambassador.code}</span>
@@ -122,6 +145,55 @@ export default function AmbassadorGatePage() {
           )}
 
           <AnimatePresence mode="wait">
+            {step === 'signin' && (
+              <motion.form
+                key="signin"
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                onSubmit={handleLogin}
+                className="space-y-4"
+              >
+                <p className="text-sm text-gray-600 font-medium leading-relaxed">
+                  Use the email and password from when you claimed your ambassador code.
+                </p>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Mail size={10} /> Email
+                  </label>
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Ambassador email"
+                    className={fieldClass}
+                    autoFocus
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                    <Lock size={10} /> Password
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className={fieldClass}
+                    required
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full py-4 rounded-2xl bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest transition-colors flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  {loading ? <Loader2 size={16} className="animate-spin" /> : 'Open hub'}
+                </button>
+              </motion.form>
+            )}
+
             {step === 'code' && (
               <motion.form
                 key="code"

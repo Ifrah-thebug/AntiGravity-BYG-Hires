@@ -21,6 +21,7 @@ const AMBASSADOR_NAV_LINKS = [
   { name: 'Screens', href: '/ambassador/hub#screens', internalOnly: true },
   { name: 'Rewards', href: '/ambassador/hub#rewards' },
   { name: 'Share', href: '/ambassador/hub#share' },
+  { name: 'Help', href: '/ambassador/hub#help' },
 ];
 
 const ADMIN_NAV_LINKS = [
@@ -33,7 +34,7 @@ const ADMIN_NAV_LINKS = [
 
 function sectionFromHash(hash) {
   const raw = String(hash || '').replace(/^#/, '');
-  if (['invite', 'candidates', 'review', 'screens', 'rewards', 'share'].includes(raw)) return raw;
+  if (['invite', 'candidates', 'review', 'screens', 'rewards', 'share', 'help'].includes(raw)) return raw;
   return 'invite';
 }
 
