@@ -21,6 +21,11 @@ END $$;
 
 CREATE INDEX IF NOT EXISTS idx_ambassadors_kind ON public.ambassadors (kind);
 
--- Cooldown for “please publish intro slots” emails (per talent).
+-- Cooldown for ambassador reminder emails (per talent).
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS intro_slot_nudge_at timestamptz;
+
+-- 'calendar' | 'slots' — so connect-calendar and publish-slots have separate 24h locks.
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS intro_nudge_kind text;
+

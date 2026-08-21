@@ -1649,15 +1649,22 @@ export default function AmbassadorHubPage() {
                           </button>
                         ) : null}
                         {row.canNudgeSlots ? (
-                          <button
-                            type="button"
-                            disabled={Boolean(reviewActingId)}
-                            onClick={() => handleNudgeSlots(row)}
-                            className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
-                          >
-                            <Mail size={11} />{' '}
-                            {row.calConnected ? 'Ask to publish slots' : 'Ask to connect calendar'}
-                          </button>
+                          <div className="flex flex-col gap-1">
+                            <button
+                              type="button"
+                              disabled={Boolean(reviewActingId)}
+                              onClick={() => handleNudgeSlots(row)}
+                              className="inline-flex items-center gap-1 px-3 py-2 rounded-xl border border-amber-200 text-[9px] font-black uppercase tracking-wider text-amber-800"
+                            >
+                              <Mail size={11} />{' '}
+                              {row.calConnected ? 'Ask to publish slots' : 'Ask to connect calendar'}
+                            </button>
+                            {!row.calConnected ? (
+                              <p className="text-[9px] text-gray-400 font-medium max-w-[11rem]">
+                                Publish slots unlocks after they connect Cal.
+                              </p>
+                            ) : null}
+                          </div>
                         ) : row.canBookScreen ? (
                           <button
                             type="button"

@@ -72,6 +72,9 @@ function mapReviewRow(row, slotMeta = {}) {
     upcomingScreen,
     canNudgeSlots: !openCount && !upcomingScreen,
     canBookScreen: openCount > 0 && !upcomingScreen,
+    nudgeMode: row.cal_username ? 'slots' : 'calendar',
+    lastNudgeAt: row.intro_slot_nudge_at || null,
+    lastNudgeKind: row.intro_nudge_kind || null,
     monthlyFeeUsd: row.monthly_fee_usd ?? null,
     availability: row.availability || '',
     experienceYears: row.experience_years ?? null,
@@ -79,7 +82,8 @@ function mapReviewRow(row, slotMeta = {}) {
 }
 
 async function listAttributedProfiles(ambassadorId) {
-  const selectWithNudge = `${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at`;
+  const selectWithNudge = `${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at, intro_nudge_kind`;
+  const selectWithAt = `${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at`;
   const selectBasic = `${review.PROFILE_REVIEW_COLUMNS}, cal_username`;
 
   let { data, error } = await supabaseAdmin
@@ -89,6 +93,14 @@ async function listAttributedProfiles(ambassadorId) {
     .order('submitted_at', { ascending: true, nullsFirst: false })
     .limit(200);
 
+  if (error && /intro_nudge_kind/i.test(error.message || '')) {
+    ({ data, error } = await supabaseAdmin
+      .from('profiles')
+      .select(selectWithAt)
+      .eq('ambassador_id', ambassadorId)
+      .order('submitted_at', { ascending: true, nullsFirst: false })
+      .limit(200));
+  }
   if (error && /intro_slot_nudge_at/i.test(error.message || '')) {
     ({ data, error } = await supabaseAdmin
       .from('profiles')
@@ -139,11 +151,23 @@ async function getOwnedProfile(ambassador, profileKey) {
 
   const { data, error } = await supabaseAdmin
     .from('profiles')
-    .select(`${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at`)
+    .select(`${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at, intro_nudge_kind`)
     .eq('user_id', profile.user_id)
     .maybeSingle();
+  if (error && /intro_nudge_kind/i.test(error.message || '')) {
+    const retry = await supabaseAdmin
+      .from('profiles')
+      .select(`${review.PROFILE_REVIEW_COLUMNS}, cal_username, intro_slot_nudge_at`)
+      .eq('user_id', profile.user_id)
+      .maybeSingle();
+    if (retry.error && /intro_slot_nudge_at/i.test(retry.error.message || '')) {
+      return { ...profile, ambassador_id: ambassadorId, cal_username: profile.cal_username || null, intro_slot_nudge_at: null, intro_nudge_kind: null };
+    }
+    if (retry.error) throw retry.error;
+    return { ...(retry.data || profile), ambassador_id: ambassadorId };
+  }
   if (error && /intro_slot_nudge_at/i.test(error.message || '')) {
-    return { ...profile, ambassador_id: ambassadorId, cal_username: profile.cal_username || null, intro_slot_nudge_at: null };
+    return { ...profile, ambassador_id: ambassadorId, cal_username: profile.cal_username || null, intro_slot_nudge_at: null, intro_nudge_kind: null };
   }
   if (error) throw error;
   return { ...(data || profile), ambassador_id: ambassadorId };
@@ -352,36 +376,70 @@ async function nudgePublishSlotsForUser(userId, profileKey) {
     throw deny('A screening is already booked with this talent.', 'SCREEN_ALREADY_BOOKED', 400);
   }
 
-  const last = profile.intro_slot_nudge_at ? new Date(profile.intro_slot_nudge_at).getTime() : 0;
-  if (last && Date.now() - last < NUDGE_COOLDOWN_MS) {
+  const needsCalendar = !profile.cal_username;
+  const mode = needsCalendar ? 'calendar' : 'slots';
+
+  const lastAt = profile.intro_slot_nudge_at
+    ? new Date(profile.intro_slot_nudge_at).getTime()
+    : 0;
+  const lastKind = String(profile.intro_nudge_kind || '').trim() || null;
+  const withinCooldown = lastAt && Date.now() - lastAt < NUDGE_COOLDOWN_MS;
+
+  // Same reminder type within 24h → block.
+  // Calendar ask must not block a later “publish slots” ask after they connect Cal.
+  if (withinCooldown && lastKind === mode) {
     throw deny(
-      'A reminder email was already sent in the last 24 hours.',
+      mode === 'calendar'
+        ? 'A connect-calendar email was already sent to this talent in the last 24 hours.'
+        : 'A publish-slots email was already sent to this talent in the last 24 hours.',
       'NUDGE_COOLDOWN',
       429
     );
   }
+  // Legacy rows (no kind stored): keep a single 24h lock, but allow slots after a calendar nudge
+  // once the talent has connected Cal (mode flipped to slots).
+  if (withinCooldown && !lastKind && mode === 'calendar') {
+    throw deny(
+      'A reminder email was already sent to this talent in the last 24 hours.',
+      'NUDGE_COOLDOWN',
+      429
+    );
+  }
+  if (withinCooldown && !lastKind && mode === 'slots') {
+    // Allow one slots email after a prior undifferentiated nudge only if they now have Cal.
+    // If they still somehow hit slots-without-cal, that path is needsCalendar above.
+  }
 
-  const needsCalendar = !profile.cal_username;
   const sendResult = await sendPublishSlotsNudgeEmail({
     to: profile.email,
     name: profile.name,
     ambassadorName: ambassador.name,
-    mode: needsCalendar ? 'calendar' : 'slots',
+    mode,
   });
 
   const now = new Date().toISOString();
-  const { error } = await supabaseAdmin
+  const patch = { intro_slot_nudge_at: now, updated_at: now, intro_nudge_kind: mode };
+  let { error } = await supabaseAdmin
     .from('profiles')
-    .update({ intro_slot_nudge_at: now, updated_at: now })
+    .update(patch)
     .eq('user_id', profile.user_id);
+  if (error && /intro_nudge_kind/i.test(error.message || '')) {
+    ({ error } = await supabaseAdmin
+      .from('profiles')
+      .update({ intro_slot_nudge_at: now, updated_at: now })
+      .eq('user_id', profile.user_id));
+  }
   if (error && !/intro_slot_nudge_at/i.test(error.message || '')) {
     console.warn('[ambassador-internal] nudge stamp:', error.message);
   }
 
   return {
     sent: Boolean(sendResult?.id || sendResult),
-    mode: needsCalendar ? 'calendar' : 'slots',
-    profile: mapReviewRow({ ...profile, intro_slot_nudge_at: now }, meta),
+    mode,
+    profile: mapReviewRow(
+      { ...profile, intro_slot_nudge_at: now, intro_nudge_kind: mode },
+      meta
+    ),
   };
 }
 
