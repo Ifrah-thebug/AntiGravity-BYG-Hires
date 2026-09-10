@@ -8,6 +8,7 @@ export default defineConfig({
     exclude: ['@imgly/background-removal'],
   },
   server: {
+    port: 5177,
     proxy: {
       // Proxy API calls to backend server
       '/api': {
