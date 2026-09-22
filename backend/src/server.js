@@ -101,6 +101,7 @@ app.use('/api/talent/profile', talentProfileReviewRouter);
 app.use('/api/talent-invite', talentInviteRouter);
 app.use('/api/ambassador', require('./routes/ambassador'));
 app.use('/api/admin/ambassadors', require('./routes/adminAmbassadors'));
+app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/cron', cronRouter);
 app.use(sitemapRouter);

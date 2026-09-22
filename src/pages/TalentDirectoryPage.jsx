@@ -291,7 +291,13 @@ const TalentDirectoryPage = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const liveTalents = await fetchLiveDirectoryTalents();
+      const liveTalents = await fetchLiveDirectoryTalents({
+        enrich: true,
+        onPartial: (partial) => {
+          setTalents(sanitizeTalentList(partial));
+          setLoading(false);
+        },
+      });
       setTalents(sanitizeTalentList(liveTalents));
     } catch (err) {
       console.warn('[TalentDirectory] fetch failed:', err?.message || err);

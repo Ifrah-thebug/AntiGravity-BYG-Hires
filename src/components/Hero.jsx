@@ -1,74 +1,62 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight } from 'lucide-react';
-import heroVideo from '../assets/Hero BG.mov';
+// import heroVideo from '../assets/Hero BG.mov';
+import LiveJobsTicker from './LiveJobsTicker';
+import HeroProblemSolve from './HeroProblemSolve';
 
+const ease = [0.22, 1, 0.36, 1];
+
+/**
+ * Hero: two flat plates stretched edge-to-edge under the nav.
+ * Left jobs (~40%) | right cinematic hire journey (~60%).
+ */
 const Hero = () => {
   return (
-    <div className="relative pt-28 pb-16 lg:pt-40 lg:pb-24 overflow-hidden bg-white min-h-[65vh] flex items-center">
+    // HomePage already has pt-20 for the nav
+    <div className="relative pt-1 pb-3 sm:pb-4 overflow-hidden min-h-[calc(100vh-5rem)] flex items-stretch">
+      <div className="absolute inset-0 z-0 bg-[#f6f4f2]" />
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_at_15%_10%,rgba(255,61,61,0.1),transparent_48%),radial-gradient(ellipse_at_85%_30%,rgba(16,185,129,0.06),transparent_42%)]" />
+
+      {/*
       <video
         autoPlay
         muted
         loop
         playsInline
-        preload="metadata"
-        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-60 md:opacity-80"
+        preload="none"
+        className="absolute top-0 left-0 w-full h-full object-cover z-0 opacity-45 md:opacity-60"
       >
         <source src={heroVideo} type="video/quicktime" />
         <source src={heroVideo} type="video/mp4" />
       </video>
+      */}
 
-      <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-white/60 via-white/45 to-white/65 z-[1]" />
-
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-        <div className="text-center max-w-3xl mx-auto">
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
+      {/* Stretch plates from every direction — wider, taller, tighter gutters */}
+      <div className="relative z-10 w-full px-2 sm:px-3 lg:px-4 flex flex-col flex-1 min-h-0">
+        <div className="grid lg:grid-cols-10 gap-2 sm:gap-3 flex-1 min-h-0 items-stretch">
+          <motion.aside
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-4xl sm:text-5xl md:text-6xl font-extrabold text-black tracking-tight leading-[1.1] mb-5"
+            transition={{ duration: 0.5, ease }}
+            className="lg:col-span-4 order-2 lg:order-1 flex min-h-[30rem] lg:min-h-0"
           >
-            Your first hire
-            <br />
-            shouldn&apos;t be your{' '}
-            <span className="text-red">biggest risk.</span>
-          </motion.h1>
+            <div className="w-full h-full min-h-[30rem] lg:min-h-[calc(100vh-5.75rem)] rounded-[1.5rem] sm:rounded-[1.75rem] border border-white/10 bg-[#0a0a0a] shadow-[0_24px_70px_-28px_rgba(0,0,0,0.65)] overflow-hidden flex flex-col p-3 sm:p-4">
+              <LiveJobsTicker limit={28} fill dark />
+            </div>
+          </motion.aside>
 
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
+          <motion.aside
+            initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.15 }}
-            className="text-base md:text-lg text-gray-800 mb-8 max-w-2xl mx-auto font-medium leading-snug"
+            transition={{ duration: 0.5, delay: 0.06, ease }}
+            className="lg:col-span-6 order-1 lg:order-2 flex min-h-[30rem] lg:min-h-0"
           >
-            We find, vet, and place remote talent so founders can focus on building—not recruiting.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex flex-col sm:flex-row justify-center items-center gap-3"
-          >
-            <Link
-              to="/talent/signup"
-              className="group w-full sm:w-auto px-7 py-3.5 bg-red text-white rounded-full font-bold text-base flex items-center justify-center gap-2 hover:bg-black transition-colors shadow-lg border-2 border-red"
-            >
-              Join the Talent Pool
-              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-            </Link>
-            <Link
-              to="/talent"
-              className="group w-full sm:w-auto px-7 py-3.5 bg-white/90 border-2 border-black text-black rounded-full font-bold text-base flex items-center justify-center gap-2 hover:bg-black hover:text-white transition-colors shadow-lg"
-            >
-              Find a Great Hire
-              <ArrowRight size={16} className="transition-transform group-hover:translate-x-0.5" />
-            </Link>
-          </motion.div>
+            <div className="w-full h-full min-h-[30rem] lg:min-h-[calc(100vh-5.75rem)] rounded-[1.5rem] sm:rounded-[1.75rem] border border-black/10 bg-white/95 shadow-[0_20px_60px_-28px_rgba(0,0,0,0.28)] overflow-hidden flex flex-col p-4 sm:p-5 lg:p-6">
+              <HeroProblemSolve plate />
+            </div>
+          </motion.aside>
         </div>
       </div>
-
-      <div className="hidden md:block absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-red/5 rounded-full blur-3xl pointer-events-none" />
     </div>
   );
 };
