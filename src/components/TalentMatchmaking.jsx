@@ -350,7 +350,16 @@ const TalentMatchmaking = () => {
     (async () => {
       setLoading(true);
       try {
-        const live = await fetchLiveDirectoryTalents();
+        const live = await fetchLiveDirectoryTalents({
+          enrich: false,
+          limit: 48,
+          onPartial: (partial) => {
+            if (!cancelled) {
+              setTalents(sanitizeTalentList(partial));
+              setLoading(false);
+            }
+          },
+        });
         if (!cancelled) setTalents(sanitizeTalentList(live));
       } catch (err) {
         console.warn('[TalentMatchmaking] fetch failed:', err?.message || err);

@@ -1,5 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
+import AdminRoute from './components/AdminRoute';
+import { AuthProvider } from './context/AuthContext';
+import { talentService } from './services/talentService';
 
 const CANONICAL_BASE = 'https://byghires.com';
 
@@ -27,58 +32,55 @@ const ScrollToTop = () => {
   }, [pathname]);
   return null;
 };
-import Navbar from './components/Navbar';
-import Footer from './components/Footer';
-import HomePage from './pages/HomePage';
-import HowItWorksPage from './pages/HowItWorksPage';
-import CaseStudiesPage from './pages/CaseStudiesPage';
-import WhyUsPage from './pages/WhyUsPage';
-import AboutUsPage from './pages/AboutUsPage';
-import RemoteSalesTeamPage from './pages/RemoteSalesTeamPage';
-import RemoteSupportTeamPage from './pages/RemoteSupportTeamPage';
-import RequestIntroPage from './pages/RequestIntroPage';
-import TalentDashboardPage from './pages/TalentDashboardPage';
 
-// Import New System Pages
-import AssessmentPage from './pages/AssessmentPage';
-import TalentAssessmentPage from './pages/TalentAssessmentPage';
-import TalentVoiceInterviewPage from './pages/TalentVoiceInterviewPage';
-import StatusPage from './pages/StatusPage';
-import AdminProfileReviewsPage from './pages/AdminProfileReviewsPage';
-import AdminTalentImportPage from './pages/AdminTalentImportPage';
-import AdminAmbassadorsPage from './pages/AdminAmbassadorsPage';
-import TalentActivatePage from './pages/TalentActivatePage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+/** Route-level code splitting — keeps Vapi / heavy admin / portfolio out of the first paint. */
+const HomePage = lazy(() => import('./pages/HomePage'));
+const HowItWorksPage = lazy(() => import('./pages/HowItWorksPage'));
+const CaseStudiesPage = lazy(() => import('./pages/CaseStudiesPage'));
+const WhyUsPage = lazy(() => import('./pages/WhyUsPage'));
+const AboutUsPage = lazy(() => import('./pages/AboutUsPage'));
+const RemoteSalesTeamPage = lazy(() => import('./pages/RemoteSalesTeamPage'));
+const RemoteSupportTeamPage = lazy(() => import('./pages/RemoteSupportTeamPage'));
+const RequestIntroPage = lazy(() => import('./pages/RequestIntroPage'));
+const TalentDashboardPage = lazy(() => import('./pages/TalentDashboardPage'));
+const AssessmentPage = lazy(() => import('./pages/AssessmentPage'));
+const TalentAssessmentPage = lazy(() => import('./pages/TalentAssessmentPage'));
+const TalentVoiceInterviewPage = lazy(() => import('./pages/TalentVoiceInterviewPage'));
+const StatusPage = lazy(() => import('./pages/StatusPage'));
+const AdminProfileReviewsPage = lazy(() => import('./pages/AdminProfileReviewsPage'));
+const AdminTalentImportPage = lazy(() => import('./pages/AdminTalentImportPage'));
+const AdminAmbassadorsPage = lazy(() => import('./pages/AdminAmbassadorsPage'));
+const TalentActivatePage = lazy(() => import('./pages/TalentActivatePage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const TalentSignupPage = lazy(() => import('./pages/TalentSignupPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const TalentSetupPage = lazy(() => import('./pages/TalentSetupPage'));
+const TalentDirectoryPage = lazy(() => import('./pages/TalentDirectoryPage'));
+const TalentProfilePage = lazy(() => import('./pages/TalentProfilePage'));
+const TalentPortfolioPage = lazy(() => import('./pages/TalentPortfolioPage'));
+const PortalPage = lazy(() => import('./pages/PortalPage'));
+const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'));
+const AdminSignupPage = lazy(() => import('./pages/AdminSignupPage'));
+const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'));
+const AdminClientsPage = lazy(() => import('./pages/AdminClientsPage'));
+const ClientActivatePage = lazy(() => import('./pages/ClientActivatePage'));
+const ClientDashboardPage = lazy(() => import('./pages/ClientDashboardPage'));
+const AmbassadorGatePage = lazy(() => import('./pages/AmbassadorGatePage'));
+const AmbassadorHubPage = lazy(() => import('./pages/AmbassadorHubPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const TalentOnboardingChat = lazy(() => import('./components/talentChat/TalentOnboardingChat'));
+const DeveloperConsole = lazy(() => import('./components/DeveloperConsole'));
+const MockEmailSimulator = lazy(() => import('./components/MockEmailSimulator'));
 
-// Import Supabase-backed Talent Pool Pages
-import TalentSignupPage from './pages/TalentSignupPage';
-import TalentLoginPage from './pages/TalentLoginPage';
-import LoginPage from './pages/LoginPage';
-import TalentSetupPage from './pages/TalentSetupPage';
-import TalentDirectoryPage from './pages/TalentDirectoryPage';
-import TalentProfilePage from './pages/TalentProfilePage';
-import TalentPortfolioPage from './pages/TalentPortfolioPage';
-import PortalPage from './pages/PortalPage';
-import AdminLoginPage from './pages/AdminLoginPage';
-import AdminSignupPage from './pages/AdminSignupPage';
-import AdminDashboardPage from './pages/AdminDashboardPage';
-import AdminClientsPage from './pages/AdminClientsPage';
-import ClientActivatePage from './pages/ClientActivatePage';
-import ClientLoginPage from './pages/ClientLoginPage';
-import ClientDashboardPage from './pages/ClientDashboardPage';
-import AmbassadorGatePage from './pages/AmbassadorGatePage';
-import AmbassadorHubPage from './pages/AmbassadorHubPage';
-import NotFoundPage from './pages/NotFoundPage';
-import AdminRoute from './components/AdminRoute';
-import { AuthProvider } from './context/AuthContext';
-import TalentOnboardingChat from './components/talentChat/TalentOnboardingChat';
-
-// Import Global Sandbox Tools
-import DeveloperConsole from './components/DeveloperConsole';
-import MockEmailSimulator from './components/MockEmailSimulator';
-import { talentService } from './services/talentService';
+function PageFallback() {
+  return (
+    <div className="min-h-[50vh] flex items-center justify-center text-sm font-semibold text-gray-500">
+      Loading…
+    </div>
+  );
+}
 
 const AppContent = () => {
   const location = useLocation();
@@ -106,7 +108,6 @@ const AppContent = () => {
     location.pathname.startsWith('/ambassador');
   const isPortfolioPage = /\/talent\/[^/]+\/portfolio$/.test(location.pathname);
 
-  // One-time cleanup: remove any test/Ifrah profiles from localStorage
   useEffect(() => {
     talentService.purgeProfilesByName('ifrah');
     talentService.purgeProfilesByName('meraj');
@@ -117,98 +118,100 @@ const AppContent = () => {
       <ScrollToTop />
       {!isSuperAdminShell && <Navbar />}
       <main className="overflow-x-hidden max-w-full">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/how-it-works" element={<HowItWorksPage />} />
-          <Route path="/case-studies" element={<CaseStudiesPage />} />
-          <Route path="/why-us" element={<WhyUsPage />} />
-          <Route path="/about" element={<AboutUsPage />} />
-          <Route path="/remote-sales-team" element={<RemoteSalesTeamPage />} />
-          <Route path="/remote-support-team" element={<RemoteSupportTeamPage />} />
-          <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
-          <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
-          <Route path="/assessment" element={<TalentAssessmentPage />} />
-          <Route path="/interview" element={<TalentVoiceInterviewPage />} />
-          <Route path="/assessment/legacy" element={<AssessmentPage />} />
-          <Route path="/assessment/coming-soon" element={<Navigate to="/assessment" replace />} />
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin/signup" element={<AdminSignupPage />} />
-          <Route
-            path="/admin/dashboard"
-            element={(
-              <AdminRoute>
-                <AdminDashboardPage />
-              </AdminRoute>
-            )}
-          />
-          <Route
-            path="/admin/clients"
-            element={(
-              <AdminRoute>
-                <AdminClientsPage />
-              </AdminRoute>
-            )}
-          />
-          <Route
-            path="/admin/profile-reviews"
-            element={(
-              <AdminRoute>
-                <AdminProfileReviewsPage />
-              </AdminRoute>
-            )}
-          />
-          <Route path="/admin/reviews" element={<Navigate to="/admin/profile-reviews" replace />} />
-          <Route
-            path="/admin/talent/import"
-            element={(
-              <AdminRoute>
-                <AdminTalentImportPage />
-              </AdminRoute>
-            )}
-          />
-          <Route
-            path="/admin/ambassadors"
-            element={(
-              <AdminRoute>
-                <AdminAmbassadorsPage />
-              </AdminRoute>
-            )}
-          />
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
-          <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
-          <Route path="/request-intro" element={<RequestIntroPage />} />
-          <Route path="/privacy" element={<PrivacyPolicyPage />} />
-          {/* Supabase-backed Talent Pool System */}
-          <Route path="/talent" element={<TalentDirectoryPage />} />
-          <Route path="/talent/signup" element={<TalentSignupPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/talent/login" element={<Navigate to="/login" replace />} />
-          <Route path="/talent/activate" element={<TalentActivatePage />} />
-          <Route path="/talent/setup" element={<TalentSetupPage />} />
-          <Route path="/talent/:id/portfolio" element={<TalentPortfolioPage />} />
-          <Route path="/talent/:id" element={<TalentProfilePage />} />
-          <Route path="/portal" element={<PortalPage />} />
-          <Route path="/client/activate" element={<ClientActivatePage />} />
-          <Route path="/client/login" element={<Navigate to="/login" replace />} />
-          <Route path="/client" element={<ClientDashboardPage />} />
-          <Route path="/ambassador" element={<AmbassadorGatePage />} />
-          <Route path="/ambassador/hub" element={<AmbassadorHubPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
+        <Suspense fallback={<PageFallback />}>
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/how-it-works" element={<HowItWorksPage />} />
+            <Route path="/case-studies" element={<CaseStudiesPage />} />
+            <Route path="/why-us" element={<WhyUsPage />} />
+            <Route path="/about" element={<AboutUsPage />} />
+            <Route path="/remote-sales-team" element={<RemoteSalesTeamPage />} />
+            <Route path="/remote-support-team" element={<RemoteSupportTeamPage />} />
+            <Route path="/talent-pool" element={<Navigate to="/talent/signup" replace />} />
+            <Route path="/talent-pool/apply" element={<Navigate to="/talent/signup" replace />} />
+            <Route path="/assessment" element={<TalentAssessmentPage />} />
+            <Route path="/interview" element={<TalentVoiceInterviewPage />} />
+            <Route path="/assessment/legacy" element={<AssessmentPage />} />
+            <Route path="/assessment/coming-soon" element={<Navigate to="/assessment" replace />} />
+            <Route path="/status" element={<StatusPage />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
+            <Route path="/admin/signup" element={<AdminSignupPage />} />
+            <Route
+              path="/admin/dashboard"
+              element={(
+                <AdminRoute>
+                  <AdminDashboardPage />
+                </AdminRoute>
+              )}
+            />
+            <Route
+              path="/admin/clients"
+              element={(
+                <AdminRoute>
+                  <AdminClientsPage />
+                </AdminRoute>
+              )}
+            />
+            <Route
+              path="/admin/profile-reviews"
+              element={(
+                <AdminRoute>
+                  <AdminProfileReviewsPage />
+                </AdminRoute>
+              )}
+            />
+            <Route path="/admin/reviews" element={<Navigate to="/admin/profile-reviews" replace />} />
+            <Route
+              path="/admin/talent/import"
+              element={(
+                <AdminRoute>
+                  <AdminTalentImportPage />
+                </AdminRoute>
+              )}
+            />
+            <Route
+              path="/admin/ambassadors"
+              element={(
+                <AdminRoute>
+                  <AdminAmbassadorsPage />
+                </AdminRoute>
+              )}
+            />
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
+            <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
+            <Route path="/request-intro" element={<RequestIntroPage />} />
+            <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/talent" element={<TalentDirectoryPage />} />
+            <Route path="/talent/signup" element={<TalentSignupPage />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
+            <Route path="/talent/login" element={<Navigate to="/login" replace />} />
+            <Route path="/talent/activate" element={<TalentActivatePage />} />
+            <Route path="/talent/setup" element={<TalentSetupPage />} />
+            <Route path="/talent/:id/portfolio" element={<TalentPortfolioPage />} />
+            <Route path="/talent/:id" element={<TalentProfilePage />} />
+            <Route path="/portal" element={<PortalPage />} />
+            <Route path="/client/activate" element={<ClientActivatePage />} />
+            <Route path="/client/login" element={<Navigate to="/login" replace />} />
+            <Route path="/client" element={<ClientDashboardPage />} />
+            <Route path="/ambassador" element={<AmbassadorGatePage />} />
+            <Route path="/ambassador/hub" element={<AmbassadorHubPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Routes>
+        </Suspense>
       </main>
       {!isTalentPool && !isAssessment && !isAdmin && !isPortalPage && !isPortfolioPage && <Footer />}
-      <TalentOnboardingChat />
-      {/* Sandbox Debug Overlay Widgets - visible only with ?debug=true */}
-      {debug && (
-        <>
+      <Suspense fallback={null}>
+        <TalentOnboardingChat />
+      </Suspense>
+      {debug ? (
+        <Suspense fallback={null}>
           <DeveloperConsole />
           <MockEmailSimulator />
-        </>
-      )}
+        </Suspense>
+      ) : null}
     </div>
   );
 };

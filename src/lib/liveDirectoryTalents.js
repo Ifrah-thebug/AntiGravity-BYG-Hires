@@ -10,6 +10,13 @@ import { photoUrlForDisplay } from './talentStorage';
 export const LIVE_PROFILE_COLUMNS =
   'id, name, job_title, skills, best_skill, about, experience_years, photo_url, monthly_fee_usd, directory_fee_usd, availability, role_type, department, ambassador_id, created_at, updated_at';
 
+const CACHE_TTL_MS = 45_000;
+let memoryCache = {
+  at: 0,
+  profiles: null,
+  enriched: null,
+};
+
 export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap = {}) {
   const skills = profile.skills || [];
   const aiMeta = aiBadgeMap[profile.id] || {};
@@ -38,29 +45,89 @@ export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap =
   };
 }
 
-export async function fetchLiveDirectoryTalents() {
-  let { data, error } = await supabase
+async function fetchApprovedProfiles({ limit } = {}) {
+  let query = supabase
     .from('profiles')
     .select(LIVE_PROFILE_COLUMNS)
     .eq('directory_status', 'approved')
     .order('created_at', { ascending: false });
 
+  if (limit && Number(limit) > 0) {
+    query = query.limit(Number(limit));
+  }
+
+  let { data, error } = await query;
+
   if (error && isDirectoryStatusColumnMissing(error)) {
-    ({ data, error } = await supabase
+    let fallback = supabase
       .from('profiles')
       .select(LIVE_PROFILE_COLUMNS)
-      .order('created_at', { ascending: false }));
+      .order('created_at', { ascending: false });
+    if (limit && Number(limit) > 0) fallback = fallback.limit(Number(limit));
+    ({ data, error } = await fallback);
   }
 
   if (error) throw new Error(error.message);
+  return data || [];
+}
 
-  const profiles = data || [];
+async function enrichProfiles(profiles) {
   const profileIds = profiles.map((p) => p.id).filter(Boolean);
   const [scoreMap, aiBadgeMap] = await Promise.all([
-    fetchPublicSkillScores(profileIds),
+    fetchPublicSkillScores(profileIds).catch(() => ({})),
     fetchPublicAiInterviewBadges(profileIds).catch(() => ({})),
   ]);
   return profiles.map((p) => mapProfileToDirectoryTalent(p, scoreMap, aiBadgeMap));
+}
+
+/**
+ * Fast directory fetch.
+ * - Shows profiles ASAP (no skill/badge wait)
+ * - Optionally enriches in the background via onPartial / enrich
+ * - Short memory cache shared by homepage + /talent
+ *
+ * @param {{
+ *   enrich?: boolean,
+ *   limit?: number,
+ *   useCache?: boolean,
+ *   onPartial?: (talents: any[]) => void,
+ * }} [opts]
+ */
+export async function fetchLiveDirectoryTalents(opts = {}) {
+  const { enrich = true, limit, useCache = true, onPartial } = opts;
+  const now = Date.now();
+  const limited = Boolean(limit && Number(limit) > 0);
+
+  // Limited fetches (homepage cards) must not poison the full /talent cache.
+  if (!limited) {
+    const cacheFresh = useCache && memoryCache.profiles && now - memoryCache.at < CACHE_TTL_MS;
+    if (cacheFresh && enrich && memoryCache.enriched) {
+      return memoryCache.enriched;
+    }
+    if (cacheFresh) {
+      const fast = memoryCache.profiles.map((p) => mapProfileToDirectoryTalent(p));
+      if (typeof onPartial === 'function') onPartial(fast);
+      if (!enrich) return fast;
+      const enriched = await enrichProfiles(memoryCache.profiles);
+      memoryCache = { at: Date.now(), profiles: memoryCache.profiles, enriched };
+      return enriched;
+    }
+  }
+
+  const profiles = await fetchApprovedProfiles({ limit });
+  const fast = profiles.map((p) => mapProfileToDirectoryTalent(p));
+  if (!limited) {
+    memoryCache = { at: now, profiles, enriched: null };
+  }
+
+  if (typeof onPartial === 'function') onPartial(fast);
+  if (!enrich) return fast;
+
+  const enriched = await enrichProfiles(profiles);
+  if (!limited) {
+    memoryCache = { at: Date.now(), profiles, enriched };
+  }
+  return enriched;
 }
 
 function talentHaystack(talent) {
