@@ -54,6 +54,7 @@ const TalentActivatePage = lazy(() => import('./pages/TalentActivatePage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const DeleteAccountPage = lazy(() => import('./pages/DeleteAccountPage'));
 const TalentSignupPage = lazy(() => import('./pages/TalentSignupPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const TalentSetupPage = lazy(() => import('./pages/TalentSetupPage'));
@@ -182,6 +183,7 @@ const AppContent = () => {
             <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
             <Route path="/request-intro" element={<RequestIntroPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
+            <Route path="/delete-account" element={<DeleteAccountPage />} />
             <Route path="/talent" element={<TalentDirectoryPage />} />
             <Route path="/talent/signup" element={<TalentSignupPage />} />
             <Route path="/login" element={<LoginPage />} />
