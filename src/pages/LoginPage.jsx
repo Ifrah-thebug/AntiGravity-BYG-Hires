@@ -42,12 +42,41 @@ export default function LoginPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (roleHint === 'unknown') {
+      setError(
+        'This email is not registered. Please create a talent account, or activate your client account from the email we sent you.'
+      );
+      return;
+    }
+    if (roleHint === 'client_pending') {
+      setError(
+        'This client account is not activated yet. Open the activation link in your intro or discovery email first.'
+      );
+      return;
+    }
     setLoading(true);
     try {
       await signIn(form.email, form.password);
       await routeAfterAuth(navigate);
     } catch (err) {
-      setError(formatAuthError(err));
+      const base = formatAuthError(err);
+      if (roleHint === 'unknown' || /invalid email or password/i.test(base)) {
+        // Re-check in case hint was stale / still loading
+        const fresh = roleHint || (await fetchLoginRoleHint(form.email));
+        if (fresh === 'unknown') {
+          setError(
+            'This email is not registered. Please create a talent account, or activate your client account from the email we sent you.'
+          );
+        } else if (fresh === 'talent' || fresh === 'talent_pending') {
+          setError('Talent account found, but the password is incorrect. Try again or use Forgot password.');
+        } else if (fresh === 'client') {
+          setError('Client account found, but the password is incorrect. Try again or use Forgot password.');
+        } else {
+          setError(base);
+        }
+      } else {
+        setError(base);
+      }
     } finally {
       setLoading(false);
     }
@@ -131,9 +160,13 @@ export default function LoginPage() {
               {!hintLoading && hintText && (
                 <p
                   className={`text-[11px] font-semibold leading-relaxed rounded-lg px-3 py-2 ${
-                    roleHint === 'client_pending'
+                    roleHint === 'unknown' || roleHint === 'client_pending'
                       ? 'text-amber-800 bg-amber-50 border border-amber-200'
-                      : 'text-gray-600 bg-gray-50 border border-gray-100'
+                      : roleHint === 'talent' || roleHint === 'talent_pending'
+                        ? 'text-blue-900 bg-blue-50 border border-blue-100'
+                        : roleHint === 'client'
+                          ? 'text-green-900 bg-green-50 border border-green-100'
+                          : 'text-gray-600 bg-gray-50 border border-gray-100'
                   }`}
                 >
                   {hintText}
@@ -176,14 +209,15 @@ export default function LoginPage() {
 
           <div className="pt-4 border-t border-gray-100 space-y-2 text-center text-xs text-gray-500 font-medium">
             <p>
-              Booked an intro?{' '}
-              <span className="text-gray-700">Activate via the link in your email first.</span>
+              No account yet?{' '}
+              <Link to="/talent/signup" className="text-red font-bold hover:underline">
+                Create a talent account
+              </Link>
+              {' '}or activate as a client from your intro/discovery email.
             </p>
             <p>
-              Talent new here?{' '}
-              <Link to="/talent/signup" className="text-red font-bold hover:underline">
-                Join the Talent Pool
-              </Link>
+              Booked an intro already?{' '}
+              <span className="text-gray-700">Use the activation link we emailed you first.</span>
             </p>
           </div>
         </motion.div>

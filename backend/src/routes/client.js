@@ -79,13 +79,20 @@ function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
-/** Pre-login UI hint — talent is checked before client (no password check). */
+/**
+ * Pre-login UI hint (no password check).
+ * Order: registered talent (profiles) → activated client → pending client →
+ * auth-only (incomplete talent signup) → unknown (not registered).
+ * Never default unknown emails to "talent".
+ */
 router.get('/role-hint', async (req, res) => {
   try {
     const email = normalizeEmail(req.query.email);
     if (!email) return res.status(400).json({ error: 'email is required' });
 
     let authUserId = null;
+    let hasTalentProfile = false;
+
     if (supabaseAdmin) {
       authUserId = await clientActivation.findAuthUserIdByEmail(email);
       if (authUserId) {
@@ -95,9 +102,7 @@ router.get('/role-hint', async (req, res) => {
           .eq('user_id', authUserId)
           .maybeSingle();
         if (profileErr) throw profileErr;
-        if (profile) {
-          return res.json({ role: 'talent', label: 'Talent account' });
-        }
+        hasTalentProfile = Boolean(profile);
       }
     }
 
@@ -115,18 +120,27 @@ router.get('/role-hint', async (req, res) => {
       client = row || null;
     }
 
-    if (client?.user_id) {
-      return res.json({ role: 'client', label: 'Client account' });
+    // Talent with a profiles row = registered talent (even if also linked elsewhere)
+    if (hasTalentProfile) {
+      return res.json({ role: 'talent', label: 'Registered talent account' });
+    }
+
+    if (client?.user_id || client?.account_confirmed_at) {
+      return res.json({ role: 'client', label: 'Registered client account' });
     }
     if (client) {
       return res.json({ role: 'client_pending', label: 'Client — activation required' });
     }
 
+    // Auth user exists but no talent profile and no client row — unfinished talent signup
     if (authUserId) {
-      return res.json({ role: 'talent', label: 'Talent account — profile setup' });
+      return res.json({
+        role: 'talent_pending',
+        label: 'Talent account — finish profile setup',
+      });
     }
 
-    return res.json({ role: 'talent', label: 'Talent or new user' });
+    return res.json({ role: 'unknown', label: 'No account registered' });
   } catch (err) {
     console.error('[client/role-hint]', err?.message || err);
     return res.status(500).json({ error: 'Could not look up email.' });
