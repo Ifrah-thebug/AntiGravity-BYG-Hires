@@ -297,6 +297,22 @@ async function recordHireByAdmin({ talentEmail, clientName, notes }) {
     notes: noteParts.join(' '),
   });
 
+  // Soft Workforce HRIS bridge — only when caller passes a real salary (> 0).
+  let workforceEngagement = null;
+  try {
+    const workforceService = require('./workforceService');
+    workforceEngagement = await workforceService.tryCreateEngagementFromHire(placement, {
+      clientName: client || 'Client',
+      talentEmail: cleanEmail,
+      talentName: profile.name || null,
+      talentUserId: profile.user_id,
+      // No default salary — admin creates engagement with salary in /admin/workforce
+      salaryAmount: null,
+    });
+  } catch (wfErr) {
+    console.warn('[ambassador] workforce bridge:', wfErr?.message || wfErr);
+  }
+
   return {
     placement,
     rewardUsd,
@@ -307,6 +323,9 @@ async function recordHireByAdmin({ talentEmail, clientName, notes }) {
       name: profile.name || null,
       userId: profile.user_id,
     },
+    workforce: workforceEngagement
+      ? { engagementId: workforceEngagement.engagement?.id, created: workforceEngagement.created }
+      : null,
   };
 }
 

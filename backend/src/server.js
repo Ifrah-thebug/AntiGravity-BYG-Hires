@@ -56,6 +56,8 @@ const corsOrigins = [
   'https://byghires.com',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
 ].filter(Boolean);
 
 app.use(cors({
@@ -72,6 +74,8 @@ app.use(
   express.raw({ type: 'application/json' }),
   calWebhookRouter
 );
+// Drawn contract signatures (PNG data-URLs) exceed the default 100kb body limit.
+app.use('/api/workforce', express.json({ limit: '1mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
@@ -101,6 +105,8 @@ app.use('/api/talent/profile', talentProfileReviewRouter);
 app.use('/api/talent-invite', talentInviteRouter);
 app.use('/api/ambassador', require('./routes/ambassador'));
 app.use('/api/admin/ambassadors', require('./routes/adminAmbassadors'));
+app.use('/api/workforce', require('./routes/workforce'));
+app.use('/api/v1/workforce', require('./routes/workforceErp'));
 app.use('/api/jobs', require('./routes/jobs'));
 app.use('/api/auth', passwordResetRouter);
 app.use('/api/internal/cron', cronRouter);

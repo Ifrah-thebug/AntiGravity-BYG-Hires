@@ -10,6 +10,8 @@ import AiInterviewVerifiedBadge from './AiInterviewVerifiedBadge';
 import AmbassadorReferredBadge from './AmbassadorReferredBadge';
 import TalentModalSkillTags from './TalentModalSkillTags';
 import { SHOW_ASSESSMENT_SCORE } from '../lib/talentVerification';
+import { clientHireUrl } from '../lib/clientHireUrl';
+import { useAuth } from '../context/AuthContext';
 
 const ROLE_TYPE_LABELS = {
   night: 'Night Role',
@@ -48,7 +50,11 @@ export default function DirectoryTalentModal({
   footerExtra = null,
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   if (!talent) return null;
+
+  const role = String(user?.user_metadata?.role || user?.app_metadata?.role || '').toLowerCase();
+  const hireForClient = Boolean(user) && role !== 'talent' && role !== 'ambassador';
 
   const card = (
     <motion.div
@@ -161,12 +167,23 @@ export default function DirectoryTalentModal({
               Request Intro <ArrowRight size={14} />
             </button>
           )}
+          {hireForClient && talent.id ? (
+            <button
+              type="button"
+              onClick={() =>
+                navigate(clientHireUrl({ talentId: talent.id, talentName: talent.name }))
+              }
+              className="flex-1 min-w-[10rem] py-4 bg-red hover:bg-[#c41e1e] text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
+            >
+              Hire <ArrowRight size={14} />
+            </button>
+          ) : null}
           {footerExtra}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className={`${canRequestIntro || footerExtra ? 'px-6' : 'flex-1'} py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors`}
+              className={`${canRequestIntro || footerExtra || hireForClient ? 'px-6' : 'flex-1'} py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors`}
             >
               Close
             </button>

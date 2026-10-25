@@ -12,7 +12,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  FileText,
+  Users,
+  Briefcase,
 } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { fetchAdminClients, fetchAdminClientDetail } from '../../lib/adminClients';
 
 const INTRO_STATUS_CLASS = {
@@ -64,11 +68,33 @@ function isUpcoming(intro) {
   return intro.startAt && new Date(intro.startAt).getTime() >= Date.now();
 }
 
+const CONTRACT_STATUS_CLASS = {
+  signed: 'bg-green-50 text-green-700 border-green-100',
+  ready_to_sign: 'bg-amber-50 text-amber-700 border-amber-100',
+  partially_signed: 'bg-blue-50 text-blue-700 border-blue-100',
+  draft: 'bg-gray-50 text-gray-600 border-gray-200',
+  pending_ai: 'bg-purple-50 text-purple-700 border-purple-100',
+  needs_fixes: 'bg-red/5 text-red border-red/10',
+};
+
+function openContractHtml(html, title) {
+  if (!html) return;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(
+    `<!DOCTYPE html><html><head><title>${String(title || 'Contract').replace(/</g, '')}</title></head><body style="font-family:system-ui,sans-serif;padding:24px;max-width:800px;margin:0 auto">${html}</body></html>`
+  );
+  win.document.close();
+}
+
 const ClientDetailModal = ({ clientId, onClose }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [client, setClient] = useState(null);
   const [intros, setIntros] = useState([]);
+  const [engagements, setEngagements] = useState([]);
+  const [contracts, setContracts] = useState([]);
+  const [detailTab, setDetailTab] = useState('hires');
 
   useEffect(() => {
     if (!clientId) return undefined;
@@ -82,6 +108,10 @@ const ClientDetailModal = ({ clientId, onClose }) => {
         if (cancelled) return;
         setClient(data.client);
         setIntros(data.intros || []);
+        setEngagements(data.engagements || []);
+        setContracts(data.contracts || []);
+        const hasHires = (data.engagements || []).length > 0 || (data.contracts || []).length > 0;
+        setDetailTab(hasHires ? 'hires' : 'intros');
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load client.');
       } finally {
@@ -92,10 +122,18 @@ const ClientDetailModal = ({ clientId, onClose }) => {
     return () => { cancelled = true; };
   }, [clientId]);
 
-  if (!clientId) return null;
+  const upcoming = useMemo(() => intros.filter(isUpcoming), [intros]);
+  const past = useMemo(() => intros.filter((i) => !isUpcoming(i)), [intros]);
+  const contractsByEngagement = useMemo(() => {
+    const map = new Map();
+    for (const c of contracts) {
+      if (!map.has(c.engagementId)) map.set(c.engagementId, []);
+      map.get(c.engagementId).push(c);
+    }
+    return map;
+  }, [contracts]);
 
-  const upcoming = intros.filter(isUpcoming);
-  const past = intros.filter((i) => !isUpcoming(i));
+  if (!clientId) return null;
 
   return (
     <AnimatePresence>
@@ -137,6 +175,12 @@ const ClientDetailModal = ({ clientId, onClose }) => {
                     {client.activated ? 'Activated' : 'Pending activation'}
                   </span>
                   <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border bg-white/10 text-white/80 border-white/20">
+                    {client.hiredTalentCount || 0} hired
+                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border bg-white/10 text-white/80 border-white/20">
+                    {client.contractCount || 0} contract{(client.contractCount || 0) === 1 ? '' : 's'}
+                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border bg-white/10 text-white/80 border-white/20">
                     {client.introCount} intro{client.introCount === 1 ? '' : 's'}
                   </span>
                 </div>
@@ -155,6 +199,28 @@ const ClientDetailModal = ({ clientId, onClose }) => {
             ) : null}
           </div>
 
+          {!loading && !error && client ? (
+            <div className="flex gap-2 px-6 pt-4 shrink-0 border-b border-gray-100">
+              {[
+                { id: 'hires', label: `Hires & contracts (${engagements.length})` },
+                { id: 'intros', label: `Intros (${intros.length})` },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setDetailTab(t.id)}
+                  className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-widest border-b-2 transition-colors ${
+                    detailTab === t.id
+                      ? 'border-red text-black'
+                      : 'border-transparent text-gray-400 hover:text-gray-700'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           <div className="flex-1 min-h-0 overflow-y-auto p-6 sm:p-8 space-y-6">
             {error && (
               <div className="p-4 bg-red/5 border border-red/20 text-red rounded-2xl text-sm font-semibold">
@@ -162,7 +228,107 @@ const ClientDetailModal = ({ clientId, onClose }) => {
               </div>
             )}
 
-            {!loading && !error && (
+            {!loading && !error && detailTab === 'hires' && (
+              <section className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <Users size={11} /> Talents hired ({client?.hiredTalentCount || 0})
+                  </p>
+                  <Link
+                    to="/admin/workforce"
+                    className="text-[10px] font-black uppercase tracking-widest text-red hover:text-black"
+                  >
+                    Open Workforce →
+                  </Link>
+                </div>
+
+                {engagements.length === 0 ? (
+                  <p className="text-sm text-gray-400 font-medium italic">
+                    No Workforce hires yet for this client.
+                  </p>
+                ) : (
+                  <ul className="space-y-3">
+                    {engagements.map((eng) => {
+                      const engContracts = contractsByEngagement.get(eng.id) || [];
+                      return (
+                        <li key={eng.id} className="rounded-2xl border border-gray-100 bg-gray-50/60 p-4 space-y-3">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <p className="font-black text-sm text-gray-900 flex items-center gap-1.5">
+                                <User size={12} /> {eng.talentName || eng.talentEmail || 'Talent'}
+                              </p>
+                              <p className="text-xs text-gray-500 font-semibold mt-0.5">
+                                {eng.roleTitle || 'Role'} · {eng.talentEmail}
+                              </p>
+                              <p className="text-[10px] text-gray-400 font-medium mt-1">
+                                Started {formatShortDate(eng.startDate || eng.createdAt)}
+                              </p>
+                            </div>
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border shrink-0 ${
+                              eng.status === 'active'
+                                ? 'bg-green-50 text-green-700 border-green-100'
+                                : 'bg-gray-50 text-gray-600 border-gray-200'
+                            }`}>
+                              {eng.status}
+                            </span>
+                          </div>
+
+                          {engContracts.length === 0 ? (
+                            <p className="text-[11px] text-gray-400 font-medium">No contract on this hire yet.</p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-1">
+                                <FileText size={10} /> Contracts
+                              </p>
+                              {engContracts.map((c) => (
+                                <div
+                                  key={c.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white border border-gray-100 px-3 py-2.5"
+                                >
+                                  <div>
+                                    <p className="text-xs font-bold text-gray-800">
+                                      Contract · {c.status?.replace(/_/g, ' ')}
+                                    </p>
+                                    <p className="text-[10px] text-gray-400 font-medium">
+                                      Signed: {(c.signedRoles || []).length
+                                        ? c.signedRoles.join(', ')
+                                        : 'none yet'}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-full border ${
+                                      CONTRACT_STATUS_CLASS[c.status] || 'bg-gray-50 text-gray-600 border-gray-200'
+                                    }`}>
+                                      {c.status}
+                                    </span>
+                                    {c.hasHtml || c.renderedHtml ? (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          openContractHtml(
+                                            c.renderedHtml,
+                                            `${eng.talentName || 'Talent'} contract`
+                                          )
+                                        }
+                                        className="px-3 py-1.5 bg-black hover:bg-red text-white text-[9px] font-black uppercase tracking-widest rounded-lg transition-colors"
+                                      >
+                                        View contract
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </section>
+            )}
+
+            {!loading && !error && detailTab === 'intros' && (
               <>
                 <section>
                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
@@ -267,6 +433,7 @@ const AdminClientsPanel = () => {
     total: clients.length,
     activated: clients.filter((c) => c.activated).length,
     withIntros: clients.filter((c) => c.introCount > 0).length,
+    withHires: clients.filter((c) => (c.hiredTalentCount || 0) > 0).length,
   }), [clients]);
 
   return (
@@ -274,7 +441,7 @@ const AdminClientsPanel = () => {
       <div>
         <h1 className="text-3xl md:text-4xl font-black tracking-tight">Browse clients</h1>
         <p className="text-gray-500 text-sm font-medium mt-2">
-          Hiring partners who booked intros — contact details and interview history.
+          Hiring partners — intros, how many talents they hired, and their contracts.
         </p>
       </div>
 
@@ -287,6 +454,9 @@ const AdminClientsPanel = () => {
         </span>
         <span className="px-3 py-1.5 bg-red/5 border border-red/10 rounded-full text-[10px] font-black text-red uppercase tracking-widest">
           {stats.withIntros} with intros
+        </span>
+        <span className="px-3 py-1.5 bg-black text-white rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-1">
+          <Briefcase size={11} /> {stats.withHires} with hires
         </span>
       </div>
 
@@ -332,12 +502,12 @@ const AdminClientsPanel = () => {
       ) : (
         <div className="bg-white border border-gray-200 rounded-[2rem] overflow-hidden shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[720px]">
+            <table className="w-full min-w-[900px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/80">
-                  {['Client', 'Company', 'Status', 'Intros', 'Last intro', ''].map((h) => (
+                  {['Client', 'Company', 'Status', 'Hired', 'Contracts', 'Intros', 'Last intro', ''].map((h) => (
                     <th
-                      key={h}
+                      key={h || 'action'}
                       className="text-left text-[10px] font-black text-gray-400 uppercase tracking-widest px-5 py-4"
                     >
                       {h}
@@ -368,6 +538,18 @@ const AdminClientsPanel = () => {
                       </span>
                     </td>
                     <td className="px-5 py-4">
+                      <p className="font-black text-sm">{client.hiredTalentCount || 0}</p>
+                      {(client.activeHireCount || 0) > 0 && (
+                        <p className="text-[10px] text-green-700 font-bold">{client.activeHireCount} active</p>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
+                      <p className="font-black text-sm">{client.contractCount || 0}</p>
+                      {(client.signedContractCount || 0) > 0 && (
+                        <p className="text-[10px] text-gray-500 font-bold">{client.signedContractCount} signed</p>
+                      )}
+                    </td>
+                    <td className="px-5 py-4">
                       <p className="font-black text-sm">{client.introCount}</p>
                       {client.upcomingIntroCount > 0 && (
                         <p className="text-[10px] text-red font-bold">{client.upcomingIntroCount} upcoming</p>
@@ -382,7 +564,7 @@ const AdminClientsPanel = () => {
                         onClick={() => setSelectedId(client.id)}
                         className="px-4 py-2 bg-black hover:bg-red text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-colors"
                       >
-                        View intros
+                        View details
                       </button>
                     </td>
                   </tr>
