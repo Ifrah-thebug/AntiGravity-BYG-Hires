@@ -1,0 +1,6 @@
+<resources>
+    <!-- Launcher icon tile behind the BYG mark. -->
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <!-- Matches the in-app BrandLoader so splash -> loader has no flash. -->
+    <color name="splash_background">#FBFBFB</color>
+</resources>
