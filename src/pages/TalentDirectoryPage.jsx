@@ -78,10 +78,16 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
     parttime: '⚡ Part-Time',
   };
 
+  const hired = Boolean(talent.isHired);
+
   return (
     <div
       onClick={() => onSelect(talent)}
-      className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-[border-color,box-shadow] duration-300 flex flex-col cursor-pointer"
+      className={`group bg-white border rounded-3xl overflow-hidden transition-[border-color,box-shadow] duration-300 flex flex-col cursor-pointer ${
+        hired
+          ? 'border-gray-200 opacity-95'
+          : 'border-gray-100 hover:border-red/30 hover:shadow-xl hover:shadow-red/5'
+      }`}
     >
       {/* Photo container */}
       <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-50">
@@ -91,11 +97,15 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
             alt={talent.name}
             loading="lazy"
             decoding="async"
-            className="w-full h-full object-cover object-top md:group-hover:scale-105 md:transition-transform md:duration-500"
+            className={`w-full h-full object-cover object-top md:transition-transform md:duration-500 ${
+              hired ? 'scale-105 blur-[6px] brightness-90' : 'md:group-hover:scale-105'
+            }`}
           />
         ) : (
           <div
-            className="w-full h-full flex items-center justify-center text-white font-black text-5xl select-none"
+            className={`w-full h-full flex items-center justify-center text-white font-black text-5xl select-none ${
+              hired ? 'blur-[6px] brightness-90' : ''
+            }`}
             style={{
               background: `linear-gradient(135deg, hsl(${(talent.name.charCodeAt(0) * 37 + (talent.name.charCodeAt(1) || 0) * 17) % 360},55%,42%), hsl(${(talent.name.charCodeAt(0) * 37 + (talent.name.charCodeAt(1) || 0) * 17) % 360 + 40},60%,32%))`
             }}
@@ -104,20 +114,30 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           </div>
         )}
 
-        {/* Availability Badge */}
-        <div className="absolute bottom-3 right-3 bg-white border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
-          <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'from_month' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
-          <span>{formatAvailabilityLabel(talent.availability)}</span>
-        </div>
+        {hired ? (
+          <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none">
+            <span className="bg-white text-black text-[10px] font-black uppercase tracking-[0.18em] px-3 py-1.5 rounded-full shadow-lg">
+              Hired
+            </span>
+          </div>
+        ) : null}
 
-        {talent.ambassadorReferred ? (
+        {/* Availability Badge */}
+        {!hired ? (
+          <div className="absolute bottom-3 right-3 bg-white border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm">
+            <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : talent.availability === 'from_month' ? 'bg-indigo-500' : 'bg-gray-400'}`} />
+            <span>{formatAvailabilityLabel(talent.availability)}</span>
+          </div>
+        ) : null}
+
+        {talent.ambassadorReferred && !hired ? (
           <div className="absolute top-3 left-3">
             <AmbassadorReferredBadge compact />
           </div>
         ) : null}
 
         {/* Match Score Badge (Only show if > 0) */}
-        {showMatchBadge && (
+        {showMatchBadge && !hired && (
           <div className="absolute top-3 right-3 bg-black text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
             <span className="text-red">{talent.score || talent.match}%</span>
             <span>match</span>
@@ -150,15 +170,33 @@ const TalentCard = ({ talent, onSelect, canRequestIntro = true }) => {
           </span>
         </div>
 
-        {/* Monthly Fee */}
+        {/* Monthly Fee — hidden when hired */}
         <div className="h-[42px] flex flex-col justify-end mt-auto">
-          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">Monthly</p>
-          <p className="text-black font-black text-base leading-none">
-            ${talent.fee ? talent.fee.toLocaleString() : '0'}<span className="text-xs">{talent.period || '/mo'}</span>
+          <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">
+            {hired ? 'Rate' : 'Monthly'}
           </p>
+          {hired ? (
+            <p className="text-gray-400 font-black text-base leading-none tracking-wide">Private</p>
+          ) : (
+            <p className="text-black font-black text-base leading-none">
+              ${talent.fee ? talent.fee.toLocaleString() : '0'}
+              <span className="text-xs">{talent.period || '/mo'}</span>
+            </p>
+          )}
         </div>
 
-        {canRequestIntro ? (
+        {hired ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect(talent);
+            }}
+            className="w-full py-3.5 border border-gray-200 bg-gray-50 text-gray-600 text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-gray-100 transition-colors"
+          >
+            View profile
+          </button>
+        ) : canRequestIntro ? (
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -362,12 +400,24 @@ const TalentDirectoryPage = () => {
     // Filters
     if (filters.availability.length) list = list.filter(t => filters.availability.includes(t.availability));
     if (filters.roleType.length) list = list.filter(t => filters.roleType.includes(t.roleType));
-    list = list.filter(t => t.fee <= filters.maxFee);
+    list = list.filter((t) => t.isHired || (Number(t.fee) || 0) <= filters.maxFee);
 
     // Sort
     switch (sortBy) {
-      case 'fee-asc':  list = [...list].sort((a, b) => a.fee - b.fee); break;
-      case 'fee-desc': list = [...list].sort((a, b) => b.fee - a.fee); break;
+      case 'fee-asc':
+        list = [...list].sort((a, b) => {
+          if (a.isHired && !b.isHired) return 1;
+          if (!a.isHired && b.isHired) return -1;
+          return (Number(a.fee) || 0) - (Number(b.fee) || 0);
+        });
+        break;
+      case 'fee-desc':
+        list = [...list].sort((a, b) => {
+          if (a.isHired && !b.isHired) return 1;
+          if (!a.isHired && b.isHired) return -1;
+          return (Number(b.fee) || 0) - (Number(a.fee) || 0);
+        });
+        break;
       case 'name-asc': list = [...list].sort((a, b) => a.name.localeCompare(b.name)); break;
       case 'name-desc':list = [...list].sort((a, b) => b.name.localeCompare(a.name)); break;
       case 'score-desc':list = [...list].sort((a, b) => b.score - a.score); break;

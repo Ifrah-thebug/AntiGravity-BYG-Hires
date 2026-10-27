@@ -50,6 +50,8 @@ const StatusPage = lazy(() => import('./pages/StatusPage'));
 const AdminProfileReviewsPage = lazy(() => import('./pages/AdminProfileReviewsPage'));
 const AdminTalentImportPage = lazy(() => import('./pages/AdminTalentImportPage'));
 const AdminAmbassadorsPage = lazy(() => import('./pages/AdminAmbassadorsPage'));
+const AdminWorkforcePage = lazy(() => import('./pages/AdminWorkforcePage'));
+const WorkforcePortalPage = lazy(() => import('./pages/WorkforcePortalPage'));
 const TalentActivatePage = lazy(() => import('./pages/TalentActivatePage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
@@ -178,9 +180,19 @@ const AppContent = () => {
                 </AdminRoute>
               )}
             />
+            <Route
+              path="/admin/workforce"
+              element={(
+                <AdminRoute>
+                  <AdminWorkforcePage />
+                </AdminRoute>
+              )}
+            />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             <Route path="/talent-browse" element={<Navigate to="/talent" replace />} />
             <Route path="/talent/dashboard" element={<TalentDashboardPage />} />
+            <Route path="/talent/workforce" element={<WorkforcePortalPage roleHint="talent" />} />
+            <Route path="/client/workforce" element={<WorkforcePortalPage roleHint="client" />} />
             <Route path="/request-intro" element={<RequestIntroPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />
             <Route path="/delete-account" element={<DeleteAccountPage />} />

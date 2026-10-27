@@ -7,6 +7,7 @@ import { useClientSchedulingTimezone } from '../hooks/useClientSchedulingTimezon
 import { formatIntroSlotSummary } from '../lib/clientSchedulingTimezone';
 import IntroBookingAiInterviewAction from '../components/IntroBookingAiInterviewAction';
 import AiInterviewClientStatus from '../components/AiInterviewClientStatus';
+import { clientHireUrl } from '../lib/clientHireUrl';
 const API_BASE = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 
 async function parseApiJson(resp) {
@@ -199,6 +200,12 @@ export default function ClientDashboardPage() {
           <p className="text-gray-500 text-sm font-medium mt-2">
             Discovery calls and talent intros — times in your local timezone ({timeZoneLabel})
           </p>
+          <Link
+            to="/client/workforce"
+            className="mt-5 inline-flex items-center gap-2 rounded-full bg-red px-5 py-2.5 text-xs font-black uppercase tracking-widest text-white hover:bg-black transition-colors"
+          >
+            Hire talent & contracts <ArrowRight size={14} />
+          </Link>
         </motion.div>
 
         {loading && (
@@ -440,6 +447,18 @@ export default function ClientDashboardPage() {
                         </a>
                       )}
                     </div>
+
+                    {!isDiscovery && b.talentId && (
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <Link
+                          to={clientHireUrl({ talentId: b.talentId, talentName: b.talentName })}
+                          className="inline-flex items-center gap-2 rounded-xl bg-black px-5 py-3 text-white font-black text-xs uppercase tracking-widest hover:bg-red transition-colors"
+                        >
+                          Hire {b.talentName || 'talent'}
+                          <ArrowRight size={14} />
+                        </Link>
+                      </div>
+                    )}
 
                     {!isDiscovery && b.talentId && (
                       <IntroBookingAiInterviewAction

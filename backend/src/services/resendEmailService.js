@@ -838,6 +838,9 @@ async function sendHrScreenBookedEmail({ to, name, ambassadorName, whenLabel, me
 }
 
 module.exports = {
+  sendTransactionalEmail,
+  buildEmailLogoHtml,
+  buildEmailLinkButton,
   sendClientActivationEmail,
   sendTalentActivationEmail,
   sendTalentActivationReminderEmail,

@@ -27,6 +27,7 @@ const AMBASSADOR_NAV_LINKS = [
 const ADMIN_NAV_LINKS = [
   { name: 'Browse Candidates', href: '/admin/dashboard' },
   { name: 'Bulk CV Import', href: '/admin/talent/import' },
+  { name: 'Workforce', href: '/admin/workforce' },
   { name: 'Ambassadors', href: '/admin/ambassadors' },
   { name: 'Browse Clients', href: '/admin/clients' },
   { name: 'Profile reviews', href: '/admin/profile-reviews' },
@@ -70,6 +71,9 @@ function isNavLinkActive(pathname, href, hash = '') {
   }
   if (href === '/admin/ambassadors') {
     return pathname === '/admin/ambassadors';
+  }
+  if (href === '/admin/workforce') {
+    return pathname === '/admin/workforce' || pathname.startsWith('/admin/workforce/');
   }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
@@ -243,16 +247,28 @@ const Navbar = () => {
             {user ? (
               <div className="flex items-center gap-4 border-l border-gray-200 pl-6 ml-2">
                 {isClientUser && (
-                  <Link
-                    to="/client"
-                    className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
-                      pathname === '/client' || pathname.startsWith('/client/')
-                        ? 'text-red border-red'
-                        : 'text-black border-transparent hover:text-red'
-                    }`}
-                  >
-                    <LayoutDashboard size={15} /> My Dashboard
-                  </Link>
+                  <>
+                    <Link
+                      to="/client"
+                      className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                        pathname === '/client'
+                          ? 'text-red border-red'
+                          : 'text-black border-transparent hover:text-red'
+                      }`}
+                    >
+                      <LayoutDashboard size={15} /> My Dashboard
+                    </Link>
+                    <Link
+                      to="/client/workforce"
+                      className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                        pathname === '/client/workforce' || pathname.startsWith('/client/workforce/')
+                          ? 'text-red border-red'
+                          : 'text-black border-transparent hover:text-red'
+                      }`}
+                    >
+                      Hiring
+                    </Link>
+                  </>
                 )}
                 {isTalentUser && (
                   <>
@@ -275,6 +291,16 @@ const Navbar = () => {
                       }`}
                     >
                       <LayoutDashboard size={15} /> My Portal
+                    </Link>
+                    <Link
+                      to="/talent/workforce"
+                      className={`text-sm font-bold flex items-center gap-2 transition-colors border-b-2 pb-0.5 ${
+                        pathname === '/talent/workforce'
+                          ? 'text-red border-red'
+                          : 'text-black border-transparent hover:text-red'
+                      }`}
+                    >
+                      Contracts
                     </Link>
                   </>
                 )}
@@ -364,9 +390,18 @@ const Navbar = () => {
               {user ? (
                 <>
                   {isClientUser && (
-                    <Link to="/client" onClick={closeMobile} className={mobileLinkClass('/client')}>
-                      My Dashboard
-                    </Link>
+                    <>
+                      <Link to="/client" onClick={closeMobile} className={mobileLinkClass('/client')}>
+                        My Dashboard
+                      </Link>
+                      <Link
+                        to="/client/workforce"
+                        onClick={closeMobile}
+                        className={mobileLinkClass('/client/workforce')}
+                      >
+                        Hiring
+                      </Link>
+                    </>
                   )}
                   {isTalentUser && (
                     <>
@@ -375,6 +410,13 @@ const Navbar = () => {
                       </Link>
                       <Link to="/portal" onClick={closeMobile} className={mobileLinkClass('/portal')}>
                         My Portal
+                      </Link>
+                      <Link
+                        to="/talent/workforce"
+                        onClick={closeMobile}
+                        className={mobileLinkClass('/talent/workforce')}
+                      >
+                        Contracts
                       </Link>
                     </>
                   )}

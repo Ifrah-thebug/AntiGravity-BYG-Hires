@@ -42,7 +42,35 @@ export function mapProfileToDirectoryTalent(profile, scoreMap = {}, aiBadgeMap =
     roleType: profile.role_type || 'flexible',
     bio: profile.about || 'No bio provided.',
     period: '/mo',
+    isHired: false,
   };
+}
+
+function apiRoot() {
+  const configured = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+  if (import.meta.env.DEV) return '';
+  return configured;
+}
+
+/** Open workforce hires → profile ids (public, no rates/PII). */
+export async function fetchHiredProfileIdSet() {
+  try {
+    const resp = await fetch(`${apiRoot()}/api/workforce/directory-hired`);
+    if (!resp.ok) return new Set();
+    const data = await resp.json().catch(() => ({}));
+    return new Set(Array.isArray(data.profileIds) ? data.profileIds : []);
+  } catch {
+    return new Set();
+  }
+}
+
+/** Blur/hired treatment: strip public rates for placed talent. */
+export function applyDirectoryHiredFlags(talents, hiredIds) {
+  const set = hiredIds instanceof Set ? hiredIds : new Set(hiredIds || []);
+  return (talents || []).map((t) => {
+    if (!t?.id || !set.has(t.id)) return { ...t, isHired: Boolean(t.isHired) };
+    return { ...t, isHired: true, fee: null };
+  });
 }
 
 async function fetchApprovedProfiles({ limit } = {}) {
@@ -73,11 +101,15 @@ async function fetchApprovedProfiles({ limit } = {}) {
 
 async function enrichProfiles(profiles) {
   const profileIds = profiles.map((p) => p.id).filter(Boolean);
-  const [scoreMap, aiBadgeMap] = await Promise.all([
+  const [scoreMap, aiBadgeMap, hiredIds] = await Promise.all([
     fetchPublicSkillScores(profileIds).catch(() => ({})),
     fetchPublicAiInterviewBadges(profileIds).catch(() => ({})),
+    fetchHiredProfileIdSet(),
   ]);
-  return profiles.map((p) => mapProfileToDirectoryTalent(p, scoreMap, aiBadgeMap));
+  return applyDirectoryHiredFlags(
+    profiles.map((p) => mapProfileToDirectoryTalent(p, scoreMap, aiBadgeMap)),
+    hiredIds
+  );
 }
 
 /**
@@ -105,7 +137,11 @@ export async function fetchLiveDirectoryTalents(opts = {}) {
       return memoryCache.enriched;
     }
     if (cacheFresh) {
-      const fast = memoryCache.profiles.map((p) => mapProfileToDirectoryTalent(p));
+      const hiredIds = await fetchHiredProfileIdSet();
+      const fast = applyDirectoryHiredFlags(
+        memoryCache.profiles.map((p) => mapProfileToDirectoryTalent(p)),
+        hiredIds
+      );
       if (typeof onPartial === 'function') onPartial(fast);
       if (!enrich) return fast;
       const enriched = await enrichProfiles(memoryCache.profiles);
@@ -114,8 +150,14 @@ export async function fetchLiveDirectoryTalents(opts = {}) {
     }
   }
 
-  const profiles = await fetchApprovedProfiles({ limit });
-  const fast = profiles.map((p) => mapProfileToDirectoryTalent(p));
+  const [profiles, hiredIds] = await Promise.all([
+    fetchApprovedProfiles({ limit }),
+    fetchHiredProfileIdSet(),
+  ]);
+  const fast = applyDirectoryHiredFlags(
+    profiles.map((p) => mapProfileToDirectoryTalent(p)),
+    hiredIds
+  );
   if (!limited) {
     memoryCache = { at: now, profiles, enriched: null };
   }

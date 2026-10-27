@@ -1,6 +1,9 @@
 import { supabase } from './supabase';
 
-const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
+/** Prefer same-origin /api in Vite so proxy hits :5001 (avoids CORS Failed to fetch). */
+const API_BASE = import.meta.env.DEV
+  ? ''
+  : (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5001').replace(/\/$/, '');
 
 async function getAuthHeaders() {
   const { data: { session } } = await supabase.auth.getSession();

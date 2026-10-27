@@ -95,7 +95,7 @@ function summarizeIntros(intros) {
   };
 }
 
-function mapClientRow(client, intros) {
+function mapClientRow(client, intros, workforce = {}) {
   const stats = summarizeIntros(intros);
   return {
     id: client.id,
@@ -110,7 +110,173 @@ function mapClientRow(client, intros) {
     introCount: stats.total,
     upcomingIntroCount: stats.upcoming,
     lastIntroAt: stats.lastIntroAt,
+    hiredTalentCount: workforce.hiredTalentCount || 0,
+    activeHireCount: workforce.activeHireCount || 0,
+    engagementCount: workforce.engagementCount || 0,
+    contractCount: workforce.contractCount || 0,
+    signedContractCount: workforce.signedContractCount || 0,
   };
+}
+
+function isMissingWorkforceSchema(err) {
+  const msg = String(err?.message || err?.details || '');
+  return /does not exist|schema cache|Could not find the table/i.test(msg);
+}
+
+/** Aggregate hire/contract counts per client email from Workforce tables. */
+async function fetchWorkforceSummaryByEmail() {
+  const byEmail = new Map();
+  const empty = () => ({
+    hiredTalentCount: 0,
+    activeHireCount: 0,
+    engagementCount: 0,
+    contractCount: 0,
+    signedContractCount: 0,
+    talentEmails: new Set(),
+    engagementIds: [],
+  });
+
+  try {
+    const { data: engagements, error: engErr } = await supabaseAdmin
+      .from('wf_engagements')
+      .select('id, client_email, talent_email, status');
+    if (engErr) throw engErr;
+
+    for (const row of engagements || []) {
+      const email = normalizeEmail(row.client_email);
+      if (!email) continue;
+      if (!byEmail.has(email)) byEmail.set(email, empty());
+      const bucket = byEmail.get(email);
+      bucket.engagementCount += 1;
+      bucket.engagementIds.push(row.id);
+      if (row.talent_email) bucket.talentEmails.add(normalizeEmail(row.talent_email));
+      if (['active', 'contracted', 'offered', 'paused'].includes(row.status)) {
+        bucket.activeHireCount += 1;
+      }
+    }
+
+    const allEngIds = [...byEmail.values()].flatMap((b) => b.engagementIds);
+    if (allEngIds.length) {
+      const { data: contracts, error: cErr } = await supabaseAdmin
+        .from('wf_contracts')
+        .select('id, engagement_id, status')
+        .in('engagement_id', allEngIds)
+        .neq('status', 'void');
+      if (cErr) throw cErr;
+
+      const engToEmail = new Map();
+      for (const [email, bucket] of byEmail) {
+        for (const id of bucket.engagementIds) engToEmail.set(id, email);
+      }
+      for (const c of contracts || []) {
+        const email = engToEmail.get(c.engagement_id);
+        if (!email || !byEmail.has(email)) continue;
+        const bucket = byEmail.get(email);
+        bucket.contractCount += 1;
+        if (c.status === 'signed') bucket.signedContractCount += 1;
+      }
+    }
+
+    for (const bucket of byEmail.values()) {
+      bucket.hiredTalentCount = bucket.talentEmails.size;
+      delete bucket.talentEmails;
+      delete bucket.engagementIds;
+    }
+  } catch (err) {
+    if (!isMissingWorkforceSchema(err)) {
+      console.warn('[admin/clients] workforce summary:', err?.message || err);
+    }
+  }
+
+  return byEmail;
+}
+
+/** Engagements + contracts (+ signature summary) for one client email. */
+async function fetchWorkforceDetailForClient(clientEmail) {
+  const email = normalizeEmail(clientEmail);
+  if (!email) return { engagements: [], contracts: [] };
+
+  try {
+    const { data: engRows, error: engErr } = await supabaseAdmin
+      .from('wf_engagements')
+      .select('id, talent_email, talent_name, role_title, status, start_date, end_date, created_at, client_email, client_name')
+      .ilike('client_email', email)
+      .order('created_at', { ascending: false });
+    if (engErr) throw engErr;
+
+    const engagements = (engRows || []).map((r) => ({
+      id: r.id,
+      talentEmail: r.talent_email,
+      talentName: r.talent_name,
+      roleTitle: r.role_title,
+      status: r.status,
+      startDate: r.start_date,
+      endDate: r.end_date,
+      createdAt: r.created_at,
+      clientEmail: r.client_email,
+      clientName: r.client_name,
+    }));
+
+    const engIds = engagements.map((e) => e.id);
+    if (!engIds.length) return { engagements, contracts: [] };
+
+    const { data: contractRows, error: cErr } = await supabaseAdmin
+      .from('wf_contracts')
+      .select('id, engagement_id, status, ai_review_status, rendered_html, created_at, updated_at')
+      .in('engagement_id', engIds)
+      .neq('status', 'void')
+      .order('created_at', { ascending: false });
+    if (cErr) throw cErr;
+
+    const contractIds = (contractRows || []).map((c) => c.id);
+    let sigsByContract = new Map();
+    if (contractIds.length) {
+      const { data: sigs, error: sErr } = await supabaseAdmin
+        .from('wf_signatures')
+        .select('id, contract_id, role, signed_at, signer_email')
+        .in('contract_id', contractIds);
+      if (!sErr) {
+        for (const s of sigs || []) {
+          if (!sigsByContract.has(s.contract_id)) sigsByContract.set(s.contract_id, []);
+          sigsByContract.get(s.contract_id).push({
+            id: s.id,
+            role: s.role,
+            signedAt: s.signed_at,
+            signerEmail: s.signer_email,
+          });
+        }
+      }
+    }
+
+    const engById = new Map(engagements.map((e) => [e.id, e]));
+    const contracts = (contractRows || []).map((c) => {
+      const eng = engById.get(c.engagement_id);
+      const signatures = sigsByContract.get(c.id) || [];
+      return {
+        id: c.id,
+        engagementId: c.engagement_id,
+        status: c.status,
+        aiReviewStatus: c.ai_review_status,
+        createdAt: c.created_at,
+        updatedAt: c.updated_at,
+        hasHtml: Boolean(c.rendered_html),
+        renderedHtml: c.rendered_html || null,
+        signatures,
+        signedRoles: signatures.filter((s) => s.signedAt).map((s) => s.role),
+        talentName: eng?.talentName || null,
+        talentEmail: eng?.talentEmail || null,
+        roleTitle: eng?.roleTitle || null,
+        engagementStatus: eng?.status || null,
+      };
+    });
+
+    return { engagements, contracts };
+  } catch (err) {
+    if (!isMissingWorkforceSchema(err)) {
+      console.warn('[admin/clients] workforce detail:', err?.message || err);
+    }
+    return { engagements: [], contracts: [] };
+  }
 }
 
 /** GET /api/admin/clients — all clients with intro summary */
@@ -162,6 +328,8 @@ router.get('/', async (req, res) => {
       }
     }
 
+    const workforceByEmail = await fetchWorkforceSummaryByEmail();
+
     let rows = (clients || []).map((client) => {
       const byId = introsByClientId.get(client.id) || [];
       const byEmail = introsByEmail.get(normalizeEmail(client.email)) || [];
@@ -170,7 +338,8 @@ router.get('/', async (req, res) => {
       const intros = [...merged.values()].sort(
         (a, b) => new Date(b.startAt || 0) - new Date(a.startAt || 0)
       );
-      return mapClientRow(client, intros);
+      const wf = workforceByEmail.get(normalizeEmail(client.email)) || {};
+      return mapClientRow(client, intros, wf);
     });
 
     if (search) {
@@ -186,7 +355,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-/** GET /api/admin/clients/:id — client detail + intros */
+/** GET /api/admin/clients/:id — client detail + intros + workforce hires/contracts */
 router.get('/:id', async (req, res) => {
   try {
     if (!supabaseAdmin) {
@@ -205,10 +374,25 @@ router.get('/:id', async (req, res) => {
     if (!client) return res.status(404).json({ error: 'Client not found.' });
 
     const intros = await fetchIntrosForClient(client);
+    const workforce = await fetchWorkforceDetailForClient(client.email);
+    const talentEmails = new Set(
+      workforce.engagements.map((e) => normalizeEmail(e.talentEmail)).filter(Boolean)
+    );
+    const wfSummary = {
+      hiredTalentCount: talentEmails.size,
+      activeHireCount: workforce.engagements.filter((e) =>
+        ['active', 'contracted', 'offered', 'paused'].includes(e.status)
+      ).length,
+      engagementCount: workforce.engagements.length,
+      contractCount: workforce.contracts.length,
+      signedContractCount: workforce.contracts.filter((c) => c.status === 'signed').length,
+    };
 
     return res.json({
-      client: mapClientRow(client, intros),
+      client: mapClientRow(client, intros, wfSummary),
       intros,
+      engagements: workforce.engagements,
+      contracts: workforce.contracts,
     });
   } catch (err) {
     console.error('[admin/clients detail]', err?.message || err);

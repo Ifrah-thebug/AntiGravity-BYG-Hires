@@ -47,6 +47,7 @@ function messageFromApi(data, fallback) {
 
 function ExistingIntroPanel({
   booking,
+  talentId,
   talentName,
   isRepeatVisit,
   syncNotice,
@@ -55,6 +56,9 @@ function ExistingIntroPanel({
   isLoggedInClient = false,
 }) {
   const summary = formatIntroSlotSummary(booking.start, clientTimeZone);
+  const hireHref = talentId
+    ? `/client/workforce?hire=${encodeURIComponent(talentId)}&name=${encodeURIComponent(talentName || '')}`
+    : '/client/workforce';
 
   return (
     <div className="py-10 sm:py-16 px-4 sm:px-8 text-center max-w-md mx-auto">
@@ -110,13 +114,24 @@ function ExistingIntroPanel({
         </p>
       )}
       {isLoggedInClient && (
-        <p className="text-[11px] text-gray-500 mt-4">
-          This intro is on your{' '}
-          <a href="/client" className="font-bold text-red hover:underline">
-            client dashboard
+        <div className="mt-6 space-y-3">
+          <p className="text-[11px] text-gray-500">
+            After the call, hire here to start the BYG contract — salary, sign, invoice.
+          </p>
+          <a
+            href={hireHref}
+            className="inline-flex items-center justify-center w-full rounded-xl bg-black text-white px-5 py-3.5 text-xs font-black uppercase tracking-widest hover:bg-red transition-colors"
+          >
+            Hire {talentName || 'this talent'}
           </a>
-          .
-        </p>
+          <p className="text-[11px] text-gray-500">
+            Or open your{' '}
+            <a href="/client" className="font-bold text-red hover:underline">
+              client dashboard
+            </a>
+            .
+          </p>
+        </div>
       )}
     </div>
   );
@@ -302,6 +317,7 @@ export default function IntroSlotPicker({
     return (
       <ExistingIntroPanel
         booking={existingIntro}
+        talentId={talentId}
         talentName={talentName}
         isRepeatVisit
         syncNotice={syncNotice}
@@ -316,6 +332,7 @@ export default function IntroSlotPicker({
     return (
       <ExistingIntroPanel
         booking={justBooked}
+        talentId={talentId}
         talentName={talentName}
         isRepeatVisit={false}
         clientTimeZone={clientTimeZone}
