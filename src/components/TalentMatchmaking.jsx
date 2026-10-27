@@ -479,6 +479,7 @@ const TalentMatchmaking = () => {
             {displayed.map((talent, i) => {
               const showMatchBadge =
                 SHOW_ASSESSMENT_SCORE && Boolean(talent.verified) && Number(talent.match) > 0;
+              const hired = Boolean(talent.isHired);
               return (
               <motion.div
                 key={talent.id}
@@ -486,7 +487,11 @@ const TalentMatchmaking = () => {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.07 }}
                 onClick={() => setSelectedTalent(talent)}
-                className="group bg-white border border-gray-100 rounded-3xl overflow-hidden hover:border-red/30 hover:shadow-xl hover:shadow-red/5 transition-all duration-300 flex flex-col cursor-pointer"
+                className={`group bg-white border rounded-3xl overflow-hidden transition-all duration-300 flex flex-col cursor-pointer ${
+                  hired
+                    ? 'border-gray-200'
+                    : 'border-gray-100 hover:border-red/30 hover:shadow-xl hover:shadow-red/5'
+                }`}
               >
                 {/* Photo */}
                 <div className="relative w-full aspect-[4/5] overflow-hidden bg-gray-50">
@@ -494,11 +499,15 @@ const TalentMatchmaking = () => {
                     <img
                       src={talent.photo}
                       alt={talent.name}
-                      className="w-full h-full object-cover object-top group-hover:scale-105 transition-transform duration-500"
+                      className={`w-full h-full object-cover object-top transition-transform duration-500 ${
+                        hired ? 'scale-105 blur-[6px] brightness-90' : 'group-hover:scale-105'
+                      }`}
                     />
                   ) : (
                     <div
-                      className="w-full h-full flex items-center justify-center text-white font-black text-3xl"
+                      className={`w-full h-full flex items-center justify-center text-white font-black text-3xl ${
+                        hired ? 'blur-[6px] brightness-90' : ''
+                      }`}
                       style={{
                         background: `linear-gradient(135deg, hsl(${(talent.name.charCodeAt(0) * 37) % 360},55%,42%), hsl(${((talent.name.charCodeAt(0) * 37) + 40) % 360},60%,32%))`,
                       }}
@@ -506,14 +515,23 @@ const TalentMatchmaking = () => {
                       {talent.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
                   )}
+                  {hired ? (
+                    <div className="absolute inset-0 bg-black/35 flex items-center justify-center pointer-events-none z-10">
+                      <span className="bg-white text-black text-[10px] font-black uppercase tracking-[0.18em] px-3 py-1.5 rounded-full shadow-lg">
+                        Hired
+                      </span>
+                    </div>
+                  ) : null}
                   {/* Availability Badge */}
-                  <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm z-10">
-                    <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
-                    <span>{formatAvailabilityLabel(talent.availability)}</span>
-                  </div>
+                  {!hired ? (
+                    <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm border border-gray-100 text-black text-[9px] font-black px-2.5 py-1 rounded-full flex items-center gap-1 shadow-sm z-10">
+                      <span className={`w-1.5 h-1.5 rounded-full ${talent.availability === 'immediate' ? 'bg-green-500 animate-pulse' : talent.availability === '2weeks' ? 'bg-yellow-500' : 'bg-gray-400'}`} />
+                      <span>{formatAvailabilityLabel(talent.availability)}</span>
+                    </div>
+                  ) : null}
 
                   {/* Match Score Badge */}
-                  {showMatchBadge && (
+                  {showMatchBadge && !hired && (
                     <div className="absolute top-3 right-3 bg-black text-white text-[10px] font-black px-2.5 py-1 rounded-full flex items-center gap-1">
                       <span className="text-red">{talent.match}%</span>
                       <span>match</span>
@@ -545,15 +563,33 @@ const TalentMatchmaking = () => {
                     </span>
                   </div>
 
-                  {/* Monthly Fee */}
+                  {/* Monthly Fee — hidden when hired */}
                   <div className="h-[42px] flex flex-col justify-end mt-auto">
-                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">Monthly</p>
-                    <p className="text-black font-black text-base leading-none">
-                      ${talent.fee ? talent.fee.toLocaleString() : '0'}<span className="text-xs">{talent.period || '/mo'}</span>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest mb-1.5">
+                      {hired ? 'Rate' : 'Monthly'}
                     </p>
+                    {hired ? (
+                      <p className="text-gray-400 font-black text-base leading-none tracking-wide">Private</p>
+                    ) : (
+                      <p className="text-black font-black text-base leading-none">
+                        ${talent.fee ? talent.fee.toLocaleString() : '0'}
+                        <span className="text-xs">{talent.period || '/mo'}</span>
+                      </p>
+                    )}
                   </div>
 
-                  {canRequestIntro ? (
+                  {hired ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedTalent(talent);
+                      }}
+                      className="w-full py-3.5 border border-gray-200 bg-gray-50 text-gray-600 text-[10px] font-black tracking-widest uppercase rounded-xl hover:bg-gray-100 transition-colors"
+                    >
+                      View profile
+                    </button>
+                  ) : canRequestIntro ? (
                     <button
                       onClick={(e) => {
                         e.stopPropagation();

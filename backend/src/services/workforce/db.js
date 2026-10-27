@@ -427,6 +427,46 @@ const supabaseStore = {
     return rows.map((r) => mapEngagement(r, salaries.get(r.id) || null));
   },
 
+  /**
+   * Profile ids for talents with an open workforce hire (offered → paused).
+   * Used by the public directory to blur cards and hide rates — no PII returned.
+   */
+  async listHiredDirectoryProfileIds() {
+    const { data: rows, error } = await supabaseAdmin
+      .from('wf_engagements')
+      .select('talent_user_id, talent_email')
+      .in('status', OPEN_ENGAGEMENT);
+    check(error);
+
+    const userIds = [...new Set((rows || []).map((r) => r.talent_user_id).filter(Boolean))];
+    const emails = [
+      ...new Set(
+        (rows || [])
+          .map((r) => normalizeEmail(r.talent_email))
+          .filter(Boolean)
+      ),
+    ];
+
+    const ids = new Set();
+
+    if (userIds.length) {
+      const { data, error: uErr } = await supabaseAdmin.from('profiles').select('id').in('user_id', userIds);
+      check(uErr);
+      for (const p of data || []) if (p?.id) ids.add(p.id);
+    }
+
+    if (emails.length) {
+      const { data, error: eErr } = await supabaseAdmin.from('profiles').select('id').in('email', emails);
+      if (eErr) {
+        console.warn('[workforce] hired profile email lookup:', eErr.message || eErr);
+      } else {
+        for (const p of data || []) if (p?.id) ids.add(p.id);
+      }
+    }
+
+    return [...ids];
+  },
+
   async getEngagement(id) {
     const { data, error } = await supabaseAdmin.from('wf_engagements').select('*').eq('id', id).maybeSingle();
     check(error);

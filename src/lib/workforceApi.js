@@ -95,10 +95,20 @@ export const fetchMyWorkforceInvoices = () => authFetch('/api/workforce/me/invoi
 export const fetchMyInvoiceDocument = (invoiceId) => authFetch(`/api/workforce/me/invoices/${invoiceId}`);
 export const payInvoiceWithTap = (invoiceId) => post(`/api/workforce/me/invoices/${invoiceId}/pay-tap`);
 export const payInvoiceWithWallet = (invoiceId) => post(`/api/workforce/me/invoices/${invoiceId}/pay-wallet`);
+/** Offline/test pay — marks invoice paid and emails BYG to release talent payout. */
+export const payInvoiceManually = (invoiceId, { reference, note } = {}) =>
+  post(`/api/workforce/me/invoices/${invoiceId}/pay-manual`, { reference, note });
 export const fetchMyWallet = () => authFetch('/api/workforce/me/wallet');
 export const topUpWallet = (amount, currency) => post('/api/workforce/me/wallet/topup', { amount, currency });
 export const setWalletAutoPay = (currency, autoPay) => post('/api/workforce/me/wallet/auto-pay', { currency, autoPay });
 export const fetchMyTalentOptions = () => authFetch('/api/workforce/me/talent-options');
+/** Client/admin hire preview — HR dossier (not public directory). */
+export const fetchMyTalentHrDetails = (talentId) =>
+  authFetch(`/api/workforce/me/talent/${encodeURIComponent(talentId)}/hr-details`);
+export const fetchAdminTalentHrDetails = (talentId) =>
+  authFetch(`/api/workforce/admin/talent/${encodeURIComponent(talentId)}/hr-details`);
+export const fetchAdminHrDetailsByEmail = (email) =>
+  authFetch(`/api/workforce/admin/hr-details?email=${encodeURIComponent(email)}`);
 export const previewWorkforceContract = (body) => post('/api/workforce/me/contract-preview', body);
 export const clientHireTalent = (body) => post('/api/workforce/me/hire', body);
 export const changeContractStartDate = (contractId, startDate) =>

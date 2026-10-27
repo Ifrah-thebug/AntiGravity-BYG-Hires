@@ -12,6 +12,8 @@ import TalentModalSkillTags from './TalentModalSkillTags';
 import { SHOW_ASSESSMENT_SCORE } from '../lib/talentVerification';
 import { clientHireUrl } from '../lib/clientHireUrl';
 import { useAuth } from '../context/AuthContext';
+import { useAccountType } from '../hooks/useAccountType';
+import TalentHrDetailsCard from './workforce/TalentHrDetailsCard';
 
 const ROLE_TYPE_LABELS = {
   night: 'Night Role',
@@ -51,10 +53,17 @@ export default function DirectoryTalentModal({
 }) {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const accountType = useAccountType(user);
+  const isAdmin = accountType === 'admin';
+  const isClient = accountType === 'client';
+  const canViewHrDetails = isAdmin || isClient;
+  const hireForClient = isClient;
+
   if (!talent) return null;
 
-  const role = String(user?.user_metadata?.role || user?.app_metadata?.role || '').toLowerCase();
-  const hireForClient = Boolean(user) && role !== 'talent' && role !== 'ambassador';
+  const hired = Boolean(talent.isHired);
+  const showIntro = canRequestIntro && !hired;
+  const showHire = hireForClient && talent.id && !hired;
 
   const card = (
     <motion.div
@@ -67,7 +76,7 @@ export default function DirectoryTalentModal({
           ? { type: 'spring', stiffness: 280, damping: 26 }
           : { duration: 0.35 }
       }
-      className="bg-white rounded-[2.5rem] max-w-2xl w-full shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto"
+      className="bg-white rounded-[2.5rem] max-w-2xl w-full shadow-2xl overflow-hidden max-h-[90vh] overflow-y-auto pb-2"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="bg-black text-white p-8 relative overflow-hidden">
@@ -83,8 +92,24 @@ export default function DirectoryTalentModal({
           </button>
         )}
         <div className="flex items-start gap-6 relative z-10">
-          <Avatar name={talent.name} photo={talent.photo} size="w-48 h-48 text-5xl" />
+          <div className={`relative ${hired ? 'opacity-90' : ''}`}>
+            <div className={hired ? 'blur-[5px] brightness-90' : ''}>
+              <Avatar name={talent.name} photo={talent.photo} size="w-48 h-48 text-5xl" />
+            </div>
+            {hired ? (
+              <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="bg-white text-black text-[10px] font-black uppercase tracking-[0.18em] px-3 py-1.5 rounded-full shadow-lg">
+                  Hired
+                </span>
+              </span>
+            ) : null}
+          </div>
           <div>
+            {hired ? (
+              <span className="inline-flex mb-2 bg-white/15 border border-white/20 text-white text-[9px] font-black uppercase tracking-[0.18em] px-2.5 py-1 rounded-full">
+                Currently hired
+              </span>
+            ) : null}
             <ProfileVerificationBadge talent={talent} variant="dark" />
             <AiInterviewVerifiedBadge talent={talent} variant="dark" />
             {talent.ambassadorReferred ? (
@@ -122,7 +147,7 @@ export default function DirectoryTalentModal({
         )}
       </div>
 
-      <div className="p-8 space-y-6">
+      <div className="p-8 pb-10 space-y-6">
         <div>
           <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">About</p>
           <p className="text-gray-700 text-sm font-medium leading-relaxed">{talent.bio}</p>
@@ -138,8 +163,10 @@ export default function DirectoryTalentModal({
         <div className="grid grid-cols-2 gap-4">
           {[
             {
-              label: 'Monthly Fee',
-              value: `$${(talent.fee || 0).toLocaleString()}${talent.period || '/mo'}`,
+              label: hired ? 'Rate' : 'Monthly Fee',
+              value: hired
+                ? 'Private'
+                : `$${(talent.fee || 0).toLocaleString()}${talent.period || '/mo'}`,
             },
             { label: 'Availability', value: formatAvailabilityLabel(talent.availability) },
             {
@@ -152,38 +179,48 @@ export default function DirectoryTalentModal({
               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">
                 {label}
               </p>
-              <p className="font-black text-gray-900 text-sm">{value}</p>
+              <p className={`font-black text-sm ${hired && label === 'Rate' ? 'text-gray-400' : 'text-gray-900'}`}>
+                {value}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-3 pt-2">
-          {canRequestIntro && (
+        <div className="grid grid-cols-1 gap-3 pt-2 sm:grid-cols-2">
+          {showIntro && (
             <button
               type="button"
               onClick={() => navigate(`/request-intro?id=${talent.id}`)}
-              className="flex-1 min-w-[10rem] py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
+              className="w-full py-4 bg-black hover:bg-red text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg whitespace-nowrap"
             >
               Request Intro <ArrowRight size={14} />
             </button>
           )}
-          {hireForClient && talent.id ? (
+          {showHire ? (
             <button
               type="button"
               onClick={() =>
                 navigate(clientHireUrl({ talentId: talent.id, talentName: talent.name }))
               }
-              className="flex-1 min-w-[10rem] py-4 bg-red hover:bg-[#c41e1e] text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg"
+              className="w-full py-4 bg-red hover:bg-[#c41e1e] text-white font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center flex items-center justify-center gap-2 shadow-lg whitespace-nowrap"
             >
               Hire <ArrowRight size={14} />
             </button>
+          ) : null}
+          {canViewHrDetails && talent.id ? (
+            <TalentHrDetailsCard
+              variant={isAdmin ? 'admin' : 'client'}
+              talentId={talent.id}
+              talentName={talent.name}
+              buttonClassName="w-full py-4 bg-white hover:bg-gray-50 border border-gray-200 text-gray-800 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors text-center inline-flex items-center justify-center gap-2 whitespace-nowrap"
+            />
           ) : null}
           {footerExtra}
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className={`${canRequestIntro || footerExtra || hireForClient ? 'px-6' : 'flex-1'} py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors`}
+              className="w-full py-4 bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-600 font-black text-xs uppercase tracking-widest rounded-2xl transition-colors whitespace-nowrap"
             >
               Close
             </button>

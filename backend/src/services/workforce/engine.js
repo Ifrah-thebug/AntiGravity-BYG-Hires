@@ -272,6 +272,18 @@ function createWorkforceEngine(seedStore) {
       .map((eng) => ({ ...eng, salary: getOpenSalary(eng.id) }));
   }
 
+  /** Memory store: open hires keyed by talentUserId (tests have no profiles table). */
+  function listHiredDirectoryProfileIds() {
+    return [
+      ...new Set(
+        listEngagements()
+          .filter((e) => OPEN_ENGAGEMENT.includes(e.status))
+          .map((e) => e.talentUserId)
+          .filter(Boolean)
+      ),
+    ];
+  }
+
   function updateEngagementStatus(id, status, { reason = null, endDate = null } = {}, actorEmail = null) {
     assert(ENGAGEMENT_STATUSES.includes(status), 'INVALID_STATUS', 'Invalid engagement status');
     const eng = engRow(id);
@@ -944,6 +956,7 @@ function createWorkforceEngine(seedStore) {
     db,
     createEngagement,
     listEngagements,
+    listHiredDirectoryProfileIds,
     getEngagement,
     updateEngagementStatus,
     createContractFromTemplate,

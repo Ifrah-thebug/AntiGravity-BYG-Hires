@@ -6,7 +6,11 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
 import { isDirectoryLive } from '../lib/profileReview';
-import { mapProfileToDirectoryTalent } from '../lib/liveDirectoryTalents';
+import {
+  applyDirectoryHiredFlags,
+  fetchHiredProfileIdSet,
+  mapProfileToDirectoryTalent,
+} from '../lib/liveDirectoryTalents';
 import { fetchPublicSkillScores } from '../services/assessmentService';
 import { fetchPublicAiInterviewBadges } from '../services/voiceInterviewService';
 import { sanitizeTalentForPublicDisplay } from '../lib/talentVerification';
@@ -21,6 +25,7 @@ const TalentProfilePage = () => {
   const [profile, setProfile] = useState(null);
   const [scoreMap, setScoreMap] = useState({});
   const [aiBadgeMap, setAiBadgeMap] = useState({});
+  const [isHired, setIsHired] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -43,12 +48,14 @@ const TalentProfilePage = () => {
       return;
     }
 
-    const [scores, badges] = await Promise.all([
+    const [scores, badges, hiredIds] = await Promise.all([
       fetchPublicSkillScores([data.id].filter(Boolean)),
       fetchPublicAiInterviewBadges([data.id]).catch(() => ({})),
+      fetchHiredProfileIdSet(),
     ]);
     setScoreMap(scores);
     setAiBadgeMap(badges);
+    setIsHired(hiredIds.has(data.id));
     setProfile(data);
     setLoading(false);
   };
@@ -59,8 +66,9 @@ const TalentProfilePage = () => {
   const directoryTalent = useMemo(() => {
     if (!profile) return null;
     const mapped = mapProfileToDirectoryTalent(profile, scoreMap, aiBadgeMap);
-    return sanitizeTalentForPublicDisplay(mapped);
-  }, [profile, scoreMap, aiBadgeMap]);
+    const [withHire] = applyDirectoryHiredFlags([mapped], isHired ? [mapped.id] : []);
+    return sanitizeTalentForPublicDisplay(withHire);
+  }, [profile, scoreMap, aiBadgeMap, isHired]);
 
   if (loading) {
     return (

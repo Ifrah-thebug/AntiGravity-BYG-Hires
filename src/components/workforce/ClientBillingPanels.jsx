@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { CreditCard, FileDown, Landmark, Receipt, Wallet, Zap } from 'lucide-react';
 import {
   fetchMyInvoiceDocument,
+  payInvoiceManually,
   payInvoiceWithTap,
   payInvoiceWithWallet,
   setWalletAutoPay,
@@ -20,12 +21,25 @@ export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, r
     return rank(a) - rank(b) || (a.createdAt < b.createdAt ? 1 : -1);
   });
 
+  const payManual = (inv) => {
+    const reference = window.prompt(
+      'Optional payment reference (bank transfer ID, cheque no., or leave blank for test):',
+      ''
+    );
+    if (reference === null) return; // cancelled
+    run(
+      `manual-${inv.id}`,
+      () => payInvoiceManually(inv.id, { reference: reference.trim() || undefined, note: 'Client manual / test payment' }),
+      'Manual payment recorded — BYG Hires will release the talent payout.'
+    );
+  };
+
   return (
     <Card>
       <SectionTitle
         icon={Receipt}
         title="Invoices"
-        hint="Each billing period is invoiced in advance. Pay by card, or keep a wallet balance and turn on auto-pay."
+        hint="Pay by card, wallet, or mark a manual/offline payment (BYG confirms and pays the talent)."
       />
       {sorted.length === 0 ? (
         <EmptyState icon={Receipt} title="No invoices yet">
@@ -88,6 +102,19 @@ export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, r
                     >
                       <BusyLabel busy={busy === `wallet-${inv.id}`} busyText="Paying…">
                         <Wallet size={12} /> Pay from wallet
+                      </BusyLabel>
+                    </button>
+                  ) : null}
+                  {unpaid ? (
+                    <button
+                      type="button"
+                      disabled={!!busy}
+                      title="Mark as paid offline / for testing — notifies BYG Hires"
+                      onClick={() => payManual(inv)}
+                      className={btn.small}
+                    >
+                      <BusyLabel busy={busy === `manual-${inv.id}`} busyText="Recording…">
+                        <Landmark size={12} /> Pay manually
                       </BusyLabel>
                     </button>
                   ) : null}

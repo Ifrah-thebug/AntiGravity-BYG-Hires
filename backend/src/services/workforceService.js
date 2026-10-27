@@ -173,6 +173,32 @@ async function runBilling({ asOf, leadDays } = {}, actorEmail = 'system:billing'
   return { asOf: date, issued: out.length, autoPaid: out.filter((i) => i.status === 'paid').length, invoices: out };
 }
 
+/**
+ * Client offline/manual pay (test phase + bank transfers).
+ * Marks invoice paid, queues talent payout, emails BYG admins.
+ */
+async function clientManualPay(invoiceId, { reference = null, note = null } = {}, clientEmail) {
+  requireEnabled();
+  const result = await call(
+    'payInvoice',
+    invoiceId,
+    {
+      method: 'manual',
+      providerRef: reference || `client_manual_${String(invoiceId).slice(0, 8)}`,
+      payerEmail: clientEmail,
+    },
+    clientEmail
+  );
+  let eng = null;
+  try {
+    eng = await call('getEngagement', result.invoice.engagementId);
+  } catch (_e) {
+    eng = null;
+  }
+  await notify.manualPaymentByClient(result.invoice, eng, { note, payoutId: result.payoutId });
+  return result;
+}
+
 async function releasePayout(payoutId, opts, actorEmail) {
   const payout = await call('releasePayout', payoutId, opts, actorEmail);
   try {
@@ -219,6 +245,7 @@ async function tryCreateEngagementFromHire(placement, meta = {}) {
 const PASS_THROUGH = [
   'createEngagement',
   'listEngagements',
+  'listHiredDirectoryProfileIds',
   'getEngagement',
   'updateEngagementStatus',
   'createContractFromTemplate',
@@ -272,6 +299,7 @@ module.exports = {
   sign,
   changeStartDate,
   runBilling,
+  clientManualPay,
   releasePayout,
   resetMemoryStore,
   ...Object.fromEntries(PASS_THROUGH.map((m) => [m, (...a) => call(m, ...a)])),

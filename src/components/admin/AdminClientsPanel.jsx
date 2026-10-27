@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { fetchAdminClients, fetchAdminClientDetail } from '../../lib/adminClients';
+import TalentHrDetailsCard from '../workforce/TalentHrDetailsCard';
 
 const INTRO_STATUS_CLASS = {
   accepted: 'bg-green-50 text-green-700 border-green-100',
@@ -272,6 +273,16 @@ const ClientDetailModal = ({ clientId, onClose }) => {
                               {eng.status}
                             </span>
                           </div>
+
+                          {eng.talentEmail ? (
+                            <div className="pt-1">
+                              <TalentHrDetailsCard
+                                variant="admin"
+                                talentEmail={eng.talentEmail}
+                                talentName={eng.talentName}
+                              />
+                            </div>
+                          ) : null}
 
                           {engContracts.length === 0 ? (
                             <p className="text-[11px] text-gray-400 font-medium">No contract on this hire yet.</p>

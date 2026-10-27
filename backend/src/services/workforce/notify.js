@@ -179,13 +179,66 @@ async function invoiceIssued(invoice, eng, { autoPaid = false } = {}) {
       heading: autoPaid ? 'Invoice paid from wallet' : 'New invoice',
       paragraphs: [
         `${autoPaid ? 'We paid' : 'Your invoice'} <strong>${escapeHtml(invoice.invoiceNumber)}</strong> (${money(invoice.total, invoice.currency)})${escapeHtml(period)} for <strong>${eng ? who(eng) : 'your contractor'}</strong>${autoPaid ? ' from your wallet balance.' : '.'}`,
-        autoPaid ? 'No action needed.' : 'Pay by card or from your wallet balance in your workspace.',
+        autoPaid
+          ? 'No action needed.'
+          : 'Pay by card, from your wallet, or mark a manual/offline payment in your workspace.',
       ],
       ctaLabel: autoPaid ? 'View invoices' : 'Pay invoice',
       ctaHref: appUrl('/client/workforce?tab=invoices'),
     }),
     autoPaid ? 'invoice_autopaid' : 'invoice_issued'
   );
+}
+
+/**
+ * Client chose offline/manual payment (test + bank transfer).
+ * Invoice is already marked paid; admin must release the talent payout.
+ */
+async function manualPaymentByClient(invoice, eng, { note = null, payoutId = null } = {}) {
+  if (!invoice) return;
+  const period = invoice.periodStart ? ` (${invoice.periodStart} → ${invoice.periodEnd})` : '';
+  const ref = invoice.providerRef || '—';
+  const admins = adminEmails();
+
+  if (invoice.clientEmail) {
+    await send(
+      invoice.clientEmail,
+      `Manual payment recorded for ${invoice.invoiceNumber}`,
+      layout({
+        heading: 'Manual payment recorded',
+        paragraphs: [
+          `We recorded your manual payment for <strong>${escapeHtml(invoice.invoiceNumber)}</strong> (${money(invoice.total, invoice.currency)})${escapeHtml(period)}.`,
+          'BYG Hires will confirm funds and pay the talent from the admin workspace.',
+        ],
+        ctaLabel: 'View invoices',
+        ctaHref: appUrl('/client/workforce?tab=invoices'),
+      }),
+      'manual_pay_client'
+    );
+  }
+
+  if (admins.length) {
+    await send(
+      admins,
+      `[Workforce] Manual payment: ${invoice.invoiceNumber} — ${money(invoice.total, invoice.currency)}`,
+      layout({
+        heading: 'Client reported a manual payment',
+        paragraphs: [
+          `<strong>${escapeHtml(invoice.clientName || invoice.clientEmail)}</strong> marked invoice <strong>${escapeHtml(invoice.invoiceNumber)}</strong> as paid offline.`,
+          `Amount: <strong>${money(invoice.total, invoice.currency)}</strong>${escapeHtml(period)} · Talent: <strong>${eng ? who(eng) : '—'}</strong>`,
+          `Reference: <strong>${escapeHtml(ref)}</strong>${note ? ` · Note: ${escapeHtml(note)}` : ''}`,
+          payoutId
+            ? 'A talent payout is queued — confirm you received funds, then release the payout from Admin → Workforce → Payouts.'
+            : 'Confirm funds received, then release the talent payout from Admin → Workforce → Payouts.',
+        ],
+        ctaLabel: 'Open payouts',
+        ctaHref: appUrl('/admin/workforce?tab=payouts'),
+      }),
+      'manual_pay_admin'
+    );
+  } else {
+    console.warn('[workforce] WORKFORCE_ADMIN_EMAILS not set — skipping manual-pay admin email');
+  }
 }
 
 async function payoutSent(payout, eng) {
@@ -260,6 +313,7 @@ module.exports = {
   contractUpdated,
   engagementActive,
   invoiceIssued,
+  manualPaymentByClient,
   payoutSent,
   signatureOtp,
   jobPosted,

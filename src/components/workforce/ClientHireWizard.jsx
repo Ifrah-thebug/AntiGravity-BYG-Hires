@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Eye, Search, UserPlus } from 'lucide-react';
 import { clientHireTalent, previewWorkforceContract } from '../../lib/workforceApi';
 import { BusyLabel, DocumentPreview, Field, Money, btn, inputClass } from './WorkforceUi';
+import TalentHrDetailsCard from './TalentHrDetailsCard';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const CADENCE_LABEL = { monthly: 'month', biweekly: '2 weeks', weekly: 'week' };
@@ -172,6 +173,16 @@ export default function ClientHireWizard({
             Change
           </button>
         </div>
+
+        {selected?.id ? (
+          <div className="mb-5">
+            <TalentHrDetailsCard
+              variant="client"
+              talentId={selected.id}
+              talentName={selected.name}
+            />
+          </div>
+        ) : null}
 
         <div className="grid gap-4 sm:grid-cols-2">
           {openJobs.length ? (

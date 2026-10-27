@@ -100,6 +100,19 @@ router.get(
   })
 );
 
+/**
+ * Public directory: which approved talents currently have an open hire.
+ * Returns profile ids only (no emails, salaries, or client names).
+ */
+router.get(
+  '/directory-hired',
+  wrap(async (_req, res) => {
+    const profileIds = await workforce.listHiredDirectoryProfileIds();
+    res.set('Cache-Control', 'public, max-age=30');
+    res.json({ profileIds });
+  })
+);
+
 /** Tap redirect return — no auth (browser comes back from Tap). Query: tap_id=chg_... */
 router.get('/payments/tap/return', async (req, res) => {
   const tap = require('../services/tapPayments');
@@ -146,6 +159,29 @@ router.get('/admin/engagements', requireAdmin, wrap(async (req, res) => {
 
 router.get('/admin/talent-options', requireAdmin, wrap(async (_req, res) => {
   res.json({ talent: await workforce.listTalentOptions() });
+}));
+
+/**
+ * HR dossier for a directory talent (admin). Matched via ERP work/personal email.
+ * Never exposed on the public talent directory.
+ */
+router.get('/admin/talent/:talentId/hr-details', requireAdmin, wrap(async (req, res) => {
+  const hr = require('../services/hrDirectoryService');
+  const talent = await workforce.getTalentProfile(req.params.talentId);
+  const result = await hr.lookupByEmail(talent.email);
+  res.json({
+    talent: { id: talent.id, name: talent.name, email: talent.email, jobTitle: talent.jobTitle },
+    configured: hr.isConfigured(),
+    ...result,
+  });
+}));
+
+router.get('/admin/hr-details', requireAdmin, wrap(async (req, res) => {
+  const hr = require('../services/hrDirectoryService');
+  const email = String(req.query.email || '').trim();
+  if (!email) fail('INVALID_EMAIL', 'email query required');
+  const result = await hr.lookupByEmail(email);
+  res.json({ configured: hr.isConfigured(), email, ...result });
 }));
 
 router.get('/admin/client-options', requireAdmin, wrap(async (_req, res) => {
@@ -450,6 +486,16 @@ router.post('/me/invoices/:id/pay-wallet', ...clientOnly, sensitiveLimiter, wrap
   res.json(await workforce.payInvoice(req.params.id, { method: 'wallet', payerEmail: req.client.email }, req.client.email));
 }));
 
+/**
+ * Client offline / test payment — marks invoice paid and emails BYG admins
+ * so they can release the talent payout from Admin → Workforce.
+ */
+router.post('/me/invoices/:id/pay-manual', ...clientOnly, sensitiveLimiter, wrap(async (req, res) => {
+  const reference = String(req.body?.reference || '').trim().slice(0, 120) || null;
+  const note = String(req.body?.note || '').trim().slice(0, 500) || null;
+  res.json(await workforce.clientManualPay(req.params.id, { reference, note }, req.client.email));
+}));
+
 router.get('/me/wallet', ...clientOnly, wrap(async (req, res) => {
   const [wallets, transactions] = await Promise.all([
     workforce.listWallets(req.client.email),
@@ -478,6 +524,21 @@ router.post('/me/wallet/auto-pay', ...clientOnly, wrap(async (req, res) => {
 router.get('/me/talent-options', ...clientOnly, wrap(async (_req, res) => {
   const talent = await workforce.listTalentOptions();
   res.json({ talent: talent.map(({ id, name, jobTitle, suggestedSalary }) => ({ id, name, jobTitle, suggestedSalary })) });
+}));
+
+/**
+ * HR dossier before hire (logged-in client only).
+ * Public directory APIs never return these fields.
+ */
+router.get('/me/talent/:talentId/hr-details', ...clientOnly, wrap(async (req, res) => {
+  const hr = require('../services/hrDirectoryService');
+  const talent = await workforce.getTalentProfile(req.params.talentId);
+  const result = await hr.lookupByEmail(talent.email);
+  res.json({
+    talent: { id: talent.id, name: talent.name, jobTitle: talent.jobTitle },
+    configured: hr.isConfigured(),
+    ...result,
+  });
 }));
 
 function clientHireInput(req, talent) {

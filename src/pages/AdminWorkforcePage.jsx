@@ -26,6 +26,7 @@ import AdminPageShell from '../components/AdminPageShell';
 import SignatureCapture, { signatureReady } from '../components/SignatureCapture';
 import { PIPELINE_STAGES } from '../components/workforce/ClientJobsPanel';
 import ContractRow from '../components/workforce/ContractViewer';
+import TalentHrDetailsCard from '../components/workforce/TalentHrDetailsCard';
 import {
   BusyLabel,
   Card,
@@ -275,6 +276,16 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
             </button>
           ))}
         </div>
+
+        {form.talentProfileId || form.talentEmail ? (
+          <TalentHrDetailsCard
+            variant="admin"
+            talentId={form.talentProfileId || null}
+            talentEmail={form.talentEmail || null}
+            talentName={form.talentName}
+            className="mt-4"
+          />
+        ) : null}
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Client" className="sm:col-span-2">
