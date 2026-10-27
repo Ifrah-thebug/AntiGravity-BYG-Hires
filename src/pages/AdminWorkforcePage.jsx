@@ -73,6 +73,7 @@ import {
   workforceStatus,
 } from '../lib/workforceApi';
 import { openContractPdf, openInvoicePdf } from '../lib/openInvoicePdf';
+import { splitInclusiveTotal } from '../lib/workforceFee';
 
 const CURRENCIES = ['USD', 'AED', 'SAR', 'KWD', 'BHD', 'QAR', 'OMR', 'EGP', 'EUR', 'GBP'];
 const ADMIN_STAGES = ['shortlisted', 'intro', 'interview', 'offer', 'rejected', 'withdrawn'];
@@ -266,10 +267,10 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
     return (s ? talent.filter((t) => t.email.includes(s) || t.name?.toLowerCase().includes(s) || t.jobTitle?.toLowerCase().includes(s)) : talent).slice(0, 30);
   }, [talent, q]);
   const clientJobs = jobs.filter((j) => j.clientEmail === form.clientEmail && ['open', 'on_hold'].includes(j.status));
-  const salary = Number(form.salaryAmount) || 0;
-  const fee = Number(form.bygFeePercent) || 0;
-  const total = Math.round((salary + (salary * fee) / 100) * 100) / 100;
-  const ready = form.talentEmail && form.clientEmail && salary > 0 && form.roleTitle.trim();
+  const gross = Number(form.salaryAmount) || 0;
+  const feePct = Number(form.bygFeePercent) || 0;
+  const { total, fee, contractor } = splitInclusiveTotal(gross, feePct);
+  const ready = form.talentEmail && form.clientEmail && gross > 0 && form.roleTitle.trim();
 
   const submit = async () => {
     setBusy(true);
@@ -278,8 +279,9 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
       const res = await createWorkforceEngagement({
         ...form,
         jobId: form.jobId || undefined,
-        salaryAmount: salary,
-        bygFeePercent: fee,
+        // All-in client total — server stores contractor net after fee split.
+        salaryAmount: gross,
+        bygFeePercent: feePct,
       });
       onCreated(res);
       setForm({ ...emptyHire, bygFeePercent: String(defaultFee) });
@@ -377,8 +379,8 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
           <Field label="Role title" className="sm:col-span-2">
             <input className={inputClass} value={form.roleTitle} onChange={set('roleTitle')} />
           </Field>
-          <Field label="Contractor pay">
-            <input className={inputClass} inputMode="decimal" value={form.salaryAmount} onChange={set('salaryAmount')} />
+          <Field label="Client pays (fee included)">
+            <input className={inputClass} inputMode="decimal" value={form.salaryAmount} onChange={set('salaryAmount')} placeholder="e.g. 650" />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Currency">
@@ -419,7 +421,8 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
           <Money value={total} currency={form.currency} />
         </p>
         <p className="mt-1 text-[11px] font-medium text-gray-500">
-          Contractor <Money value={salary} currency={form.currency} /> + fee {fee}%
+          Contractor <Money value={contractor} currency={form.currency} /> + fee{' '}
+          <Money value={fee} currency={form.currency} /> ({feePct}%)
         </p>
         <p className="mt-4 text-sm font-medium text-gray-500">
           {form.talentName || 'Talent'} → {form.clientName || 'client'}

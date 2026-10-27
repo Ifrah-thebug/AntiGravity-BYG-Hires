@@ -320,6 +320,7 @@ const PASS_THROUGH = [
   'listPaymentAccounts',
   'getTalentProfile',
   'getClientForUser',
+  'updateClientBillingName',
   'listTalentOptions',
   'listClientOptions',
   'createJob',

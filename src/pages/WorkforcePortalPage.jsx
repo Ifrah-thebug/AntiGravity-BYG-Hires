@@ -565,6 +565,10 @@ export default function WorkforcePortalPage({ roleHint = 'talent' }) {
             wallets={wallets}
             engagements={engagements}
             tapConfigured={Boolean(client?.tapConfigured)}
+            billingClient={client?.client}
+            onBillingClientSaved={(updated) =>
+              setClient((prev) => (prev ? { ...prev, client: { ...prev.client, ...updated } } : prev))
+            }
             run={run}
             busy={busy}
           />

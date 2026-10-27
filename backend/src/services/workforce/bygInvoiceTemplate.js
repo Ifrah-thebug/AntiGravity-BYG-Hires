@@ -29,7 +29,7 @@ function renderInvoiceHtml(invoice, eng = null, lines = []) {
     lines.length > 0
       ? lines
       : [
-          { description: 'Contractor compensation', amount: invoice.subtotal },
+          { description: 'Contractor pay', amount: invoice.subtotal },
           { description: 'BYG Hires platform fee', amount: invoice.feeAmount },
         ];
 

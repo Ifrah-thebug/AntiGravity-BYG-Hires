@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, FileDown, FileSignature, Pencil } from 'lucide-react';
 import { openContractPdf } from '../../lib/openInvoicePdf';
+import { clientTotalFromContractor, splitInclusiveTotal } from '../../lib/workforceFee';
 import { BusyLabel, DocumentPreview, Money, SignatureSteps, StatusBadge, btn, formatDate, inputClass } from './WorkforceUi';
 
 /**
@@ -19,23 +20,28 @@ export function ContractTermsEditor({
 }) {
   const f = contract.filledFields || {};
   const salary = engagement?.salary || {};
+  const storedFee = Number(f.byg_fee_percent ?? salary.bygFeePercent ?? 0);
+  const storedContractor = Number(f.salary_amount || salary.amount || 0);
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     startDate: f.start_date || engagement?.startDate || '',
-    salaryAmount: String(f.salary_amount || salary.amount || ''),
-    bygFeePercent: String(f.byg_fee_percent ?? salary.bygFeePercent ?? 0),
+    salaryAmount: String(clientTotalFromContractor(storedContractor, storedFee) || ''),
+    bygFeePercent: String(storedFee),
     currency: f.currency || salary.currency || 'USD',
     cadence: f.cadence || salary.cadence || 'monthly',
   });
   const signedCount = (contract.signatures || []).filter((s) => s.signedAt).length;
+  const liveSplit = splitInclusiveTotal(Number(form.salaryAmount) || 0, Number(form.bygFeePercent) || 0);
 
   if (['signed', 'void'].includes(contract.status)) return null;
 
   const openEditor = () => {
+    const feePct = Number(f.byg_fee_percent ?? salary.bygFeePercent ?? 0);
+    const contractor = Number(f.salary_amount || salary.amount || 0);
     setForm({
       startDate: f.start_date || engagement?.startDate || '',
-      salaryAmount: String(f.salary_amount || salary.amount || ''),
-      bygFeePercent: String(f.byg_fee_percent ?? salary.bygFeePercent ?? 0),
+      salaryAmount: String(clientTotalFromContractor(contractor, feePct) || ''),
+      bygFeePercent: String(feePct),
       currency: f.currency || salary.currency || 'USD',
       cadence: f.cadence || salary.cadence || 'monthly',
     });
@@ -67,6 +73,13 @@ export function ContractTermsEditor({
           {signedCount > 0 ? ' Any signatures already collected will be cleared.' : ''}
         </p>
       ) : null}
+      {liveSplit.total > 0 ? (
+        <p className="mt-2 text-[11px] font-medium text-gray-500">
+          Invoice split: contractor <Money value={liveSplit.contractor} currency={form.currency} /> + fee{' '}
+          <Money value={liveSplit.fee} currency={form.currency} /> ({liveSplit.feePercent}%) ={' '}
+          <Money value={liveSplit.total} currency={form.currency} />
+        </p>
+      ) : null}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
           Start date
@@ -78,7 +91,7 @@ export function ContractTermsEditor({
           />
         </label>
         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
-          Contractor pay
+          Client pays (fee included)
           <input
             inputMode="decimal"
             value={form.salaryAmount}

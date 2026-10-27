@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, Eye, Search, UserPlus } from 'lucide-react';
 import { clientHireTalent, previewWorkforceContract } from '../../lib/workforceApi';
+import { splitInclusiveTotal } from '../../lib/workforceFee';
 import { BusyLabel, DocumentPreview, Field, Money, btn, inputClass } from './WorkforceUi';
 import TalentHrDetailsCard from './TalentHrDetailsCard';
 
@@ -8,8 +9,8 @@ const today = () => new Date().toISOString().slice(0, 10);
 const CADENCE_LABEL = { monthly: 'month', biweekly: '2 weeks', weekly: 'week' };
 
 /**
- * Client hires a specific directory talent. The fee is set by BYG (server-side);
- * the client sees the all-in cost before confirming.
+ * Client hires a specific directory talent. The amount they enter is all-in
+ * (platform fee included); BYG fee % is set server-side.
  */
 export default function ClientHireWizard({
   talent,
@@ -68,16 +69,16 @@ export default function ClientHireWizard({
     return list.slice(0, 40);
   }, [talent, query]);
 
-  const salary = Number(terms.salaryAmount) || 0;
-  const fee = Math.round(salary * defaultFeePercent) / 100;
-  const total = Math.round((salary + fee) * 100) / 100;
-  const canSubmit = selected && salary > 0 && terms.roleTitle.trim() && terms.startDate;
+  const gross = Number(terms.salaryAmount) || 0;
+  const { total, fee, contractor } = splitInclusiveTotal(gross, defaultFeePercent);
+  const canSubmit = selected && gross > 0 && terms.roleTitle.trim() && terms.startDate;
 
   const body = () => ({
     talentId: selected.id,
     jobId: terms.jobId || undefined,
     roleTitle: terms.roleTitle.trim(),
-    salaryAmount: salary,
+    // All-in total — server splits to contractor net + platform fee.
+    salaryAmount: gross,
     currency: terms.currency,
     cadence: terms.cadence,
     startDate: terms.startDate,
@@ -200,9 +201,18 @@ export default function ClientHireWizard({
           <Field label="Role title" className="sm:col-span-2">
             <input className={inputClass} value={terms.roleTitle} maxLength={140} onChange={set('roleTitle')} />
           </Field>
-          <Field label="Contractor pay">
-            <input className={inputClass} inputMode="decimal" value={terms.salaryAmount} onChange={set('salaryAmount')} placeholder="e.g. 2500" />
+          <Field label="You pay (platform fee included)">
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={terms.salaryAmount}
+              onChange={set('salaryAmount')}
+              placeholder="e.g. 650"
+            />
           </Field>
+          <p className="sm:col-span-2 -mt-2 text-[11px] font-medium text-gray-500">
+            Enter the all-in amount. BYG&apos;s platform fee is taken from this total — the contractor receives the rest.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Currency">
               <select className={inputClass} value={terms.currency} onChange={set('currency')}>
@@ -243,18 +253,30 @@ export default function ClientHireWizard({
         </p>
         <dl className="mt-5 space-y-2 text-sm">
           <div className="flex justify-between font-medium text-gray-600">
-            <dt>Contractor pay</dt>
+            <dt>Contractor receives</dt>
             <dd className="font-black text-black">
-              <Money value={salary} currency={terms.currency} />
+              <Money value={contractor} currency={terms.currency} />
             </dd>
           </div>
           <div className="flex justify-between font-medium text-gray-600">
-            <dt>BYG Hires fee ({defaultFeePercent}%)</dt>
+            <dt>BYG platform fee ({defaultFeePercent}%)</dt>
             <dd className="font-black text-black">
               <Money value={fee} currency={terms.currency} />
             </dd>
           </div>
+          <div className="flex justify-between border-t border-gray-100 pt-2 font-medium text-gray-600">
+            <dt>Invoice total</dt>
+            <dd className="font-black text-black">
+              <Money value={total} currency={terms.currency} />
+            </dd>
+          </div>
         </dl>
+        {defaultFeePercent > 0 && gross > 0 ? (
+          <p className="mt-3 text-[11px] font-medium leading-relaxed text-gray-500">
+            Invoice will show <Money value={contractor} currency={terms.currency} /> contractor pay +{' '}
+            <Money value={fee} currency={terms.currency} /> ({defaultFeePercent}% platform fee).
+          </p>
+        ) : null}
         <ol className="mt-6 space-y-2 border-t border-gray-100 pt-5 text-[11px] font-medium text-gray-500">
           <li>1. Clicking Hire emails the talent (and you) a link to review &amp; sign the contract.</li>
           <li>2. BYG Hires countersigns after you and the talent have signed.</li>

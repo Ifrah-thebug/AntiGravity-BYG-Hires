@@ -95,6 +95,8 @@ export const fetchMyPayouts = () => authFetch('/api/workforce/me/payouts');
 
 // ─── Client ─────────────────────────────────────────────────────────────────
 export const fetchMyClient = () => authFetch('/api/workforce/me/client');
+export const updateMyInvoiceBillingName = (invoiceBillingName) =>
+  patch('/api/workforce/me/client/billing-name', { invoiceBillingName });
 export const fetchMyWorkforceInvoices = () => authFetch('/api/workforce/me/invoices');
 export const fetchMyInvoiceDocument = (invoiceId) => authFetch(`/api/workforce/me/invoices/${invoiceId}`);
 export const payInvoiceWithTap = (invoiceId) => post(`/api/workforce/me/invoices/${invoiceId}/pay-tap`);

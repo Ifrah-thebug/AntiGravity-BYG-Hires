@@ -7,13 +7,59 @@ import {
   payInvoiceWithWallet,
   setWalletAutoPay,
   topUpWallet,
+  updateMyInvoiceBillingName,
 } from '../../lib/workforceApi';
 import { openInvoicePdf } from '../../lib/openInvoicePdf';
 import { BusyLabel, Card, EmptyState, Field, Money, SectionTitle, StatusBadge, btn, formatDate, inputClass } from './WorkforceUi';
 
 const BILLING_EMAIL = import.meta.env.VITE_WORKFORCE_BILLING_EMAIL || '';
 
-export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, run, busy }) {
+export function InvoiceBillingNameCard({ client, onSaved, run, busy }) {
+  const [name, setName] = useState(client?.invoiceBillingName || client?.name || '');
+
+  return (
+    <Card>
+      <SectionTitle
+        icon={Landmark}
+        title="Invoice billing name"
+        hint="Shown as “Bill to” on every new invoice. Leave blank to use your account name."
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field label="Bill to" className="flex-1">
+          <input
+            className={inputClass}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Company or legal entity name"
+            maxLength={200}
+          />
+        </Field>
+        <button
+          type="button"
+          disabled={!!busy}
+          onClick={() =>
+            run(
+              'billing-name',
+              async () => {
+                const res = await updateMyInvoiceBillingName(name.trim());
+                onSaved?.(res.client);
+                return res;
+              },
+              'Invoice billing name saved. New invoices will use this name.'
+            )
+          }
+          className={btn.accent}
+        >
+          <BusyLabel busy={busy === 'billing-name'} busyText="Saving…">
+            Save name
+          </BusyLabel>
+        </button>
+      </div>
+    </Card>
+  );
+}
+
+export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, run, busy, billingClient, onBillingClientSaved }) {
   const balance = (currency) => wallets.find((w) => w.currency === currency)?.balance || 0;
   const talentFor = (inv) => engagements.find((e) => e.id === inv.engagementId)?.talentName;
   const sorted = [...invoices].sort((a, b) => {
@@ -35,6 +81,15 @@ export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, r
   };
 
   return (
+    <div className="space-y-6">
+    {billingClient ? (
+      <InvoiceBillingNameCard
+        client={billingClient}
+        onSaved={onBillingClientSaved}
+        run={run}
+        busy={busy}
+      />
+    ) : null}
     <Card>
       <SectionTitle
         icon={Receipt}
@@ -125,6 +180,7 @@ export function InvoicesPanel({ invoices, wallets, engagements, tapConfigured, r
         </div>
       )}
     </Card>
+    </div>
   );
 }
 

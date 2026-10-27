@@ -10,6 +10,7 @@ const { supabaseAdmin } = require('../../middleware/requireAdmin');
 const {
   normalizeEmail,
   roundMoney,
+  splitInclusiveTotal,
   assertSignerAllowed,
   validateEngagementInput,
   buildPeriodInvoice,
@@ -288,6 +289,27 @@ async function audit(action, entityType, entityId, meta = {}, actorEmail = null)
     meta: entityId && !uuid ? { ...meta, entityKey: String(entityId) } : meta,
   });
   if (error) console.warn('[workforce] audit insert failed:', error.message);
+}
+
+async function resolveInvoiceBillingName(eng) {
+  if (eng?.clientEmail) {
+    try {
+      const { data } = await supabaseAdmin
+        .from('clients')
+        .select('invoice_billing_name, company, name')
+        .ilike('email', normalizeEmail(eng.clientEmail).replace(/[%_\\]/g, '\\$&'))
+        .limit(1)
+        .maybeSingle();
+      const billed =
+        String(data?.invoice_billing_name || '').trim() ||
+        String(data?.company || '').trim() ||
+        String(data?.name || '').trim();
+      if (billed) return billed.slice(0, 200);
+    } catch (_e) {
+      /* column may be missing until migration */
+    }
+  }
+  return eng?.clientName || 'Client';
 }
 
 async function salariesFor(engagementIds) {
@@ -661,15 +683,16 @@ const supabaseStore = {
       assert(isIsoDate(patch.startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
       next.startDate = patch.startDate;
     }
-    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
-      const amount = Number(patch.salaryAmount);
-      assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
-      next.salaryAmount = roundMoney(amount);
-    }
     if (patch.bygFeePercent != null && patch.bygFeePercent !== '') {
-      const fee = Number(patch.bygFeePercent);
-      assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
-      next.bygFeePercent = fee;
+      const feePct = Number(patch.bygFeePercent);
+      assert(Number.isFinite(feePct) && feePct >= 0 && feePct < 100, 'INVALID_FEE', 'BYG fee percent must be 0–99.99');
+      next.bygFeePercent = feePct;
+    }
+    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
+      const feePct = next.bygFeePercent != null ? next.bygFeePercent : eng.salary.bygFeePercent;
+      const split = splitInclusiveTotal(patch.salaryAmount, feePct);
+      next.salaryAmount = split.contractor;
+      next.clientTotal = split.total;
     }
     if (patch.currency != null && patch.currency !== '') {
       next.currency = String(patch.currency).toUpperCase();
@@ -900,7 +923,7 @@ const supabaseStore = {
           period_index: index,
           period_start: draft.bounds.start,
           period_end: draft.bounds.end,
-          client_name: eng.clientName,
+          client_name: await resolveInvoiceBillingName(eng),
           client_email: eng.clientEmail,
         })
         .select('*')
@@ -1278,11 +1301,19 @@ const supabaseStore = {
 
   async getClientForUser(user) {
     if (!user) return null;
-    const select = 'id, email, name, company, user_id, account_confirmed_at';
+    const select = 'id, email, name, company, user_id, account_confirmed_at, invoice_billing_name';
     let data = null;
     let error = null;
     if (user.id) {
       ({ data, error } = await supabaseAdmin.from('clients').select(select).eq('user_id', user.id).maybeSingle());
+      // Older DBs may lack invoice_billing_name — retry without it.
+      if (error && /invoice_billing_name/i.test(error.message || '')) {
+        ({ data, error } = await supabaseAdmin
+          .from('clients')
+          .select('id, email, name, company, user_id, account_confirmed_at')
+          .eq('user_id', user.id)
+          .maybeSingle());
+      }
       check(error);
     }
     if (!data && user.email) {
@@ -1292,6 +1323,14 @@ const supabaseStore = {
         .ilike('email', normalizeEmail(user.email).replace(/[%_\\]/g, '\\$&'))
         .limit(1)
         .maybeSingle());
+      if (error && /invoice_billing_name/i.test(error.message || '')) {
+        ({ data, error } = await supabaseAdmin
+          .from('clients')
+          .select('id, email, name, company, user_id, account_confirmed_at')
+          .ilike('email', normalizeEmail(user.email).replace(/[%_\\]/g, '\\$&'))
+          .limit(1)
+          .maybeSingle());
+      }
       check(error);
     }
     if (!data) return null;
@@ -1300,6 +1339,28 @@ const supabaseStore = {
       email: normalizeEmail(data.email),
       name: data.company || data.name || data.email,
       contactName: data.name || null,
+      invoiceBillingName: data.invoice_billing_name || null,
+      userId: data.user_id || null,
+      activated: Boolean(data.account_confirmed_at),
+    };
+  },
+
+  async updateClientBillingName(clientId, invoiceBillingName, actorEmail = null) {
+    const name = String(invoiceBillingName || '').trim().slice(0, 200) || null;
+    const { data, error } = await supabaseAdmin
+      .from('clients')
+      .update({ invoice_billing_name: name, updated_at: nowIso() })
+      .eq('id', clientId)
+      .select('id, email, name, company, invoice_billing_name, user_id, account_confirmed_at')
+      .single();
+    check(error);
+    await audit('client.billing_name_updated', 'client', clientId, { invoiceBillingName: name }, actorEmail);
+    return {
+      id: data.id,
+      email: normalizeEmail(data.email),
+      name: data.company || data.name || data.email,
+      contactName: data.name || null,
+      invoiceBillingName: data.invoice_billing_name || null,
       userId: data.user_id || null,
       activated: Boolean(data.account_confirmed_at),
     };

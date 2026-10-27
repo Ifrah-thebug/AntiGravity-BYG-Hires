@@ -502,6 +502,16 @@ router.get('/me/client', ...clientOnly, wrap(async (req, res) => {
   });
 }));
 
+/** Client sets the "Bill to" name shown on invoices. */
+router.patch('/me/client/billing-name', ...clientOnly, wrap(async (req, res) => {
+  const client = await workforce.updateClientBillingName(
+    req.client.id,
+    req.body?.invoiceBillingName,
+    req.client.email
+  );
+  res.json({ client });
+}));
+
 router.get('/me/invoices', ...clientOnly, wrap(async (req, res) => {
   res.json({ invoices: await workforce.listInvoices({ clientEmail: req.client.email }) });
 }));

@@ -40,6 +40,31 @@ function roundMoney(n) {
   return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 }
 
+/**
+ * Client-entered totals are fee-inclusive.
+ * e.g. gross 650 @ 10% → fee 65, contractor 585 (talent receives 585).
+ */
+function splitInclusiveTotal(gross, feePercent) {
+  const total = roundMoney(gross);
+  const p = Number(feePercent) || 0;
+  assert(Number.isFinite(total) && total > 0, 'INVALID_SALARY', 'Amount must be greater than 0');
+  assert(Number.isFinite(p) && p >= 0 && p < 100, 'INVALID_FEE', 'BYG fee percent must be 0–99.99');
+  if (p <= 0) return { total, fee: 0, contractor: total, feePercent: 0 };
+  const fee = roundMoney((total * p) / 100);
+  const contractor = roundMoney(total - fee);
+  assert(contractor > 0, 'INVALID_SALARY', 'Fee leaves no contractor pay — lower the fee % or raise the total');
+  return { total, fee, contractor, feePercent: p };
+}
+
+/** Reverse of inclusive split: contractor net + fee% → platform fee amount. */
+function platformFeeFromContractor(contractorAmount, feePercent) {
+  const amount = roundMoney(contractorAmount);
+  const p = Number(feePercent) || 0;
+  if (p <= 0) return 0;
+  assert(p < 100, 'INVALID_FEE', 'BYG fee percent must be under 100');
+  return roundMoney((amount * p) / (100 - p));
+}
+
 function assert(condition, code, message) {
   if (!condition) {
     const err = new Error(message);
@@ -76,14 +101,14 @@ function validateEngagementInput(input) {
   assert(talentEmail.includes('@'), 'INVALID_EMAIL', 'Valid talent email required');
   const clientName = String(input.clientName || '').trim();
   assert(clientName, 'CLIENT_REQUIRED', 'Client name required');
-  const amount = Number(input.salaryAmount);
-  assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
   const cadence = input.cadence || 'monthly';
   assert(CADENCES.includes(cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
   const envFee = Number(process.env.WORKFORCE_DEFAULT_FEE_PERCENT);
   const fallbackFee = Number.isFinite(envFee) && envFee >= 0 && envFee <= 100 ? envFee : 0;
   const fee = input.bygFeePercent == null || input.bygFeePercent === '' ? fallbackFee : Number(input.bygFeePercent);
-  assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
+  assert(Number.isFinite(fee) && fee >= 0 && fee < 100, 'INVALID_FEE', 'BYG fee percent must be 0–99.99');
+  // salaryAmount is the client all-in total (platform fee included).
+  const inclusive = splitInclusiveTotal(input.salaryAmount, fee);
   const startDate = input.startDate || todayIso();
   assert(isIsoDate(startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
   const roleTitle = String(input.roleTitle || 'Remote contractor').trim().slice(0, 140) || 'Remote contractor';
@@ -91,7 +116,9 @@ function validateEngagementInput(input) {
     talentEmail,
     clientName: clientName.slice(0, 200),
     clientEmail: normalizeEmail(input.clientEmail) || null,
-    amount: roundMoney(amount),
+    amount: inclusive.contractor,
+    clientTotal: inclusive.total,
+    platformFeeAmount: inclusive.fee,
     currency: String(input.currency || 'USD').toUpperCase(),
     cadence,
     fee,
@@ -100,25 +127,34 @@ function validateEngagementInput(input) {
   };
 }
 
-/** Invoice amounts + lines for one billing period. */
+/** Invoice amounts + lines for one billing period (fee is % of client all-in total). */
 function buildPeriodInvoice(eng, salary, index) {
   const bounds = periodBounds(eng.startDate, salary.cadence, index);
-  const fee = roundMoney((salary.amount * salary.bygFeePercent) / 100);
+  const subtotal = roundMoney(salary.amount);
+  const fee = platformFeeFromContractor(subtotal, salary.bygFeePercent);
+  const total = roundMoney(subtotal + fee);
   const today = todayIso();
   const minDue = addDays(today, 7);
+  const feePct = Number(salary.bygFeePercent) || 0;
   return {
     bounds,
-    subtotal: salary.amount,
+    subtotal,
     feeAmount: fee,
-    total: roundMoney(salary.amount + fee),
+    total,
     currency: salary.currency,
     dueDate: bounds.start > minDue ? bounds.start : minDue,
     lines: [
       {
         description: `Contractor pay — ${eng.talentName || eng.talentEmail} (${bounds.start} → ${bounds.end})`,
-        amount: salary.amount,
+        amount: subtotal,
       },
-      { description: `BYG Hires platform fee (${salary.bygFeePercent}%)`, amount: fee },
+      {
+        description:
+          feePct > 0
+            ? `BYG Hires platform fee (${feePct}% of ${total} ${salary.currency || 'USD'} total)`
+            : 'BYG Hires platform fee',
+        amount: fee,
+      },
     ],
   };
 }
@@ -414,15 +450,17 @@ function createWorkforceEngine(seedStore) {
       assert(isIsoDate(patch.startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
       next.startDate = patch.startDate;
     }
-    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
-      const amount = Number(patch.salaryAmount);
-      assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
-      next.salaryAmount = roundMoney(amount);
-    }
     if (patch.bygFeePercent != null && patch.bygFeePercent !== '') {
-      const fee = Number(patch.bygFeePercent);
-      assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
-      next.bygFeePercent = fee;
+      const feePct = Number(patch.bygFeePercent);
+      assert(Number.isFinite(feePct) && feePct >= 0 && feePct < 100, 'INVALID_FEE', 'BYG fee percent must be 0–99.99');
+      next.bygFeePercent = feePct;
+    }
+    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
+      // Client/admin enter all-in total; store contractor net after inclusive fee split.
+      const feePct = next.bygFeePercent != null ? next.bygFeePercent : salary.bygFeePercent;
+      const split = splitInclusiveTotal(patch.salaryAmount, feePct);
+      next.salaryAmount = split.contractor;
+      next.clientTotal = split.total;
     }
     if (patch.currency != null && patch.currency !== '') {
       next.currency = String(patch.currency).toUpperCase();
@@ -589,7 +627,9 @@ function createWorkforceEngine(seedStore) {
       paidAt: null,
       paymentProvider: null,
       providerRef: null,
-      clientName: eng.clientName,
+      clientName:
+        getClientForUser({ email: eng.clientEmail })?.invoiceBillingName ||
+        eng.clientName,
       clientEmail: eng.clientEmail,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -970,7 +1010,20 @@ function createWorkforceEngine(seedStore) {
 
   function getClientForUser(user) {
     const email = normalizeEmail(user?.email);
-    return db.clients.find((c) => (user?.id && c.userId === user.id) || c.email === email) || null;
+    const c = db.clients.find((x) => (user?.id && x.userId === user.id) || x.email === email) || null;
+    if (!c) return null;
+    return {
+      ...c,
+      invoiceBillingName: c.invoiceBillingName || null,
+      activated: c.activated !== false,
+    };
+  }
+
+  function updateClientBillingName(clientId, invoiceBillingName) {
+    const c = db.clients.find((x) => String(x.id) === String(clientId));
+    assert(c, 'NOT_FOUND', 'Client not found');
+    c.invoiceBillingName = String(invoiceBillingName || '').trim().slice(0, 200) || null;
+    return getClientForUser({ id: c.userId, email: c.email });
   }
 
   function listTalentOptions() {
@@ -1066,6 +1119,7 @@ function createWorkforceEngine(seedStore) {
     listPaymentAccounts,
     getTalentProfile,
     getClientForUser,
+    updateClientBillingName,
     listTalentOptions,
     listClientOptions,
     ledgerBalance,
@@ -1080,6 +1134,8 @@ module.exports = {
   createMemoryStore,
   normalizeEmail,
   roundMoney,
+  splitInclusiveTotal,
+  platformFeeFromContractor,
   assertSignerAllowed,
   validateEngagementInput,
   buildPeriodInvoice,
