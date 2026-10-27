@@ -1,66 +1,143 @@
 import React, { useState } from 'react';
-import { CalendarClock, Eye, EyeOff, FileDown, FileSignature } from 'lucide-react';
+import { Eye, EyeOff, FileDown, FileSignature, Pencil } from 'lucide-react';
 import { openContractPdf } from '../../lib/openInvoicePdf';
-import { BusyLabel, DocumentPreview, Money, SignatureSteps, StatusBadge, btn, formatDate } from './WorkforceUi';
-
-const todayIso = () => new Date().toISOString().slice(0, 10);
+import { BusyLabel, DocumentPreview, Money, SignatureSteps, StatusBadge, btn, formatDate, inputClass } from './WorkforceUi';
 
 /**
- * Inline start-date editor. Allowed until the contract is fully signed;
- * changing it clears signatures already given (the backend enforces this).
+ * Edit start date + contractor pay (and optional BYG fee) until fully signed.
+ * Past start dates are allowed. Saving regenerates the contract document.
  */
-export function StartDateEditor({ contract, busy, onSave }) {
-  const current = contract.filledFields?.start_date || '';
+export function ContractTermsEditor({
+  contract,
+  engagement,
+  busy,
+  onSave,
+  canEditFee = false,
+  label = 'Edit terms',
+  /** When true (client portal), warn that saving re-emails the talent. */
+  warnTalentEmail = false,
+}) {
+  const f = contract.filledFields || {};
+  const salary = engagement?.salary || {};
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(current);
+  const [form, setForm] = useState({
+    startDate: f.start_date || engagement?.startDate || '',
+    salaryAmount: String(f.salary_amount || salary.amount || ''),
+    bygFeePercent: String(f.byg_fee_percent ?? salary.bygFeePercent ?? 0),
+    currency: f.currency || salary.currency || 'USD',
+    cadence: f.cadence || salary.cadence || 'monthly',
+  });
   const signedCount = (contract.signatures || []).filter((s) => s.signedAt).length;
 
   if (['signed', 'void'].includes(contract.status)) return null;
 
+  const openEditor = () => {
+    setForm({
+      startDate: f.start_date || engagement?.startDate || '',
+      salaryAmount: String(f.salary_amount || salary.amount || ''),
+      bygFeePercent: String(f.byg_fee_percent ?? salary.bygFeePercent ?? 0),
+      currency: f.currency || salary.currency || 'USD',
+      cadence: f.cadence || salary.cadence || 'monthly',
+    });
+    setEditing(true);
+  };
+
   if (!editing) {
     return (
-      <button
-        type="button"
-        onClick={() => {
-          setValue(current);
-          setEditing(true);
-        }}
-        className={btn.small}
-      >
-        <CalendarClock size={12} /> Change start date
+      <button type="button" onClick={openEditor} className={btn.small}>
+        <Pencil size={12} /> {label}
       </button>
     );
   }
 
+  const set = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }));
+  const amountOk = Number(form.salaryAmount) > 0;
+  const feeOk = !canEditFee || (Number(form.bygFeePercent) >= 0 && Number(form.bygFeePercent) <= 100);
+  const canSave = form.startDate && amountOk && feeOk && !busy;
+
   return (
     <div className="w-full rounded-2xl border border-gray-200 bg-gray-50 p-4">
-      <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
-        New start date
-        <input
-          type="date"
-          min={todayIso()}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="mt-1.5 block rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-bold normal-case tracking-normal outline-none focus:border-red"
-        />
-      </label>
-      {signedCount > 0 ? (
+      <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Update contract terms</p>
+      <p className="mt-1 text-[11px] font-medium text-gray-500">
+        Changes update the live contract document. Past start dates are allowed.
+      </p>
+      {warnTalentEmail ? (
+        <p className="mt-3 rounded-xl border border-red/20 bg-red/5 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-red">
+          Saving these changes emails the talent again with a link to review and sign the updated contract.
+          {signedCount > 0 ? ' Any signatures already collected will be cleared.' : ''}
+        </p>
+      ) : null}
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
+          Start date
+          <input
+            type="date"
+            value={form.startDate}
+            onChange={set('startDate')}
+            className={`${inputClass} mt-1.5 normal-case tracking-normal`}
+          />
+        </label>
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
+          Contractor pay
+          <input
+            inputMode="decimal"
+            value={form.salaryAmount}
+            onChange={set('salaryAmount')}
+            className={`${inputClass} mt-1.5 normal-case tracking-normal`}
+          />
+        </label>
+        {canEditFee ? (
+          <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
+            BYG platform fee %
+            <input
+              inputMode="decimal"
+              value={form.bygFeePercent}
+              onChange={set('bygFeePercent')}
+              className={`${inputClass} mt-1.5 normal-case tracking-normal`}
+            />
+          </label>
+        ) : null}
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
+          Currency
+          <select value={form.currency} onChange={set('currency')} className={`${inputClass} mt-1.5 normal-case tracking-normal`}>
+            {['USD', 'AED', 'EUR', 'GBP'].map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
+          Cadence
+          <select value={form.cadence} onChange={set('cadence')} className={`${inputClass} mt-1.5 normal-case tracking-normal`}>
+            <option value="monthly">Month</option>
+            <option value="biweekly">2 weeks</option>
+            <option value="weekly">Week</option>
+          </select>
+        </label>
+      </div>
+      {signedCount > 0 && !warnTalentEmail ? (
         <p className="mt-3 text-[11px] font-semibold text-red">
-          {signedCount} signature{signedCount > 1 ? 's' : ''} will be cleared — everyone signs the updated contract again.
+          {signedCount} signature{signedCount > 1 ? 's' : ''} will be cleared — everyone signs the updated contract again. Talent is emailed the new version.
         </p>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={!value || value === current || busy}
+          disabled={!canSave}
           onClick={async () => {
-            const ok = await onSave(value);
+            const payload = {
+              startDate: form.startDate,
+              salaryAmount: Number(form.salaryAmount),
+              currency: form.currency,
+              cadence: form.cadence,
+            };
+            if (canEditFee) payload.bygFeePercent = Number(form.bygFeePercent);
+            const ok = await onSave(payload);
             if (ok !== false) setEditing(false);
           }}
           className={btn.smallDark}
         >
           <BusyLabel busy={busy} busyText="Saving…">
-            Save date
+            {warnTalentEmail ? 'Save & email talent' : 'Save & refresh contract'}
           </BusyLabel>
         </button>
         <button type="button" onClick={() => setEditing(false)} className={btn.small}>
@@ -71,11 +148,34 @@ export function StartDateEditor({ contract, busy, onSave }) {
   );
 }
 
-/** View + download any contract (any status). Optional start-date editing. */
-export default function ContractRow({ contract, engagement, counterpartLabel, canEditDate = false, busy = false, onChangeDate }) {
+/** @deprecated use ContractTermsEditor — kept for ContractSignCard compatibility */
+export function StartDateEditor({ contract, busy, onSave }) {
+  return (
+    <ContractTermsEditor
+      contract={contract}
+      busy={busy}
+      label="Change start date"
+      onSave={async (terms) => onSave(terms.startDate)}
+    />
+  );
+}
+
+/** View + download any contract (any status). Optional terms editing. */
+export default function ContractRow({
+  contract,
+  engagement,
+  counterpartLabel,
+  canEditDate = false,
+  canEditFee = false,
+  warnTalentEmail = false,
+  busy = false,
+  onChangeDate,
+  onChangeTerms,
+}) {
   const [open, setOpen] = useState(false);
   const f = contract.filledFields || {};
   const title = engagement?.roleTitle || f.role_title || 'BYG Hires contract';
+  const saveTerms = onChangeTerms || (onChangeDate ? async (terms) => onChangeDate(terms.startDate) : null);
 
   return (
     <div className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -90,7 +190,8 @@ export default function ContractRow({ contract, engagement, counterpartLabel, ca
               <StatusBadge status={contract.status} label={contract.status === 'signed' ? 'Fully signed' : undefined} />
             </div>
             <p className="mt-1 text-[11px] font-medium text-gray-500">
-              {counterpartLabel} · <Money value={f.salary_amount} currency={f.currency} /> / {f.cadence} · starts {formatDate(f.start_date)}
+              {counterpartLabel} · <Money value={f.salary_amount} currency={f.currency} /> / {f.cadence}
+              {f.byg_fee_percent != null ? ` · fee ${f.byg_fee_percent}%` : ''} · starts {formatDate(f.start_date)}
             </p>
           </div>
         </div>
@@ -109,7 +210,16 @@ export default function ContractRow({ contract, engagement, counterpartLabel, ca
         >
           <FileDown size={12} /> Download PDF
         </button>
-        {canEditDate ? <StartDateEditor contract={contract} busy={busy} onSave={onChangeDate} /> : null}
+        {canEditDate && saveTerms ? (
+          <ContractTermsEditor
+            contract={contract}
+            engagement={engagement}
+            busy={busy}
+            canEditFee={canEditFee}
+            warnTalentEmail={warnTalentEmail}
+            onSave={saveTerms}
+          />
+        ) : null}
       </div>
 
       {open ? (

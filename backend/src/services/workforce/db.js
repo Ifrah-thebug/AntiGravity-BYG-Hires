@@ -27,7 +27,7 @@ const {
   isFullySigned,
 } = require('./bygContractTemplate');
 const { reviewContractContent } = require('./aiContractReview');
-const { isIsoDate, todayIso, duePeriodIndexes } = require('./periods');
+const { CADENCES, isIsoDate, todayIso, duePeriodIndexes } = require('./periods');
 
 function assert(condition, code, message) {
   if (!condition) {
@@ -275,12 +275,17 @@ function mapCandidate(row) {
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
 async function audit(action, entityType, entityId, meta = {}, actorEmail = null) {
+  // entity_id is uuid in wf_audit_events — only pass real UUIDs (settings keys go in meta).
+  const uuid =
+    entityId && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(entityId))
+      ? entityId
+      : null;
   const { error } = await supabaseAdmin.from('wf_audit_events').insert({
     actor_email: actorEmail,
     action,
     entity_type: entityType,
-    entity_id: entityId,
-    meta,
+    entity_id: uuid,
+    meta: entityId && !uuid ? { ...meta, entityKey: String(entityId) } : meta,
   });
   if (error) console.warn('[workforce] audit insert failed:', error.message);
 }
@@ -638,9 +643,42 @@ const supabaseStore = {
    * so signatures already given are cleared and those parties sign again.
    */
   async changeStartDate(contractId, startDate, actorEmail = null) {
-    assert(isIsoDate(startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
+    return this.updateContractTerms(contractId, { startDate }, actorEmail);
+  },
+
+  /**
+   * Update start date and/or pay terms before fully signed.
+   * Regenerates contract HTML and clears signatures already collected.
+   */
+  async updateContractTerms(contractId, patch = {}, actorEmail = null) {
     const contract = await this.getContract(contractId);
     assert(!['signed', 'void'].includes(contract.status), 'CONTRACT_LOCKED', 'A fully signed contract cannot be changed');
+    const eng = await this.getEngagement(contract.engagementId);
+    assert(eng.salary, 'NO_SALARY', 'No salary schedule');
+
+    const next = {};
+    if (patch.startDate != null && patch.startDate !== '') {
+      assert(isIsoDate(patch.startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
+      next.startDate = patch.startDate;
+    }
+    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
+      const amount = Number(patch.salaryAmount);
+      assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
+      next.salaryAmount = roundMoney(amount);
+    }
+    if (patch.bygFeePercent != null && patch.bygFeePercent !== '') {
+      const fee = Number(patch.bygFeePercent);
+      assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
+      next.bygFeePercent = fee;
+    }
+    if (patch.currency != null && patch.currency !== '') {
+      next.currency = String(patch.currency).toUpperCase();
+    }
+    if (patch.cadence != null && patch.cadence !== '') {
+      assert(CADENCES.includes(patch.cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
+      next.cadence = patch.cadence;
+    }
+    assert(Object.keys(next).length, 'NO_FIELDS', 'Provide startDate, salaryAmount, bygFeePercent, currency, and/or cadence');
 
     const { data: removed, error: sErr } = await supabaseAdmin
       .from('wf_signatures')
@@ -650,27 +688,49 @@ const supabaseStore = {
     check(sErr);
     const clearedRoles = (removed || []).filter((s) => s.signed_at).map((s) => s.role);
 
-    const { error: eErr } = await supabaseAdmin
-      .from('wf_engagements')
-      .update({ start_date: startDate, updated_at: nowIso() })
-      .eq('id', contract.engagementId);
-    check(eErr);
-    const { error: salErr } = await supabaseAdmin
-      .from('wf_salary_schedules')
-      .update({ effective_from: startDate })
-      .eq('engagement_id', contract.engagementId)
-      .is('effective_to', null);
-    check(salErr);
+    if (next.startDate) {
+      const { error: eErr } = await supabaseAdmin
+        .from('wf_engagements')
+        .update({ start_date: next.startDate, updated_at: nowIso() })
+        .eq('id', contract.engagementId);
+      check(eErr);
+    }
+
+    const salaryPatch = {};
+    if (next.startDate) salaryPatch.effective_from = next.startDate;
+    if (next.salaryAmount != null) salaryPatch.amount = next.salaryAmount;
+    if (next.bygFeePercent != null) salaryPatch.byg_fee_percent = next.bygFeePercent;
+    if (next.currency) salaryPatch.currency = next.currency;
+    if (next.cadence) salaryPatch.cadence = next.cadence;
+    if (Object.keys(salaryPatch).length) {
+      const { error: salErr } = await supabaseAdmin
+        .from('wf_salary_schedules')
+        .update(salaryPatch)
+        .eq('engagement_id', contract.engagementId)
+        .is('effective_to', null);
+      check(salErr);
+    }
+
     const { error: cErr } = await supabaseAdmin
       .from('wf_contracts')
       .update({ status: 'draft', doc_hash: null, updated_at: nowIso() })
       .eq('id', contractId);
     check(cErr);
 
-    await this.fillContract(contractId, { start_date: startDate }, actorEmail);
+    await this.fillContract(
+      contractId,
+      {
+        ...(next.startDate ? { start_date: next.startDate } : {}),
+        ...(next.salaryAmount != null ? { salary_amount: String(next.salaryAmount) } : {}),
+        ...(next.bygFeePercent != null ? { byg_fee_percent: String(next.bygFeePercent) } : {}),
+        ...(next.currency ? { currency: next.currency } : {}),
+        ...(next.cadence ? { cadence: next.cadence } : {}),
+      },
+      actorEmail
+    );
     const reviewed = await this.reviewContract(contractId, actorEmail);
-    await audit('contract.start_date_changed', 'contract', contractId, { startDate, clearedRoles }, actorEmail);
-    return { contract: reviewed, clearedRoles };
+    await audit('contract.terms_updated', 'contract', contractId, { ...next, clearedRoles }, actorEmail);
+    return { contract: reviewed, clearedRoles, terms: next };
   },
 
   async requestSignatureOtp(contractId, role, signerEmail) {
@@ -1431,6 +1491,40 @@ const supabaseStore = {
       .eq('talent_email', email)
       .neq('stage', 'hired');
     check(error);
+  },
+
+  async getPlatformSettings() {
+    const { data, error } = await supabaseAdmin.from('wf_settings').select('value').eq('key', 'platform').maybeSingle();
+    if (error) {
+      if (isMissingSchema(error) || /wf_settings|does not exist/i.test(error.message || '')) {
+        return null;
+      }
+      check(error);
+    }
+    const value = data?.value || {};
+    const fee = Number(value.defaultFeePercent);
+    return {
+      defaultFeePercent: Number.isFinite(fee) && fee >= 0 && fee <= 100 ? fee : null,
+    };
+  },
+
+  async setPlatformSettings({ defaultFeePercent }, actorEmail = null) {
+    const fee = Number(defaultFeePercent);
+    assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
+    const payload = {
+      key: 'platform',
+      value: { defaultFeePercent: fee },
+      updated_at: nowIso(),
+      updated_by: actorEmail || null,
+    };
+    const { data, error } = await supabaseAdmin
+      .from('wf_settings')
+      .upsert(payload, { onConflict: 'key' })
+      .select('value')
+      .single();
+    check(error);
+    await audit('settings.platform_updated', 'settings', null, { key: 'platform', defaultFeePercent: fee }, actorEmail);
+    return { defaultFeePercent: Number(data.value.defaultFeePercent) };
   },
 
   /** Called when all three parties sign: candidate → hired; job → filled at headcount. */

@@ -128,26 +128,71 @@ async function awaitingBygSignature(eng) {
   );
 }
 
-/** Start date changed before full signature; anyone who had signed must sign again. */
-async function contractUpdated(eng, { clearedRoles = [], actorEmail = null } = {}) {
+/** Contract terms/start date changed before full signature — talent is always re-notified. */
+async function contractUpdated(eng, { clearedRoles = [], actorEmail = null, terms = null } = {}) {
   const resign = clearedRoles.length > 0;
+  const salary = eng.salary || {};
+  const amount =
+    terms?.salaryAmount != null
+      ? terms.salaryAmount
+      : salary.amount;
+  const currency = terms?.currency || salary.currency || 'USD';
+  const cadence = terms?.cadence || salary.cadence || 'monthly';
+  const fee =
+    terms?.bygFeePercent != null
+      ? terms.bygFeePercent
+      : salary.bygFeePercent;
+  const start = terms?.startDate || eng.startDate;
+
   const paragraphs = [
-    `The start date for <strong>${role(eng)}</strong> (${who(eng)} → <strong>${escapeHtml(eng.clientName)}</strong>) is now <strong>${escapeHtml(eng.startDate)}</strong>.`,
-    resign ? 'Because the contract changed, earlier signatures were cleared — please review and sign the updated version.' : 'Please review the updated contract before signing.',
+    `Contract terms for <strong>${role(eng)}</strong> (${who(eng)} → <strong>${escapeHtml(eng.clientName)}</strong>) were updated.`,
+    `Start date: <strong>${escapeHtml(start)}</strong> · Pay: <strong>${money(amount, currency)}</strong> / ${escapeHtml(cadence)}${
+      fee != null ? ` · Platform fee: <strong>${escapeHtml(String(fee))}%</strong>` : ''
+    }.`,
+    resign
+      ? 'Earlier signatures were cleared — please open your workspace, review the updated contract, and sign again.'
+      : 'Please open your workspace, review the updated contract, and sign when ready.',
   ];
-  const recipients = [
-    [eng.talentEmail, '/talent/workforce?tab=contracts'],
-    [eng.clientEmail, '/client/workforce?tab=contracts'],
-  ].filter(([email]) => email && email.toLowerCase() !== String(actorEmail || '').toLowerCase());
-  for (const [email, path] of recipients) {
+
+  const actor = String(actorEmail || '').trim().toLowerCase();
+  const talentEmail = normalizeNotifyEmail(eng.talentEmail);
+  const clientEmail = normalizeNotifyEmail(eng.clientEmail);
+
+  // Talent always gets a fresh email when the contract is saved/updated.
+  if (talentEmail) {
     await send(
-      email,
-      `Updated BYG Hires contract: new start date ${eng.startDate}`,
-      layout({ heading: 'Your contract was updated', paragraphs, ctaLabel: 'Review contract', ctaHref: appUrl(path) }),
-      'contract_updated'
+      talentEmail,
+      `Updated BYG Hires contract — please review & sign`,
+      layout({
+        heading: 'Your contract was updated',
+        paragraphs,
+        ctaLabel: 'Review & sign',
+        ctaHref: appUrl('/talent/workforce?tab=contracts'),
+      }),
+      'contract_updated_talent'
     );
   }
+
+  // Client is notified unless they made the change themselves.
+  if (clientEmail && clientEmail !== actor) {
+    await send(
+      clientEmail,
+      `Updated BYG Hires contract for ${eng.talentName || 'your hire'}`,
+      layout({
+        heading: 'Contract terms were updated',
+        paragraphs,
+        ctaLabel: 'Review contract',
+        ctaHref: appUrl('/client/workforce?tab=contracts'),
+      }),
+      'contract_updated_client'
+    );
+  }
+
   if (resign && clearedRoles.includes('byg')) await awaitingBygSignature(eng);
+}
+
+function normalizeNotifyEmail(email) {
+  return String(email || '').trim().toLowerCase() || null;
 }
 
 async function engagementActive(eng) {

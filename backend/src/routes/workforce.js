@@ -209,7 +209,7 @@ router.post('/admin/engagements', requireAdmin, wrap(async (req, res) => {
       salaryAmount: b.salaryAmount,
       currency: b.currency,
       cadence: b.cadence,
-      bygFeePercent: b.bygFeePercent ?? workforce.defaultFeePercent(),
+      bygFeePercent: b.bygFeePercent ?? (await workforce.defaultFeePercent()),
       startDate: b.startDate,
       jobId: job?.id || null,
     },
@@ -249,9 +249,36 @@ router.patch('/admin/contracts/:id/fill', requireAdmin, wrap(async (req, res) =>
   res.json({ contract: await workforce.reviewContract(req.params.id, actor(req)) });
 }));
 
+/** Global platform fee default (applies to new client hires). */
+router.get('/admin/settings', requireAdmin, wrap(async (_req, res) => {
+  res.json({ defaultFeePercent: await workforce.defaultFeePercent() });
+}));
+
+router.patch('/admin/settings', requireAdmin, wrap(async (req, res) => {
+  res.json(await workforce.setDefaultFeePercent(req.body?.defaultFeePercent, actor(req)));
+}));
+
 /** Start date also moves the engagement + billing anchor, so it has its own endpoint. */
 router.patch('/admin/contracts/:id/start-date', requireAdmin, wrap(async (req, res) => {
   res.json(await workforce.changeStartDate(req.params.id, req.body?.startDate, actor(req)));
+}));
+
+/** Edit pay terms / start date before fully signed — regenerates contract live. */
+router.patch('/admin/contracts/:id/terms', requireAdmin, wrap(async (req, res) => {
+  const b = req.body || {};
+  res.json(
+    await workforce.updateContractTerms(
+      req.params.id,
+      {
+        startDate: b.startDate,
+        salaryAmount: b.salaryAmount,
+        bygFeePercent: b.bygFeePercent,
+        currency: b.currency,
+        cadence: b.cadence,
+      },
+      actor(req)
+    )
+  );
 }));
 
 router.post('/admin/contracts/:id/review', requireAdmin, wrap(async (req, res) => {
@@ -467,7 +494,12 @@ router.get('/me/payouts', requireUser, wrap(async (req, res) => {
 // ─── Client ─────────────────────────────────────────────────────────────────
 router.get('/me/client', ...clientOnly, wrap(async (req, res) => {
   const info = await workforce.backendInfo();
-  res.json({ client: req.client, defaultFeePercent: workforce.defaultFeePercent(), tapConfigured: info.tapConfigured, currencies: SUPPORTED_CURRENCIES });
+  res.json({
+    client: req.client,
+    defaultFeePercent: await workforce.defaultFeePercent(),
+    tapConfigured: info.tapConfigured,
+    currencies: SUPPORTED_CURRENCIES,
+  });
 }));
 
 router.get('/me/invoices', ...clientOnly, wrap(async (req, res) => {
@@ -541,14 +573,11 @@ router.get('/me/talent/:talentId/hr-details', ...clientOnly, wrap(async (req, re
   });
 }));
 
-function clientHireInput(req, talent) {
+async function clientHireInput(req, talent) {
   const b = req.body || {};
   const currency = String(b.currency || 'USD').toUpperCase();
   if (!SUPPORTED_CURRENCIES.includes(currency)) fail('INVALID_CURRENCY', 'Unsupported currency');
-  // Back-dated starts would immediately bill catch-up periods; admins can still backdate.
-  if (b.startDate && isIsoDate(b.startDate) && b.startDate < addDays(todayIso(), -30)) {
-    fail('INVALID_DATE', 'Start date can be at most 30 days in the past');
-  }
+  if (b.startDate && !isIsoDate(b.startDate)) fail('INVALID_DATE', 'Start date must be YYYY-MM-DD');
   return {
     talentEmail: talent.email,
     talentName: talent.name,
@@ -560,7 +589,7 @@ function clientHireInput(req, talent) {
     salaryAmount: b.salaryAmount,
     currency,
     cadence: b.cadence || 'monthly',
-    bygFeePercent: workforce.defaultFeePercent(),
+    bygFeePercent: await workforce.defaultFeePercent(),
     startDate: b.startDate,
   };
 }
@@ -570,7 +599,7 @@ router.post('/me/contract-preview', ...clientOnly, wrap(async (req, res) => {
   const { BYG_CONTRACT_HTML, renderContractHtml, buildFilledFields } = require('../services/workforce/bygContractTemplate');
   const { validateEngagementInput } = require('../services/workforce/engine');
   const talent = await workforce.getTalentProfile(req.body?.talentId);
-  const v = validateEngagementInput(clientHireInput(req, talent));
+  const v = validateEngagementInput(await clientHireInput(req, talent));
   const filledFields = buildFilledFields(
     { ...v, talentName: talent.name },
     { amount: v.amount, currency: v.currency, cadence: v.cadence, bygFeePercent: v.fee }
@@ -586,19 +615,44 @@ router.post('/me/hire', ...clientOnly, sensitiveLimiter, wrap(async (req, res) =
     job = await workforce.getJob(req.body.jobId);
     if (job.clientEmail !== req.client.email) fail('NOT_FOUND', 'Job not found');
   }
-  const result = await workforce.hire({ ...clientHireInput(req, talent), jobId: job?.id || null }, req.client.email, { job, talent });
+  const result = await workforce.hire({ ...(await clientHireInput(req, talent)), jobId: job?.id || null }, req.client.email, { job, talent });
   res.status(result.created ? 201 : 200).json(result);
 }));
 
-/** Client moves the start date before the contract is fully signed. */
+/** Client moves the start date before the contract is fully signed (past dates allowed). */
 router.patch('/me/contracts/:id/start-date', ...clientOnly, wrap(async (req, res) => {
   const startDate = req.body?.startDate;
   if (!isIsoDate(startDate)) fail('INVALID_DATE', 'Start date must be YYYY-MM-DD');
-  if (startDate < addDays(todayIso(), -30)) fail('INVALID_DATE', 'Start date can be at most 30 days in the past');
   const contract = await workforce.getContract(req.params.id);
   const eng = await workforce.getEngagement(contract.engagementId);
   if (eng.clientEmail !== req.client.email) fail('NOT_FOUND', 'Contract not found');
   res.json(await workforce.changeStartDate(contract.id, startDate, req.client.email));
+}));
+
+/**
+ * Client can update start date + contractor pay before full signature.
+ * Platform fee stays server-controlled (defaultFeePercent / admin override).
+ */
+router.patch('/me/contracts/:id/terms', ...clientOnly, wrap(async (req, res) => {
+  const b = req.body || {};
+  if (b.startDate != null && b.startDate !== '' && !isIsoDate(b.startDate)) {
+    fail('INVALID_DATE', 'Start date must be YYYY-MM-DD');
+  }
+  const contract = await workforce.getContract(req.params.id);
+  const eng = await workforce.getEngagement(contract.engagementId);
+  if (eng.clientEmail !== req.client.email) fail('NOT_FOUND', 'Contract not found');
+  res.json(
+    await workforce.updateContractTerms(
+      contract.id,
+      {
+        startDate: b.startDate,
+        salaryAmount: b.salaryAmount,
+        currency: b.currency,
+        cadence: b.cadence,
+      },
+      req.client.email
+    )
+  );
 }));
 
 // Jobs — clients see their own pipeline without talent contact details.

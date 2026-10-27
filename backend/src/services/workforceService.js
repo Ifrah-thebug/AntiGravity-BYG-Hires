@@ -69,10 +69,45 @@ async function call(method, ...args) {
   return backend[method](...args);
 }
 
-/** Platform fee for client-initiated hires. Admins can override per engagement. */
-function defaultFeePercent() {
+/** Env fallback when wf_settings is missing / empty. */
+function envDefaultFeePercent() {
   const n = Number(process.env.WORKFORCE_DEFAULT_FEE_PERCENT);
-  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 10;
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 0;
+}
+
+/** Cached platform fee — refreshed from DB on read/save. */
+let cachedDefaultFeePercent = null;
+
+/** Platform fee for client-initiated hires. Admins can override per engagement. */
+async function defaultFeePercent() {
+  if (cachedDefaultFeePercent != null) return cachedDefaultFeePercent;
+  if (useMemory()) {
+    try {
+      const s = await call('getPlatformSettings');
+      cachedDefaultFeePercent = s?.defaultFeePercent ?? envDefaultFeePercent();
+    } catch (_e) {
+      cachedDefaultFeePercent = envDefaultFeePercent();
+    }
+    return cachedDefaultFeePercent;
+  }
+  try {
+    const s = await db.getPlatformSettings();
+    if (s?.defaultFeePercent != null) {
+      cachedDefaultFeePercent = s.defaultFeePercent;
+      return cachedDefaultFeePercent;
+    }
+  } catch (_e) {
+    /* table may not exist yet */
+  }
+  cachedDefaultFeePercent = envDefaultFeePercent();
+  return cachedDefaultFeePercent;
+}
+
+async function setDefaultFeePercent(fee, actorEmail = null) {
+  requireEnabled();
+  const result = await call('setPlatformSettings', { defaultFeePercent: fee }, actorEmail);
+  cachedDefaultFeePercent = result.defaultFeePercent;
+  return result;
 }
 
 async function backendInfo() {
@@ -81,7 +116,7 @@ async function backendInfo() {
   const base = {
     tapConfigured: tap.isConfigured(),
     payments: tap.isConfigured() ? 'tap' : 'manual',
-    defaultFeePercent: defaultFeePercent(),
+    defaultFeePercent: await defaultFeePercent(),
   };
   if (useMemory()) {
     return { ...base, store: 'memory', schemaReady: true, note: 'Test/memory mode — data resets on restart.' };
@@ -158,9 +193,17 @@ async function sign(contractId, role, opts) {
 }
 
 async function changeStartDate(contractId, startDate, actorEmail) {
-  const result = await call('changeStartDate', contractId, startDate, actorEmail);
+  return updateContractTerms(contractId, { startDate }, actorEmail);
+}
+
+async function updateContractTerms(contractId, patch, actorEmail) {
+  const result = await call('updateContractTerms', contractId, patch, actorEmail);
   const eng = await call('getEngagement', result.contract.engagementId);
-  await notify.contractUpdated(eng, { clearedRoles: result.clearedRoles, actorEmail });
+  await notify.contractUpdated(eng, {
+    clearedRoles: result.clearedRoles,
+    actorEmail,
+    terms: result.terms || patch,
+  });
   return { ...result, engagement: eng };
 }
 
@@ -230,7 +273,7 @@ async function tryCreateEngagementFromHire(placement, meta = {}) {
         salaryAmount,
         currency: meta.currency || 'USD',
         cadence: meta.cadence || 'monthly',
-        bygFeePercent: meta.bygFeePercent != null ? meta.bygFeePercent : defaultFeePercent(),
+        bygFeePercent: meta.bygFeePercent != null ? meta.bygFeePercent : await defaultFeePercent(),
         startDate: meta.startDate,
         ambassadorPlacementId: placement.id || null,
       },
@@ -286,6 +329,8 @@ const PASS_THROUGH = [
   'addJobCandidate',
   'getJobCandidate',
   'updateJobCandidate',
+  'getPlatformSettings',
+  'setPlatformSettings',
   'snapshot',
 ];
 
@@ -294,10 +339,12 @@ module.exports = {
   requireEnabled,
   backendInfo,
   defaultFeePercent,
+  setDefaultFeePercent,
   tryCreateEngagementFromHire,
   hire,
   sign,
   changeStartDate,
+  updateContractTerms,
   runBilling,
   clientManualPay,
   releasePayout,

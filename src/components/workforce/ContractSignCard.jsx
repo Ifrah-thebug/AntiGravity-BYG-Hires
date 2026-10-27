@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FileSignature, Eye, EyeOff, FileDown } from 'lucide-react';
 import SignatureCapture, { signatureReady } from '../SignatureCapture';
 import { openContractPdf } from '../../lib/openInvoicePdf';
-import { StartDateEditor } from './ContractViewer';
+import { ContractTermsEditor } from './ContractViewer';
 import { BusyLabel, DocumentPreview, Money, SignatureSteps, StatusBadge, btn, formatDate } from './WorkforceUi';
 
 const ROLE_LABEL = { client: 'client', talent: 'contractor', byg: 'BYG Hires' };
@@ -11,13 +11,30 @@ const ROLE_LABEL = { client: 'client', talent: 'contractor', byg: 'BYG Hires' };
  * One contract awaiting the viewer's signature.
  * `onSign({ signatureData, consent })` performs the API call (and reload).
  */
-export default function ContractSignCard({ contract, engagement, role, busy, onSign, counterpartLabel, onChangeDate, dateBusy }) {
+export default function ContractSignCard({
+  contract,
+  engagement,
+  role,
+  busy,
+  onSign,
+  counterpartLabel,
+  onChangeDate,
+  onChangeTerms,
+  dateBusy,
+  canEditFee = false,
+  warnTalentEmail = false,
+}) {
   const [signatureData, setSignatureData] = useState('');
   const [consent, setConsent] = useState(false);
   const [showDoc, setShowDoc] = useState(true);
   const title = engagement?.roleTitle || contract.filledFields?.role_title || 'BYG Hires engagement';
   const f = contract.filledFields || {};
   const ready = signatureReady(signatureData) && consent;
+  const saveTerms =
+    onChangeTerms ||
+    (onChangeDate
+      ? async (terms) => onChangeDate(terms.startDate)
+      : null);
 
   return (
     <div className="rounded-[2rem] border border-gray-200 bg-white p-6 shadow-xl md:p-8">
@@ -30,7 +47,8 @@ export default function ContractSignCard({ contract, engagement, role, busy, onS
             <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Independent Contractor Agreement</p>
             <p className="mt-1 text-lg font-black text-black">{title}</p>
             <p className="mt-1 text-sm font-medium text-gray-500">
-              {counterpartLabel} · <Money value={f.salary_amount} currency={f.currency} /> / {f.cadence} · starts {formatDate(f.start_date)}
+              {counterpartLabel} · <Money value={f.salary_amount} currency={f.currency} /> / {f.cadence}
+              {f.byg_fee_percent != null ? ` · fee ${f.byg_fee_percent}%` : ''} · starts {formatDate(f.start_date)}
             </p>
           </div>
         </div>
@@ -53,7 +71,16 @@ export default function ContractSignCard({ contract, engagement, role, busy, onS
         >
           <FileDown size={12} /> Download PDF
         </button>
-        {onChangeDate ? <StartDateEditor contract={contract} busy={dateBusy} onSave={onChangeDate} /> : null}
+        {saveTerms ? (
+          <ContractTermsEditor
+            contract={contract}
+            engagement={engagement}
+            busy={dateBusy}
+            canEditFee={canEditFee}
+            warnTalentEmail={warnTalentEmail}
+            onSave={saveTerms}
+          />
+        ) : null}
       </div>
       {showDoc ? (
         <div className="mt-3">

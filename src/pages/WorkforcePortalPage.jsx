@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import {
-  changeContractStartDate,
+  updateContractTerms,
   fetchMyClient,
   fetchMyJobs,
   fetchMyPayoutAccount,
@@ -228,14 +228,14 @@ export default function WorkforcePortalPage({ roleHint = 'talent' }) {
           : 'Signed. We’ll notify you when the other parties have signed.'
     );
 
-  const changeDate = (contract) => async (startDate) => {
+  const changeTerms = (contract) => async (terms) => {
     const res = await run(
       `date-${contract.id}`,
-      () => changeContractStartDate(contract.id, startDate),
+      () => updateContractTerms(contract.id, terms),
       (r) =>
         r.clearedRoles?.length
-          ? `Start date moved to ${formatDate(startDate)}. Earlier signatures were cleared — everyone has been asked to sign again.`
-          : `Start date moved to ${formatDate(startDate)}.`
+          ? 'Contract updated and talent emailed. Earlier signatures were cleared — they must sign again.'
+          : 'Contract updated — talent has been emailed to review and sign.'
     );
     return Boolean(res);
   };
@@ -299,7 +299,8 @@ export default function WorkforcePortalPage({ roleHint = 'talent' }) {
           busy={busy === `sign-${c.id}`}
           onSign={sign(c)}
           counterpartLabel={isClient ? eng?.talentName || 'Your hire' : eng?.clientName || 'Client'}
-          onChangeDate={isClient ? changeDate(c) : undefined}
+          onChangeTerms={isClient ? changeTerms(c) : undefined}
+          warnTalentEmail={isClient}
           dateBusy={busy === `date-${c.id}`}
         />
       );
@@ -470,7 +471,7 @@ export default function WorkforcePortalPage({ roleHint = 'talent' }) {
               key={hireTarget?.nonce || 'hire'}
               talent={talent}
               jobs={jobs}
-              defaultFeePercent={client?.defaultFeePercent ?? 10}
+              defaultFeePercent={client?.defaultFeePercent ?? 0}
               currencies={client?.currencies || ['USD']}
               initialTalentId={hireTarget?.talentId || null}
               initialJobId={hireTarget?.jobId || null}
@@ -518,8 +519,9 @@ export default function WorkforcePortalPage({ roleHint = 'talent' }) {
                         engagement={eng}
                         counterpartLabel={isClient ? eng?.talentName || 'Your hire' : eng?.clientName || 'Client'}
                         canEditDate={isClient}
+                        warnTalentEmail={isClient}
                         busy={busy === `date-${c.id}`}
-                        onChangeDate={changeDate(c)}
+                        onChangeTerms={changeTerms(c)}
                       />
                     );
                   })}

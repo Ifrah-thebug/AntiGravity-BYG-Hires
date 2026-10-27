@@ -14,7 +14,7 @@ const CADENCE_LABEL = { monthly: 'month', biweekly: '2 weeks', weekly: 'week' };
 export default function ClientHireWizard({
   talent,
   jobs = [],
-  defaultFeePercent = 10,
+  defaultFeePercent = 0,
   currencies = ['USD'],
   initialTalentId = null,
   initialJobId = null,
@@ -256,11 +256,14 @@ export default function ClientHireWizard({
           </div>
         </dl>
         <ol className="mt-6 space-y-2 border-t border-gray-100 pt-5 text-[11px] font-medium text-gray-500">
-          <li>1. Contract goes to you, the talent and BYG Hires to sign.</li>
-          <li>2. First invoice is issued once all three have signed.</li>
-          <li>3. Pay by card or wallet — BYG pays the talent.</li>
+          <li>1. Clicking Hire emails the talent (and you) a link to review &amp; sign the contract.</li>
+          <li>2. BYG Hires countersigns after you and the talent have signed.</li>
+          <li>3. First invoice is issued once all three have signed — pay by card, wallet, or manually.</li>
         </ol>
-        <button type="button" disabled={!canSubmit || busy} onClick={confirm} className={`${btn.accent} mt-6 w-full`}>
+        <p className="mt-4 rounded-xl border border-red/15 bg-red/5 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-red">
+          An email will be sent to the talent as soon as you click Hire.
+        </p>
+        <button type="button" disabled={!canSubmit || busy} onClick={confirm} className={`${btn.accent} mt-4 w-full`}>
           <BusyLabel busy={busy === 'hire'} busyText="Creating contract…">
             <UserPlus size={14} /> Hire {selected?.name?.split(' ')[0] || 'talent'} <ArrowRight size={14} />
           </BusyLabel>

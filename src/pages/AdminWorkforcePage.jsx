@@ -12,6 +12,7 @@ import {
   Inbox,
   Landmark,
   Pause,
+  Percent,
   Play,
   Plus,
   Receipt,
@@ -48,7 +49,7 @@ import {
   useAsyncRunner,
 } from '../components/workforce/WorkforceUi';
 import {
-  adminChangeContractStartDate,
+  adminUpdateContractTerms,
   adminShortlist,
   adminSignWorkforceContract,
   adminUpdateCandidate,
@@ -65,6 +66,7 @@ import {
   releasePayout,
   reviewWorkforceContract,
   runBilling,
+  saveWorkforceSettings,
   setEngagementStatus,
   verifyPaymentAccount,
   voidInvoice,
@@ -203,6 +205,57 @@ function CountersignCard({ row, busy, onSign, onReview }) {
   );
 }
 
+/** Global default platform fee — applies to new client hires until overridden per engagement. */
+function PlatformFeeSettings({ value, onSaved, onError, onSuccess }) {
+  const [fee, setFee] = useState(String(value ?? 0));
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setFee(String(value ?? 0));
+  }, [value]);
+
+  const save = async () => {
+    setBusy(true);
+    onError('');
+    try {
+      const res = await saveWorkforceSettings({ defaultFeePercent: Number(fee) });
+      onSaved?.(res.defaultFeePercent);
+      onSuccess?.(`Global platform fee saved at ${res.defaultFeePercent}%. New client hires will use this.`);
+    } catch (err) {
+      onError(
+        err.message?.includes('wf_settings') || err.code === 'SCHEMA_MISSING' || /relation|does not exist/i.test(err.message || '')
+          ? 'Run supabase/workforce_settings.sql in Supabase first, then try Save again.'
+          : err.message || 'Could not save platform fee.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <SectionTitle
+        icon={Percent}
+        title="Platform fee (global default)"
+        hint="Applies to every new client hire. Admins can still override the % on a single engagement."
+      />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <Field label="Default BYG fee %" className="sm:max-w-[12rem]">
+          <input className={inputClass} inputMode="decimal" value={fee} onChange={(e) => setFee(e.target.value)} />
+        </Field>
+        <button type="button" disabled={busy || fee === '' || Number(fee) < 0 || Number(fee) > 100} onClick={save} className={btn.accent}>
+          <BusyLabel busy={busy} busyText="Saving…">
+            Save default fee
+          </BusyLabel>
+        </button>
+      </div>
+      <p className="mt-3 text-[11px] font-medium text-gray-500">
+        Current default: <span className="font-black text-black">{value ?? 0}%</span>. Set to 0 for pilot / no platform fee.
+      </p>
+    </Card>
+  );
+}
+
 function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }) {
   const [form, setForm] = useState({ ...emptyHire, bygFeePercent: String(defaultFee) });
   const [q, setQ] = useState('');
@@ -240,7 +293,11 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
       <Card>
-        <SectionTitle icon={UserPlus} title="Start a hire" hint="Creates the engagement and contract, and emails the client and talent to sign." />
+        <SectionTitle
+          icon={UserPlus}
+          title="Start a hire"
+          hint="Creates the engagement and contract. Client and talent both get an email to sign."
+        />
         <Field label="Talent">
           <div className="relative">
             <Search size={15} className="pointer-events-none absolute left-4 top-1/2 mt-[3px] -translate-y-1/2 text-gray-400" />
@@ -339,23 +396,38 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
               </select>
             </Field>
           </div>
-          <Field label="BYG fee %">
-            <input className={inputClass} inputMode="decimal" value={form.bygFeePercent} onChange={set('bygFeePercent')} />
+          <Field label="Platform fee for this hire only (%)">
+            <input
+              className={inputClass}
+              inputMode="decimal"
+              value={form.bygFeePercent}
+              onChange={set('bygFeePercent')}
+              title="Overrides the global default for this engagement only. Saved when you click Create engagement."
+            />
           </Field>
           <Field label="Start date">
             <input type="date" className={inputClass} value={form.startDate} onChange={set('startDate')} />
           </Field>
         </div>
+        <p className="mt-3 text-[11px] font-medium text-gray-500">
+          This fee field applies only to the hire you create below (prefilled from the global default of {defaultFee}%). Use the Platform fee card to change the default for everyone.
+        </p>
       </Card>
       <aside className="h-fit rounded-[2rem] border border-gray-200 bg-white p-6 shadow-xl">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400">Client pays per period</p>
         <p className="mt-2 text-3xl font-black text-black">
           <Money value={total} currency={form.currency} />
         </p>
+        <p className="mt-1 text-[11px] font-medium text-gray-500">
+          Contractor <Money value={salary} currency={form.currency} /> + fee {fee}%
+        </p>
         <p className="mt-4 text-sm font-medium text-gray-500">
           {form.talentName || 'Talent'} → {form.clientName || 'client'}
         </p>
-        <button type="button" disabled={!ready || busy} onClick={submit} className={`${btn.accent} mt-6 w-full`}>
+        <p className="mt-4 rounded-xl border border-red/15 bg-red/5 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-red">
+          Clicking Create engagement emails the talent and the client to review &amp; sign.
+        </p>
+        <button type="button" disabled={!ready || busy} onClick={submit} className={`${btn.accent} mt-4 w-full`}>
           <BusyLabel busy={busy} busyText="Creating…">
             <UserPlus size={14} /> Create engagement
           </BusyLabel>
@@ -861,18 +933,29 @@ const AdminWorkforcePage = () => {
           ) : null}
 
           {tab === 'hire' ? (
-            <AdminHireForm
-              talent={talent}
-              clients={clients}
-              jobs={jobs}
-              defaultFee={status?.defaultFeePercent ?? 10}
-              onError={setError}
-              onCreated={async (res) => {
-                setSuccess(res.created ? 'Engagement created — client and talent have been emailed to sign.' : 'An open engagement already exists for this pair.');
-                await reload();
-                setTab('engagements');
-              }}
-            />
+            <div className="space-y-6">
+              <PlatformFeeSettings
+                value={status?.defaultFeePercent ?? 0}
+                onError={setError}
+                onSuccess={setSuccess}
+                onSaved={async (fee) => {
+                  setStatus((s) => ({ ...(s || {}), defaultFeePercent: fee }));
+                  await reload();
+                }}
+              />
+              <AdminHireForm
+                talent={talent}
+                clients={clients}
+                jobs={jobs}
+                defaultFee={status?.defaultFeePercent ?? 0}
+                onError={setError}
+                onCreated={async (res) => {
+                  setSuccess(res.created ? 'Engagement created — client and talent have been emailed to sign.' : 'An open engagement already exists for this pair.');
+                  await reload();
+                  setTab('engagements');
+                }}
+              />
+            </div>
           ) : null}
 
           {tab === 'engagements' ? (
@@ -942,11 +1025,14 @@ const AdminWorkforcePage = () => {
                           engagement={e}
                           counterpartLabel={`${e.talentName || e.talentEmail} → ${e.clientName}`}
                           canEditDate
+                          canEditFee
                           busy={busy === `date-${c.id}`}
-                          onChangeDate={async (startDate) =>
+                          onChangeTerms={async (terms) =>
                             Boolean(
-                              await run(`date-${c.id}`, () => adminChangeContractStartDate(c.id, startDate), (r) =>
-                                r.clearedRoles?.length ? 'Start date changed — signatures cleared, parties notified to re-sign.' : 'Start date changed.'
+                              await run(`date-${c.id}`, () => adminUpdateContractTerms(c.id, terms), (r) =>
+                                r.clearedRoles?.length
+                                  ? 'Contract updated — talent emailed; signatures cleared so everyone must re-sign.'
+                                  : 'Contract updated — talent emailed to review and sign.'
                               )
                             )
                           }

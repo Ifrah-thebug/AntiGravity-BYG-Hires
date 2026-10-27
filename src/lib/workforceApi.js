@@ -62,9 +62,13 @@ export const fetchWorkforceSnapshot = () => authFetch('/api/workforce/admin/snap
 export const fetchWorkforceTalentOptions = () => authFetch('/api/workforce/admin/talent-options');
 export const fetchWorkforceClientOptions = () => authFetch('/api/workforce/admin/client-options');
 export const createWorkforceEngagement = (body) => post('/api/workforce/admin/engagements', body);
+export const fetchWorkforceSettings = () => authFetch('/api/workforce/admin/settings');
+export const saveWorkforceSettings = (body) => patch('/api/workforce/admin/settings', body);
 export const setEngagementStatus = (id, body) => post(`/api/workforce/admin/engagements/${id}/status`, body);
 export const adminChangeContractStartDate = (contractId, startDate) =>
   patch(`/api/workforce/admin/contracts/${contractId}/start-date`, { startDate });
+export const adminUpdateContractTerms = (contractId, terms) =>
+  patch(`/api/workforce/admin/contracts/${contractId}/terms`, terms);
 export const reviewWorkforceContract = (contractId) => post(`/api/workforce/admin/contracts/${contractId}/review`);
 export const adminSignWorkforceContract = (contractId, payload) => post(`/api/workforce/admin/contracts/${contractId}/sign`, payload);
 export const runBilling = (asOf) => post('/api/workforce/admin/billing/run', asOf ? { asOf } : {});
@@ -113,6 +117,8 @@ export const previewWorkforceContract = (body) => post('/api/workforce/me/contra
 export const clientHireTalent = (body) => post('/api/workforce/me/hire', body);
 export const changeContractStartDate = (contractId, startDate) =>
   patch(`/api/workforce/me/contracts/${contractId}/start-date`, { startDate });
+export const updateContractTerms = (contractId, terms) =>
+  patch(`/api/workforce/me/contracts/${contractId}/terms`, terms);
 export const fetchMyJobs = () => authFetch('/api/workforce/me/jobs');
 export const createMyJob = (body) => post('/api/workforce/me/jobs', body);
 export const updateMyJob = (jobId, body) => patch(`/api/workforce/me/jobs/${jobId}`, body);

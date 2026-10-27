@@ -80,7 +80,9 @@ function validateEngagementInput(input) {
   assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
   const cadence = input.cadence || 'monthly';
   assert(CADENCES.includes(cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
-  const fee = input.bygFeePercent == null || input.bygFeePercent === '' ? 10 : Number(input.bygFeePercent);
+  const envFee = Number(process.env.WORKFORCE_DEFAULT_FEE_PERCENT);
+  const fallbackFee = Number.isFinite(envFee) && envFee >= 0 && envFee <= 100 ? envFee : 0;
+  const fee = input.bygFeePercent == null || input.bygFeePercent === '' ? fallbackFee : Number(input.bygFeePercent);
   assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
   const startDate = input.startDate || todayIso();
   assert(isIsoDate(startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
@@ -392,20 +394,73 @@ function createWorkforceEngine(seedStore) {
 
   /** Mirrors db.changeStartDate: allowed until fully signed; clears signatures given so far. */
   function changeStartDate(contractId, startDate, actorEmail = null) {
-    assert(isIsoDate(startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
+    return updateContractTerms(contractId, { startDate }, actorEmail);
+  }
+
+  /**
+   * Update start date and/or pay terms before the contract is fully signed.
+   * Regenerates the document and clears any signatures already collected.
+   */
+  function updateContractTerms(contractId, patch = {}, actorEmail = null) {
     const contract = getContract(contractId);
     assert(!['signed', 'void'].includes(contract.status), 'CONTRACT_LOCKED', 'A fully signed contract cannot be changed');
+
+    const eng = engRow(contract.engagementId);
+    const salary = getOpenSalary(contract.engagementId);
+    assert(salary, 'NO_SALARY', 'No salary schedule');
+
+    const next = {};
+    if (patch.startDate != null && patch.startDate !== '') {
+      assert(isIsoDate(patch.startDate), 'INVALID_DATE', 'Start date must be YYYY-MM-DD');
+      next.startDate = patch.startDate;
+    }
+    if (patch.salaryAmount != null && patch.salaryAmount !== '') {
+      const amount = Number(patch.salaryAmount);
+      assert(Number.isFinite(amount) && amount > 0 && amount <= 1_000_000, 'INVALID_SALARY', 'Salary must be greater than 0');
+      next.salaryAmount = roundMoney(amount);
+    }
+    if (patch.bygFeePercent != null && patch.bygFeePercent !== '') {
+      const fee = Number(patch.bygFeePercent);
+      assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
+      next.bygFeePercent = fee;
+    }
+    if (patch.currency != null && patch.currency !== '') {
+      next.currency = String(patch.currency).toUpperCase();
+    }
+    if (patch.cadence != null && patch.cadence !== '') {
+      assert(CADENCES.includes(patch.cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
+      next.cadence = patch.cadence;
+    }
+    assert(Object.keys(next).length, 'NO_FIELDS', 'Provide startDate, salaryAmount, bygFeePercent, currency, and/or cadence');
+
     const clearedRoles = db.signatures.filter((s) => s.contractId === contractId && s.signedAt).map((s) => s.role);
     db.signatures = db.signatures.filter((s) => s.contractId !== contractId);
-    engRow(contract.engagementId).startDate = startDate;
-    const salary = getOpenSalary(contract.engagementId);
-    if (salary) salary.effectiveFrom = startDate;
+
+    if (next.startDate) {
+      eng.startDate = next.startDate;
+      salary.effectiveFrom = next.startDate;
+    }
+    if (next.salaryAmount != null) salary.amount = next.salaryAmount;
+    if (next.bygFeePercent != null) salary.bygFeePercent = next.bygFeePercent;
+    if (next.currency) salary.currency = next.currency;
+    if (next.cadence) salary.cadence = next.cadence;
+
     contract.status = 'draft';
     contract.docHash = null;
-    fillContract(contractId, { start_date: startDate }, actorEmail);
+    fillContract(
+      contractId,
+      {
+        ...(next.startDate ? { start_date: next.startDate } : {}),
+        ...(next.salaryAmount != null ? { salary_amount: String(next.salaryAmount) } : {}),
+        ...(next.bygFeePercent != null ? { byg_fee_percent: String(next.bygFeePercent) } : {}),
+        ...(next.currency ? { currency: next.currency } : {}),
+        ...(next.cadence ? { cadence: next.cadence } : {}),
+      },
+      actorEmail
+    );
     const reviewed = reviewContract(contractId, actorEmail);
-    audit('contract.start_date_changed', 'contract', contractId, { startDate, clearedRoles }, actorEmail);
-    return { contract: reviewed, clearedRoles };
+    audit('contract.terms_updated', 'contract', contractId, { ...next, clearedRoles }, actorEmail);
+    return { contract: reviewed, clearedRoles, terms: next };
   }
 
   function findSignature(contractId, role) {
@@ -952,6 +1007,23 @@ function createWorkforceEngine(seedStore) {
     };
   }
 
+  let platformFee = (() => {
+    const n = Number(process.env.WORKFORCE_DEFAULT_FEE_PERCENT);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : 0;
+  })();
+
+  function getPlatformSettings() {
+    return { defaultFeePercent: platformFee };
+  }
+
+  function setPlatformSettings({ defaultFeePercent }, actorEmail = null) {
+    const fee = Number(defaultFeePercent);
+    assert(Number.isFinite(fee) && fee >= 0 && fee <= 100, 'INVALID_FEE', 'BYG fee percent must be 0–100');
+    platformFee = fee;
+    audit('settings.platform_updated', 'settings', null, { key: 'platform', defaultFeePercent: fee }, actorEmail);
+    return { defaultFeePercent: fee };
+  }
+
   return {
     db,
     createEngagement,
@@ -965,6 +1037,7 @@ function createWorkforceEngine(seedStore) {
     fillContract,
     reviewContract,
     changeStartDate,
+    updateContractTerms,
     requestSignatureOtp,
     signContract,
     listSignatures,
@@ -996,6 +1069,8 @@ function createWorkforceEngine(seedStore) {
     listTalentOptions,
     listClientOptions,
     ledgerBalance,
+    getPlatformSettings,
+    setPlatformSettings,
     snapshot,
   };
 }

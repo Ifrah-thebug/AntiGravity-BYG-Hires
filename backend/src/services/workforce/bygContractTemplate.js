@@ -113,7 +113,7 @@ function buildFilledFields(eng, salary) {
     talent_email: eng.talentEmail,
     client_name: eng.clientName,
     client_email: eng.clientEmail || '',
-    byg_fee_percent: String(salary.bygFeePercent ?? 10),
+    byg_fee_percent: String(salary.bygFeePercent ?? 0),
   };
 }
 
