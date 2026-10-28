@@ -701,7 +701,14 @@ const supabaseStore = {
       assert(CADENCES.includes(patch.cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
       next.cadence = patch.cadence;
     }
-    assert(Object.keys(next).length, 'NO_FIELDS', 'Provide startDate, salaryAmount, bygFeePercent, currency, and/or cadence');
+    if (patch.roleTitle != null && String(patch.roleTitle).trim() !== '') {
+      next.roleTitle = String(patch.roleTitle).trim().slice(0, 140);
+    }
+    assert(
+      Object.keys(next).length,
+      'NO_FIELDS',
+      'Provide startDate, roleTitle, salaryAmount, bygFeePercent, currency, and/or cadence'
+    );
 
     const { data: removed, error: sErr } = await supabaseAdmin
       .from('wf_signatures')
@@ -711,11 +718,11 @@ const supabaseStore = {
     check(sErr);
     const clearedRoles = (removed || []).filter((s) => s.signed_at).map((s) => s.role);
 
-    if (next.startDate) {
-      const { error: eErr } = await supabaseAdmin
-        .from('wf_engagements')
-        .update({ start_date: next.startDate, updated_at: nowIso() })
-        .eq('id', contract.engagementId);
+    const engPatch = { updated_at: nowIso() };
+    if (next.startDate) engPatch.start_date = next.startDate;
+    if (next.roleTitle) engPatch.role_title = next.roleTitle;
+    if (next.startDate || next.roleTitle) {
+      const { error: eErr } = await supabaseAdmin.from('wf_engagements').update(engPatch).eq('id', contract.engagementId);
       check(eErr);
     }
 
@@ -744,6 +751,7 @@ const supabaseStore = {
       contractId,
       {
         ...(next.startDate ? { start_date: next.startDate } : {}),
+        ...(next.roleTitle ? { role_title: next.roleTitle } : {}),
         ...(next.salaryAmount != null ? { salary_amount: String(next.salaryAmount) } : {}),
         ...(next.bygFeePercent != null ? { byg_fee_percent: String(next.bygFeePercent) } : {}),
         ...(next.currency ? { currency: next.currency } : {}),

@@ -469,7 +469,14 @@ function createWorkforceEngine(seedStore) {
       assert(CADENCES.includes(patch.cadence), 'INVALID_CADENCE', 'Invalid salary cadence');
       next.cadence = patch.cadence;
     }
-    assert(Object.keys(next).length, 'NO_FIELDS', 'Provide startDate, salaryAmount, bygFeePercent, currency, and/or cadence');
+    if (patch.roleTitle != null && String(patch.roleTitle).trim() !== '') {
+      next.roleTitle = String(patch.roleTitle).trim().slice(0, 140);
+    }
+    assert(
+      Object.keys(next).length,
+      'NO_FIELDS',
+      'Provide startDate, roleTitle, salaryAmount, bygFeePercent, currency, and/or cadence'
+    );
 
     const clearedRoles = db.signatures.filter((s) => s.contractId === contractId && s.signedAt).map((s) => s.role);
     db.signatures = db.signatures.filter((s) => s.contractId !== contractId);
@@ -478,6 +485,7 @@ function createWorkforceEngine(seedStore) {
       eng.startDate = next.startDate;
       salary.effectiveFrom = next.startDate;
     }
+    if (next.roleTitle) eng.roleTitle = next.roleTitle;
     if (next.salaryAmount != null) salary.amount = next.salaryAmount;
     if (next.bygFeePercent != null) salary.bygFeePercent = next.bygFeePercent;
     if (next.currency) salary.currency = next.currency;
@@ -489,6 +497,7 @@ function createWorkforceEngine(seedStore) {
       contractId,
       {
         ...(next.startDate ? { start_date: next.startDate } : {}),
+        ...(next.roleTitle ? { role_title: next.roleTitle } : {}),
         ...(next.salaryAmount != null ? { salary_amount: String(next.salaryAmount) } : {}),
         ...(next.bygFeePercent != null ? { byg_fee_percent: String(next.bygFeePercent) } : {}),
         ...(next.currency ? { currency: next.currency } : {}),

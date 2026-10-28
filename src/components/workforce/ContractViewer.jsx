@@ -5,7 +5,7 @@ import { clientTotalFromContractor, splitInclusiveTotal } from '../../lib/workfo
 import { BusyLabel, DocumentPreview, Money, SignatureSteps, StatusBadge, btn, formatDate, inputClass } from './WorkforceUi';
 
 /**
- * Edit start date + contractor pay (and optional BYG fee) until fully signed.
+ * Edit designation, start date + contractor pay (and optional BYG fee) until fully signed.
  * Past start dates are allowed. Saving regenerates the contract document.
  */
 export function ContractTermsEditor({
@@ -22,8 +22,10 @@ export function ContractTermsEditor({
   const salary = engagement?.salary || {};
   const storedFee = Number(f.byg_fee_percent ?? salary.bygFeePercent ?? 0);
   const storedContractor = Number(f.salary_amount || salary.amount || 0);
+  const storedRole = f.role_title || engagement?.roleTitle || '';
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
+    roleTitle: storedRole,
     startDate: f.start_date || engagement?.startDate || '',
     salaryAmount: String(clientTotalFromContractor(storedContractor, storedFee) || ''),
     bygFeePercent: String(storedFee),
@@ -39,6 +41,7 @@ export function ContractTermsEditor({
     const feePct = Number(f.byg_fee_percent ?? salary.bygFeePercent ?? 0);
     const contractor = Number(f.salary_amount || salary.amount || 0);
     setForm({
+      roleTitle: f.role_title || engagement?.roleTitle || '',
       startDate: f.start_date || engagement?.startDate || '',
       salaryAmount: String(clientTotalFromContractor(contractor, feePct) || ''),
       bygFeePercent: String(feePct),
@@ -59,7 +62,7 @@ export function ContractTermsEditor({
   const set = (k) => (e) => setForm((prev) => ({ ...prev, [k]: e.target.value }));
   const amountOk = Number(form.salaryAmount) > 0;
   const feeOk = !canEditFee || (Number(form.bygFeePercent) >= 0 && Number(form.bygFeePercent) <= 100);
-  const canSave = form.startDate && amountOk && feeOk && !busy;
+  const canSave = form.roleTitle.trim() && form.startDate && amountOk && feeOk && !busy;
 
   return (
     <div className="w-full rounded-2xl border border-gray-200 bg-gray-50 p-4">
@@ -81,6 +84,16 @@ export function ContractTermsEditor({
         </p>
       ) : null}
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500 sm:col-span-2">
+          Position / designation
+          <input
+            value={form.roleTitle}
+            maxLength={140}
+            onChange={set('roleTitle')}
+            placeholder="e.g. Senior Support Specialist"
+            className={`${inputClass} mt-1.5 normal-case tracking-normal`}
+          />
+        </label>
         <label className="block text-[10px] font-black uppercase tracking-widest text-gray-500">
           Start date
           <input
@@ -138,6 +151,7 @@ export function ContractTermsEditor({
           disabled={!canSave}
           onClick={async () => {
             const payload = {
+              roleTitle: form.roleTitle.trim(),
               startDate: form.startDate,
               salaryAmount: Number(form.salaryAmount),
               currency: form.currency,

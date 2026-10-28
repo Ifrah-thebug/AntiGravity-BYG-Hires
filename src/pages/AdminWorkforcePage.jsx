@@ -376,8 +376,14 @@ function AdminHireForm({ talent, clients, jobs, defaultFee, onCreated, onError }
               </select>
             </Field>
           ) : null}
-          <Field label="Role title" className="sm:col-span-2">
-            <input className={inputClass} value={form.roleTitle} onChange={set('roleTitle')} />
+          <Field label="Position / designation" className="sm:col-span-2">
+            <input
+              className={inputClass}
+              value={form.roleTitle}
+              maxLength={140}
+              onChange={set('roleTitle')}
+              placeholder="e.g. Senior Support Specialist"
+            />
           </Field>
           <Field label="Client pays (fee included)">
             <input className={inputClass} inputMode="decimal" value={form.salaryAmount} onChange={set('salaryAmount')} placeholder="e.g. 650" />

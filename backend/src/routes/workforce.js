@@ -271,6 +271,7 @@ router.patch('/admin/contracts/:id/terms', requireAdmin, wrap(async (req, res) =
       req.params.id,
       {
         startDate: b.startDate,
+        roleTitle: b.roleTitle,
         salaryAmount: b.salaryAmount,
         bygFeePercent: b.bygFeePercent,
         currency: b.currency,
@@ -640,7 +641,7 @@ router.patch('/me/contracts/:id/start-date', ...clientOnly, wrap(async (req, res
 }));
 
 /**
- * Client can update start date + contractor pay before full signature.
+ * Client can update start date, designation, + contractor pay before full signature.
  * Platform fee stays server-controlled (defaultFeePercent / admin override).
  */
 router.patch('/me/contracts/:id/terms', ...clientOnly, wrap(async (req, res) => {
@@ -656,6 +657,7 @@ router.patch('/me/contracts/:id/terms', ...clientOnly, wrap(async (req, res) => 
       contract.id,
       {
         startDate: b.startDate,
+        roleTitle: b.roleTitle,
         salaryAmount: b.salaryAmount,
         currency: b.currency,
         cadence: b.cadence,

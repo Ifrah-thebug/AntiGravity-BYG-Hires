@@ -198,8 +198,14 @@ export default function ClientHireWizard({
               </select>
             </Field>
           ) : null}
-          <Field label="Role title" className="sm:col-span-2">
-            <input className={inputClass} value={terms.roleTitle} maxLength={140} onChange={set('roleTitle')} />
+          <Field label="Position / designation" className="sm:col-span-2">
+            <input
+              className={inputClass}
+              value={terms.roleTitle}
+              maxLength={140}
+              onChange={set('roleTitle')}
+              placeholder="e.g. Senior Support Specialist"
+            />
           </Field>
           <Field label="You pay (platform fee included)">
             <input
