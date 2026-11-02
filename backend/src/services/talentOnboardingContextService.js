@@ -101,10 +101,10 @@ function buildOnboardingChecklist(ctx) {
     if (!p.name?.trim() || !p.job_title?.trim()) {
       items.push({ id: 'portal', label: 'Add name and job title', done: false, priority: 1 });
     }
-    if (!p.photo_url?.trim()) {
+    if (!p.has_photo) {
       items.push({ id: 'portal-photo', label: 'Upload a professional photo', done: false, priority: 2 });
     }
-    if (!p.cv_url?.trim()) {
+    if (!p.has_cv) {
       items.push({ id: 'portal', label: 'Upload your CV', done: false, priority: 2 });
     }
     if (!(p.skills || []).length) {
@@ -330,6 +330,11 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
 /** Badge + proactive nudge flags for the BGuides launcher. */
 function buildGuideNotifications(ctx) {
   const hasProfile = Boolean(ctx.profile?.id);
+  const status = String(ctx.profile?.directory_status || 'draft').toLowerCase();
+  const showCalendarGaps = status === 'approved' || status === 'pending_review';
+  const needsCalendar = hasProfile && showCalendarGaps && !ctx.calendarConnected;
+  const needsIntroSlots =
+    hasProfile && showCalendarGaps && Boolean(ctx.calendarConnected) && !(Number(ctx.introSlotsCount) > 0);
   const needsSkillsTest = hasProfile && !(Number(ctx.assessmentCount) > 0);
   const needsPortfolio = hasProfile && !(Number(ctx.portfolioProjectCount) > 0);
   const pendingPortfolioRequests = Math.max(0, Number(ctx.pendingPortfolioRequestCount) || 0);
@@ -345,6 +350,12 @@ function buildGuideNotifications(ctx) {
           : `${pendingPortfolioRequests} portfolio requests waiting`,
     });
   }
+  if (needsCalendar) {
+    items.push({ id: 'calendar', count: 1, label: 'Connect calendar to get intros' });
+  }
+  if (needsIntroSlots) {
+    items.push({ id: 'intro_slots', count: 1, label: 'Publish intro slots' });
+  }
   if (needsSkillsTest) {
     items.push({ id: 'skills_test', count: 1, label: 'Skills test not taken yet' });
   }
@@ -356,6 +367,8 @@ function buildGuideNotifications(ctx) {
 
   return {
     notificationCount,
+    needsCalendar,
+    needsIntroSlots,
     needsSkillsTest,
     needsPortfolio,
     pendingPortfolioRequests,

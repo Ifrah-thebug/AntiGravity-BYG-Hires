@@ -21,6 +21,10 @@ import DirectoryTalentModal from '../components/DirectoryTalentModal';
 import AmbassadorReferredBadge from '../components/AmbassadorReferredBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
+import {
+  BGuidesCommandType,
+  subscribeBGuidesUiCommands,
+} from '../lib/bguidesUiCommands';
 
 // ─── Role type badge ──────────────────────────────────────────────────────────
 const RoleTypeBadge = ({ type }) => {
@@ -356,6 +360,53 @@ const TalentDirectoryPage = () => {
     setSearch(q);
     setRoleFilterLabel(roleLabel);
   }, [searchParams]);
+
+  // BGuides client chat → live directory filter / card open
+  useEffect(() => {
+    return subscribeBGuidesUiCommands((detail) => {
+      const { type, payload } = detail || {};
+
+      if (type === BGuidesCommandType.APPLY_DIRECTORY_FILTERS) {
+        const next = new URLSearchParams(searchParams);
+        if (payload?.dept) {
+          if (payload.dept === 'all') next.delete('dept');
+          else next.set('dept', String(payload.dept));
+        }
+        if (payload?.q != null) {
+          const q = String(payload.q).trim();
+          if (q) next.set('q', q);
+          else next.delete('q');
+        }
+        setSearchParams(next, { replace: true });
+
+        setFilters((prev) => ({
+          availability: Array.isArray(payload?.availability) && payload.availability.length
+            ? payload.availability.map(String)
+            : prev.availability,
+          roleType: Array.isArray(payload?.roleType) && payload.roleType.length
+            ? payload.roleType.map(String)
+            : prev.roleType,
+          maxFee:
+            Number.isFinite(Number(payload?.maxFee)) && Number(payload.maxFee) > 0
+              ? Number(payload.maxFee)
+              : prev.maxFee,
+        }));
+        if (
+          (Array.isArray(payload?.availability) && payload.availability.length) ||
+          (Array.isArray(payload?.roleType) && payload.roleType.length) ||
+          (Number.isFinite(Number(payload?.maxFee)) && Number(payload.maxFee) < 2000)
+        ) {
+          setShowFilters(true);
+        }
+        return;
+      }
+
+      if (type === BGuidesCommandType.OPEN_TALENT_CARD && payload?.talentId) {
+        const match = talents.find((t) => String(t.id) === String(payload.talentId));
+        if (match) setSelectedTalent(match);
+      }
+    });
+  }, [searchParams, setSearchParams, talents]);
 
   const updateFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
   const clearFilters = () => setFilters({ availability: [], roleType: [], maxFee: 2000 });

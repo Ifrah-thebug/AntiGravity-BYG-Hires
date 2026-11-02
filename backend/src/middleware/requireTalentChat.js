@@ -17,8 +17,22 @@ async function requireTalentChat(req, res, next) {
   }
 
   try {
-    const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
+    let user;
+    let error;
+    try {
+      ({ data: { user }, error } = await supabaseAdmin.auth.getUser(token));
+    } catch (fetchErr) {
+      const cause = String(fetchErr?.cause?.code || fetchErr?.code || fetchErr?.message || '');
+      if (/UNABLE_TO_VERIFY_LEAF_SIGNATURE|CERT|TLS|fetch failed/i.test(cause + String(fetchErr?.message || ''))) {
+        console.error('[requireTalentChat] TLS/fetch to Supabase failed:', fetchErr?.message || fetchErr);
+        return res.status(503).json({
+          error: 'Could not reach auth service (TLS). Restart backend with node --use-system-ca.',
+        });
+      }
+      throw fetchErr;
+    }
     if (error || !user) {
+      console.warn('[requireTalentChat] getUser failed:', error?.message || 'no user');
       return res.status(401).json({ error: 'Invalid or expired session.' });
     }
 

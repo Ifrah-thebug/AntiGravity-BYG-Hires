@@ -2,6 +2,7 @@ const { supabaseAdmin } = require('../middleware/requireAdmin');
 const groq = require('./groqClient');
 const openRouter = require('./openRouterClient');
 const { buildTalentOnboardingContext, isProfileOnWaitlist } = require('./talentOnboardingContextService');
+const { matchTalentChatIntent } = require('./talentChatIntentService');
 
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -549,7 +550,14 @@ async function maybeAppendPortfolioRequestNudge(sessionId, ctx) {
 
 async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
   const notes = ctx.guideNotifications || {};
-  if (!notes.needsSkillsTest && !notes.needsPortfolio) return null;
+  if (
+    !notes.needsCalendar &&
+    !notes.needsIntroSlots &&
+    !notes.needsSkillsTest &&
+    !notes.needsPortfolio
+  ) {
+    return null;
+  }
 
   const { data: recent } = await supabaseAdmin
     .from('talent_chat_messages')
@@ -557,11 +565,59 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
     .eq('session_id', sessionId)
     .eq('role', 'assistant')
     .order('created_at', { ascending: false })
-    .limit(12);
+    .limit(16);
 
   const triggers = new Set((recent || []).map((m) => m.metadata?.trigger).filter(Boolean));
 
-  // Prefer skills test first; then portfolio. Skip if already nudged for that gap.
+  // Priority: calendar → intro slots → skills test → portfolio
+  if (notes.needsCalendar && !triggers.has('calendar_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.calendar) {
+      actions.push({ id: 'calendar', ...ctx.actionCatalog.calendar });
+    } else if (ctx.actionCatalog['intro-slots']) {
+      actions.push({ id: 'intro-slots', ...ctx.actionCatalog['intro-slots'] });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Connect your Cal.com calendar so clients can book intro calls with you. I can take you to the scheduling section on your portal.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'calendar_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsIntroSlots && !triggers.has('intro_slots_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog['intro-slots']) {
+      actions.push({ id: 'intro-slots', ...ctx.actionCatalog['intro-slots'] });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your calendar is connected — next publish open intro slots so clients can actually book you.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'intro_slots_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
   if (notes.needsSkillsTest && !triggers.has('skills_test_missing')) {
     const actions = [];
     if (ctx.actionCatalog.assessment) {
@@ -588,7 +644,16 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
       content:
         'Your portfolio storybook is still empty. Adding even one published project makes a big difference when clients open your profile or request portfolio access.',
       actions,
-      metadata: { kind: 'proactive', trigger: 'portfolio_missing' },
+      metadata: {
+        kind: 'proactive',
+        trigger: 'portfolio_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'talent-portfolio', pathname: '/portal' },
+          },
+        ],
+      },
     });
   }
 
@@ -605,11 +670,27 @@ function publicChatContext(ctx) {
     pendingPortfolioRequestCount: ctx.pendingPortfolioRequestCount || 0,
     assessmentCount: ctx.assessmentCount || 0,
     portfolioProjectCount: ctx.portfolioProjectCount || 0,
+    calendarConnected: Boolean(ctx.calendarConnected),
+    introSlotsCount: ctx.introSlotsCount || 0,
+    needsCalendar: Boolean(notes.needsCalendar),
+    needsIntroSlots: Boolean(notes.needsIntroSlots),
     needsSkillsTest: Boolean(notes.needsSkillsTest),
     needsPortfolio: Boolean(notes.needsPortfolio),
     guideNotificationCount: Number(notes.notificationCount) || 0,
     guideNotificationLabel: notes.primaryLabel || null,
   };
+}
+
+function mapTalentMessages(messages) {
+  return messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    actions: m.actions || [],
+    pricingTip: m.metadata?.pricingTip || null,
+    uiCommands: m.metadata?.uiCommands || [],
+    createdAt: m.created_at,
+  }));
 }
 
 async function loadChatSession({ user, currentPath, backendBaseUrl }) {
@@ -643,14 +724,7 @@ async function loadChatSession({ user, currentPath, backendBaseUrl }) {
   return {
     session: { id: session.id, updatedAt: session.updated_at },
     context: publicChatContext(ctx),
-    messages: messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      actions: m.actions || [],
-      pricingTip: m.metadata?.pricingTip || null,
-      createdAt: m.created_at,
-    })),
+    messages: mapTalentMessages(messages),
   };
 }
 
@@ -674,6 +748,28 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
   const history = await listMessages(session.id, 20);
 
   await insertMessage(session.id, { role: 'user', content: text });
+
+  const intent = matchTalentChatIntent(text, ctx);
+  if (intent.matched) {
+    const saved = await insertMessage(session.id, {
+      role: 'assistant',
+      content: intent.reply,
+      actions: intent.actions || [],
+      metadata: { kind: 'intent', uiCommands: intent.uiCommands || [] },
+    });
+    return {
+      message: {
+        id: saved.id,
+        role: 'assistant',
+        content: saved.content,
+        actions: saved.actions,
+        pricingTip: null,
+        uiCommands: intent.uiCommands || [],
+        createdAt: saved.created_at,
+      },
+      context: publicChatContext(ctx),
+    };
+  }
 
   const systemPrompt = buildSystemPrompt(ctx);
   const llmHistory = history.map((m) => ({ role: m.role, content: m.content }));
@@ -706,6 +802,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
         content: saved.content,
         actions: saved.actions,
         pricingTip: saved.metadata?.pricingTip || null,
+        uiCommands: [],
         createdAt: saved.created_at,
       },
       context: publicChatContext(ctx),
@@ -721,11 +818,30 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
     }
   }
 
+  const uiCommands = [];
+  for (const action of normalized.actions || []) {
+    const href = String(action.href || '');
+    const hashIndex = href.indexOf('#');
+    if (hashIndex >= 0) {
+      const pathPart = href.slice(0, hashIndex);
+      const sectionId = href.slice(hashIndex + 1).split('?')[0];
+      const queryIndex = pathPart.indexOf('?');
+      const pathname = queryIndex >= 0 ? pathPart.slice(0, queryIndex) : pathPart || '/portal';
+      const search = queryIndex >= 0 ? pathPart.slice(queryIndex) : '';
+      if (sectionId) {
+        uiCommands.push({
+          type: 'HIGHLIGHT_SECTION',
+          payload: { sectionId, pathname, search },
+        });
+      }
+    }
+  }
+
   const saved = await insertMessage(session.id, {
     role: 'assistant',
     content: normalized.reply,
     actions: normalized.actions,
-    metadata: { pricingTip: normalized.pricingTip },
+    metadata: { pricingTip: normalized.pricingTip, uiCommands },
   });
 
   return {
@@ -735,6 +851,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
       content: saved.content,
       actions: saved.actions,
       pricingTip: saved.metadata?.pricingTip || null,
+      uiCommands,
       createdAt: saved.created_at,
     },
     context: publicChatContext(ctx),

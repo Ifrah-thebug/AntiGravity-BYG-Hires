@@ -4,6 +4,7 @@ import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import AdminRoute from './components/AdminRoute';
 import { AuthProvider } from './context/AuthContext';
+import { BGuidesUiSyncProvider } from './context/BGuidesUiSyncContext';
 import { talentService } from './services/talentService';
 
 const CANONICAL_BASE = 'https://byghires.com';
@@ -234,7 +235,9 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <BGuidesUiSyncProvider>
+          <AppContent />
+        </BGuidesUiSyncProvider>
       </AuthProvider>
     </Router>
   );

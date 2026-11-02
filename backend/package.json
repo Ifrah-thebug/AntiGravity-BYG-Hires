@@ -4,8 +4,8 @@
   "description": "Production backend for BYG Hires Talent Pool",
   "main": "src/server.js",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
+    "dev": "node --use-system-ca --watch --watch-path=src src/server.js",
+    "start": "node --use-system-ca src/server.js",
     "test": "jest",
     "dedupe-cvs": "node scripts/dedupe-cvs-from-drive.js"
   },

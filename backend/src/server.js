@@ -100,6 +100,7 @@ app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/admin/profile-review', adminProfileReviewRouter);
 app.use('/api/admin/clients', require('./routes/adminClients'));
 app.use('/api/talent/chat', require('./routes/talentChat'));
+app.use('/api/client/chat', require('./routes/clientChat'));
 app.use('/api/portfolio-access', require('./routes/portfolioAccess'));
 app.use('/api/talent/profile', talentProfileReviewRouter);
 app.use('/api/talent-invite', talentInviteRouter);
