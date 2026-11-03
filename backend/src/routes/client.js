@@ -23,10 +23,8 @@ const activateLimiter = rateLimit({
   message: { error: 'Too many attempts. Please try again later.' },
 });
 
-router.use(activateLimiter);
-
 /** Validate activation token before showing password form. */
-router.get('/activate/verify', async (req, res) => {
+router.get('/activate/verify', activateLimiter, async (req, res) => {
   try {
     const token = String(req.query.token || '').trim();
     const result = await clientActivation.verifyActivationToken(token);
@@ -46,7 +44,7 @@ router.get('/activate/verify', async (req, res) => {
 });
 
 /** Set password and activate client account. */
-router.post('/activate/set-password', async (req, res) => {
+router.post('/activate/set-password', activateLimiter, async (req, res) => {
   try {
     const token = String(req.body?.token || '').trim();
     const password = String(req.body?.password || '');

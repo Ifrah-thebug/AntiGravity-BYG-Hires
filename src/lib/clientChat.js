@@ -49,6 +49,14 @@ export async function fetchClientChatSession() {
   return data;
 }
 
+export async function fetchClientChatNotifications() {
+  const headers = await getAuthHeaders();
+  const resp = await fetch(`${API_BASE}/api/client/chat/notifications`, { headers });
+  const data = await parseJson(resp);
+  if (!resp.ok) throw new Error(data.error || 'Could not load notifications.');
+  return data;
+}
+
 export async function sendClientChatMessage(message) {
   const headers = await getAuthHeaders();
   const resp = await fetchWithRetry(`${API_BASE}/api/client/chat/message`, {

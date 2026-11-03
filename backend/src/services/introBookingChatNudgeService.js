@@ -135,6 +135,91 @@ async function notifyTalentIntroBookedViaChat({
   }
 }
 
+/**
+ * Client-side BGuides message after they book an intro (mirrors talent nudge).
+ * @param {{ clientId?: string|null, clientEmail?: string, talentName?: string, startIso?: string, meetingUrl?: string }} params
+ */
+async function notifyClientIntroBookedViaChat({
+  clientId,
+  clientEmail,
+  talentName,
+  startIso,
+  meetingUrl,
+}) {
+  if (!supabaseAdmin) return null;
+
+  try {
+    let clientUserId = null;
+    if (clientId) {
+      const { data: row } = await supabaseAdmin
+        .from('clients')
+        .select('user_id')
+        .eq('id', clientId)
+        .maybeSingle();
+      clientUserId = row?.user_id || null;
+    }
+    if (!clientUserId && clientEmail) {
+      const { data: row } = await supabaseAdmin
+        .from('clients')
+        .select('user_id')
+        .eq('email', String(clientEmail).trim().toLowerCase())
+        .maybeSingle();
+      clientUserId = row?.user_id || null;
+    }
+    if (!clientUserId) return null;
+
+    const session = await getOrCreateChatSession(clientUserId, null);
+    if (!session?.id) return null;
+
+    const who = String(talentName || 'your talent match').trim() || 'your talent match';
+    const when = formatWhen(startIso);
+    let content = `You're booked with ${who}`;
+    if (when) content += ` for ${when}`;
+    content +=
+      '. Join a couple of minutes early, skim their portfolio if available, and keep the meeting link handy.';
+
+    const actions = [
+      { id: 'dashboard', label: 'Open client dashboard', href: '/client', external: false },
+    ];
+    if (meetingUrl) {
+      actions.push({
+        id: 'meeting',
+        label: 'Open meeting link',
+        href: meetingUrl,
+        external: true,
+      });
+    }
+
+    const { data: saved, error: insertErr } = await supabaseAdmin
+      .from('talent_chat_messages')
+      .insert({
+        session_id: session.id,
+        role: 'assistant',
+        content,
+        actions,
+        metadata: {
+          kind: 'proactive',
+          trigger: 'intro_booked_client',
+          booking: { startIso: startIso || null, meetingUrl: meetingUrl || null },
+        },
+      })
+      .select('id')
+      .single();
+    if (insertErr) throw insertErr;
+
+    await supabaseAdmin
+      .from('talent_chat_sessions')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', session.id);
+
+    return saved;
+  } catch (err) {
+    console.warn('[introBookingChatNudge:client]', err?.message || err);
+    return null;
+  }
+}
+
 module.exports = {
   notifyTalentIntroBookedViaChat,
+  notifyClientIntroBookedViaChat,
 };

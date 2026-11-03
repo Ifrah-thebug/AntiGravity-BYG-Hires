@@ -5,6 +5,8 @@
 
 export const BGUIDES_UI_EVENT = 'byg-bguides-ui-command';
 
+export const BGUIDES_DIRECTORY_FILTERS_KEY = 'bguides-directory-filters';
+
 export const BGuidesCommandType = {
   APPLY_DIRECTORY_FILTERS: 'APPLY_DIRECTORY_FILTERS',
   OPEN_TALENT_CARD: 'OPEN_TALENT_CARD',
@@ -14,6 +16,67 @@ export const BGuidesCommandType = {
   NAVIGATE: 'NAVIGATE',
   REFRESH_PORTAL: 'REFRESH_PORTAL',
 };
+
+/**
+ * Persist directory filters that do not fit cleanly in the URL (fee / availability / roleType / sort).
+ * @param {Record<string, unknown>} payload
+ */
+export function persistDirectoryFilterPayload(payload) {
+  if (typeof window === 'undefined' || !payload || typeof payload !== 'object') return;
+  try {
+    const stored = {
+      availability: Array.isArray(payload.availability) ? payload.availability.map(String) : [],
+      roleType: Array.isArray(payload.roleType) ? payload.roleType.map(String) : [],
+      maxFee:
+        Number.isFinite(Number(payload.maxFee)) && Number(payload.maxFee) > 0
+          ? Number(payload.maxFee)
+          : null,
+      sort: payload.sort ? String(payload.sort) : null,
+      at: Date.now(),
+    };
+    window.sessionStorage.setItem(BGUIDES_DIRECTORY_FILTERS_KEY, JSON.stringify(stored));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/**
+ * @returns {{ availability: string[], roleType: string[], maxFee: number|null, sort: string|null } | null}
+ */
+export function readPersistedDirectoryFilters() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(BGUIDES_DIRECTORY_FILTERS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      availability: Array.isArray(parsed.availability) ? parsed.availability.map(String) : [],
+      roleType: Array.isArray(parsed.roleType) ? parsed.roleType.map(String) : [],
+      maxFee:
+        Number.isFinite(Number(parsed.maxFee)) && Number(parsed.maxFee) > 0
+          ? Number(parsed.maxFee)
+          : null,
+      sort: parsed.sort ? String(parsed.sort) : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Build /talent search string from filter payload (dept + q only in URL).
+ * @param {Record<string, unknown>} payload
+ * @returns {string} search including leading ? or empty string
+ */
+export function directoryFiltersToSearch(payload) {
+  const next = new URLSearchParams();
+  if (payload?.dept && payload.dept !== 'all') next.set('dept', String(payload.dept));
+  if (payload?.q) next.set('q', String(payload.q));
+  if (payload?.sort) next.set('sort', String(payload.sort));
+  const qs = next.toString();
+  return qs ? `?${qs}` : '';
+}
 
 /**
  * @param {{ type: string, payload?: Record<string, unknown> }} command

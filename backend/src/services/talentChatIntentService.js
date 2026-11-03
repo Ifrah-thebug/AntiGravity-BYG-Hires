@@ -85,17 +85,57 @@ function matchTalentChatIntent(text, ctx) {
     };
   }
 
+  if (
+    /\b(what is my score|what'?s my score|my (test )?score|my test results|assessment score|skills score|how did i score)\b/.test(
+      q
+    )
+  ) {
+    const scores = ctx?.assessmentScores || {};
+    const entries = Object.entries(scores).filter(([, n]) => Number.isFinite(Number(n)));
+    const notes = ctx?.guideNotifications || {};
+    const actions = [];
+    const assessment = catalogAction(ctx, 'assessment', 'Open skills tests');
+    if (assessment) actions.push(assessment);
+
+    if (!entries.length) {
+      return {
+        matched: true,
+        reply:
+          'You have not completed a skills test yet. Take one from the assessment page — scores help you stand out on the directory.',
+        actions,
+        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/assessment' } }],
+      };
+    }
+
+    const lines = entries
+      .map(([skill, n]) => `• ${skill}: ${Math.round(Number(n))}%`)
+      .join('\n');
+    const avg = notes.averageAssessmentScore;
+    let reply = `Your skills test results:\n${lines}`;
+    if (Number.isFinite(avg)) reply += `\nAverage: ${avg}%.`;
+    if (notes.needsScoreImprovement) {
+      reply += ' A score under 70% is worth retaking — clients notice verified strength.';
+    }
+
+    return {
+      matched: true,
+      reply,
+      actions,
+      uiCommands: [{ type: 'NAVIGATE', payload: { href: '/assessment' } }],
+    };
+  }
+
   if (/\b(connect calendar|cal\.com|link calendar|calendar connect)\b/.test(q)) {
     const action =
-      catalogAction(ctx, 'calendar', 'Connect calendar') ||
-      catalogAction(ctx, 'portal-calendar', 'Connect calendar') ||
+      catalogAction(ctx, 'calendar', 'Connect calendar (Cal.com)') ||
+      catalogAction(ctx, 'portal-calendar', 'Connect calendar (Cal.com)') ||
       catalogAction(ctx, 'portal', 'Open portal');
     const actions = action ? [action] : [];
     return {
       matched: true,
       reply: ctx?.calendarConnected
         ? 'Your calendar is already connected. Publish open intro slots so clients can book you.'
-        : 'Connect Cal.com from your portal so clients can book intro calls.',
+        : 'Connect your calendar (Cal.com) from your portal so clients can book intro calls.',
       actions,
       uiCommands: [
         {

@@ -439,6 +439,8 @@ function buildWelcomeMessage(ctx) {
   const name = ctx.profile?.name?.split(' ')?.[0] || 'there';
   const next = ctx.nextSteps?.[0];
   const status = ctx.profile?.directory_status || 'draft';
+  const notes = ctx.guideNotifications || {};
+  const avg = notes.averageAssessmentScore;
 
   let reply = `Hi ${name}! I'm BGuides — I'll help you finish your profile and get in front of clients faster.`;
 
@@ -451,9 +453,15 @@ function buildWelcomeMessage(ctx) {
     reply += '.';
   } else if (!ctx.profile) {
     reply += ' Start by completing your profile setup — I can walk you through every step.';
+  } else if (notes.needsScoreImprovement && notes.lowScoreSkills?.length) {
+    const first = notes.lowScoreSkills[0];
+    reply += ` Your ${first.skill} skills score is ${first.score}% — retake or add another skill test to strengthen your directory profile.`;
+  } else if (Number.isFinite(avg)) {
+    reply += ` Your average skills score is ${avg}%.`;
+    if (next) reply += ` Top priority: **${next.label}**.`;
   } else if (status === 'pending_review') {
     if (!ctx.calendarConnected) {
-      reply += ' Your profile is with our team for review — nice work getting it submitted. While you wait, I\'d connect your calendar if you haven\'t yet. That way, when you\'re approved, clients can book intro calls right away instead of you scrambling to set things up.';
+      reply += ' Your profile is with our team for review — nice work getting it submitted. While you wait, I\'d connect your calendar (Cal.com) if you haven\'t yet. That way, when you\'re approved, clients can book intro calls right away instead of you scrambling to set things up.';
     } else if (!ctx.assessmentCount) {
       reply += ' Your profile is on the review waitlist and your calendar is already linked — you\'re ahead of the game. A skills test is a great way to stand out while the team reviews your profile.';
     } else {
@@ -551,9 +559,13 @@ async function maybeAppendPortfolioRequestNudge(sessionId, ctx) {
 async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
   const notes = ctx.guideNotifications || {};
   if (
+    !notes.needsPhoto &&
+    !notes.needsCv &&
+    !notes.needsSubmit &&
     !notes.needsCalendar &&
     !notes.needsIntroSlots &&
     !notes.needsSkillsTest &&
+    !notes.needsScoreImprovement &&
     !notes.needsPortfolio
   ) {
     return null;
@@ -565,11 +577,82 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
     .eq('session_id', sessionId)
     .eq('role', 'assistant')
     .order('created_at', { ascending: false })
-    .limit(16);
+    .limit(20);
 
   const triggers = new Set((recent || []).map((m) => m.metadata?.trigger).filter(Boolean));
 
-  // Priority: calendar → intro slots → skills test → portfolio
+  // Priority: draft gaps → calendar → slots → skills test → portfolio → low scores
+  if (notes.needsPhoto && !triggers.has('photo_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog['portal-photo']) {
+      actions.push({ id: 'portal-photo', ...ctx.actionCatalog['portal-photo'] });
+    } else if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your profile still needs a professional photo before you submit for review. I can highlight the photo section on your portal.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'photo_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'profile-photo', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsCv && !triggers.has('cv_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', label: 'Open portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your CV is still missing. Re-upload it from talent setup or your portal so reviewers can see your background.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'cv_missing',
+        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/portal' } }],
+      },
+    });
+  }
+
+  if (notes.needsSubmit && !triggers.has('submit_pending')) {
+    const status = String(ctx.profile?.directory_status || 'draft').toLowerCase();
+    const actions = [];
+    if (ctx.actionCatalog['submit-review']) {
+      actions.push({ id: 'submit-review', ...ctx.actionCatalog['submit-review'] });
+    } else if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        status === 'changes_requested'
+          ? 'Admin left feedback on your profile. Fix those items and resubmit for review when you are ready.'
+          : 'When your photo, CV, and basics look good, submit your profile for review so you can join the directory.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'submit_pending',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'profile-submit', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
   if (notes.needsCalendar && !triggers.has('calendar_missing')) {
     const actions = [];
     if (ctx.actionCatalog.calendar) {
@@ -580,7 +663,7 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
     return insertMessage(sessionId, {
       role: 'assistant',
       content:
-        'Connect your Cal.com calendar so clients can book intro calls with you. I can take you to the scheduling section on your portal.',
+        'Connect your calendar (Cal.com) so clients can book intro calls with you. I can take you to the scheduling section on your portal.',
       actions,
       metadata: {
         kind: 'proactive',
@@ -657,6 +740,37 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
     });
   }
 
+  if (notes.needsScoreImprovement && !triggers.has('skills_score_low')) {
+    const low = notes.lowScoreSkills || [];
+    const scoreBits = low
+      .slice(0, 3)
+      .map((s) => `${s.skill} ${s.score}%`)
+      .join(', ');
+    const avg = notes.averageAssessmentScore;
+    let content = scoreBits
+      ? `Your skills test results need a boost: ${scoreBits}.`
+      : `Your average skills score is ${avg}% — below the 70% bar clients notice.`;
+    content += ' Retake a skill or add another test from the assessment page.';
+    const actions = [];
+    if (ctx.actionCatalog.assessment) {
+      actions.push({
+        id: 'assessment',
+        label: 'Retake / add skills test',
+        ...ctx.actionCatalog.assessment,
+      });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content,
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'skills_score_low',
+        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/assessment' } }],
+      },
+    });
+  }
+
   return null;
 }
 
@@ -669,15 +783,40 @@ function publicChatContext(ctx) {
     profileComplete: Boolean(ctx.profile?.name && ctx.profile?.job_title),
     pendingPortfolioRequestCount: ctx.pendingPortfolioRequestCount || 0,
     assessmentCount: ctx.assessmentCount || 0,
+    assessmentScores: ctx.assessmentScores || {},
+    averageAssessmentScore: notes.averageAssessmentScore ?? null,
+    needsScoreImprovement: Boolean(notes.needsScoreImprovement),
     portfolioProjectCount: ctx.portfolioProjectCount || 0,
     calendarConnected: Boolean(ctx.calendarConnected),
     introSlotsCount: ctx.introSlotsCount || 0,
+    needsPhoto: Boolean(notes.needsPhoto),
+    needsCv: Boolean(notes.needsCv),
+    needsSubmit: Boolean(notes.needsSubmit),
     needsCalendar: Boolean(notes.needsCalendar),
     needsIntroSlots: Boolean(notes.needsIntroSlots),
     needsSkillsTest: Boolean(notes.needsSkillsTest),
     needsPortfolio: Boolean(notes.needsPortfolio),
     guideNotificationCount: Number(notes.notificationCount) || 0,
     guideNotificationLabel: notes.primaryLabel || null,
+    completion: notes.completion || null,
+  };
+}
+
+async function getNotifications({ user, currentPath, backendBaseUrl }) {
+  const profile = await fetchFullProfile(user.id);
+  const ctx = await buildTalentOnboardingContext({
+    user,
+    profile,
+    currentPath,
+    backendBaseUrl,
+  });
+  const notes = ctx.guideNotifications || {};
+  return {
+    guideNotificationCount: Number(notes.notificationCount) || 0,
+    guideNotificationLabel: notes.primaryLabel || null,
+    nextStep: ctx.nextSteps?.[0] || null,
+    completion: notes.completion || null,
+    context: publicChatContext(ctx),
   };
 }
 
@@ -871,5 +1010,6 @@ async function sendChatMessage(params) {
 module.exports = {
   loadChatSession,
   sendChatMessage,
+  getNotifications,
   fetchFullProfile,
 };

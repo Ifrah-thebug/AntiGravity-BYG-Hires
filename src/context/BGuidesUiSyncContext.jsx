@@ -2,8 +2,10 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   BGuidesCommandType,
+  directoryFiltersToSearch,
   dispatchBGuidesUiCommand,
   highlightDomSection,
+  persistDirectoryFilterPayload,
   subscribeBGuidesUiCommands,
 } from '../lib/bguidesUiCommands';
 import { useAuth } from './AuthContext';
@@ -82,16 +84,12 @@ export function BGuidesUiSyncProvider({ children }) {
       }
 
       if (type === BGuidesCommandType.APPLY_DIRECTORY_FILTERS) {
-        const next = new URLSearchParams();
-        if (payload?.dept && payload.dept !== 'all') next.set('dept', String(payload.dept));
-        if (payload?.q) next.set('q', String(payload.q));
-        const search = next.toString() ? `?${next.toString()}` : '';
-        if (location.pathname !== '/talent') {
-          navigateRef.current(`/talent${search}`);
-        } else if (search !== location.search) {
+        persistDirectoryFilterPayload(payload || {});
+        const search = directoryFiltersToSearch(payload || {});
+        if (location.pathname !== '/talent' || search !== location.search) {
           navigateRef.current({ pathname: '/talent', search });
         }
-        // Directory page also listens to apply availability / fee state.
+        // TalentDirectoryPage also hydrates fee/availability/roleType from sessionStorage.
       }
     });
   }, [location.pathname, location.search]);

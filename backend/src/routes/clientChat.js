@@ -14,6 +14,20 @@ const chatLimiter = rateLimit({
 });
 
 router.use(requireClientChat);
+
+/** GET /api/client/chat/notifications — lightweight badge prefetch */
+router.get('/notifications', async (req, res) => {
+  try {
+    const payload = await chat.getNotifications({
+      client: req.clientRecord,
+    });
+    return res.json(payload);
+  } catch (err) {
+    console.error('[client/chat/notifications]', err?.message || err);
+    return res.status(500).json({ error: err.message || 'Could not load notifications.' });
+  }
+});
+
 router.use(chatLimiter);
 
 /** GET /api/client/chat/session */

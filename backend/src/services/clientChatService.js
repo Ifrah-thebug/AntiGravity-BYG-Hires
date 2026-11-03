@@ -6,6 +6,7 @@
 const { supabaseAdmin } = require('../middleware/requireAdmin');
 const groq = require('./groqClient');
 const openRouter = require('./openRouterClient');
+const { buildClientHiringContext } = require('./clientHiringContextService');
 
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -213,27 +214,102 @@ async function insertMessage(sessionId, { role, content, actions = [], metadata 
   return data;
 }
 
-function extractDirectoryFilters(text) {
-  const q = String(text || '').toLowerCase();
-  const filters = { dept: null, q: null, maxFee: null, availability: [], roleType: [] };
+/**
+ * Match a department key against text without short-token false positives
+ * (e.g. "ai" inside "available"). Prefers longest matching key across all depts.
+ */
+function keyMatchesText(text, key) {
+  const k = String(key || '').trim().toLowerCase();
+  if (!k || !text) return false;
+  if (k.length <= 3) {
+    const escaped = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|[^a-z0-9])${escaped}(?:[^a-z0-9]|$)`, 'i').test(text);
+  }
+  return text.includes(k);
+}
 
+function matchDepartmentId(text) {
+  let best = null;
   for (const dept of DEPARTMENT_HINTS) {
-    if (dept.keys.some((k) => q.includes(k))) {
-      filters.dept = dept.id;
-      break;
+    for (const key of dept.keys || []) {
+      if (!keyMatchesText(text, key)) continue;
+      const score = String(key).length;
+      if (!best || score > best.score) {
+        best = { id: dept.id, score, key };
+      }
     }
+  }
+  return best?.id || null;
+}
+
+/** True when the message is chat/help, not a talent search. */
+function looksLikeConversationalChat(text) {
+  const q = String(text || '').toLowerCase().trim();
+  if (!q) return false;
+  if (/\?$/.test(q)) return true;
+  return /\b(what|why|how|when|should i|can you|could you|tell me|do i|is my|am i|my profile|incomplete|improve|onboarding|assessment|score|company name|help me finish)\b/.test(
+    q
+  );
+}
+
+/**
+ * Only treat as a directory search when the user is clearly hiring/filtering.
+ * Avoids dumping "what should I improve on my profile?" into the search box.
+ */
+function hasHiringSearchIntent(text) {
+  const q = String(text || '').toLowerCase().trim();
+  if (!q || looksLikeConversationalChat(q)) return false;
+  return (
+    /\b(browse|find(?:\s+me)?|search(?:\s+for)?|looking for|need a|hire|show me|filter(?:\s+by)?|shortlist)\b/.test(
+      q
+    ) ||
+    /\$\s*\d{3,4}/.test(q) ||
+    /\bunder\s+\$?\d{3,4}\b/.test(q) ||
+    /\b(available immediately|full[- ]?time|part[- ]?time)\b/.test(q) ||
+    Boolean(matchDepartmentId(q))
+  );
+}
+
+function isPlausibleSkillQuery(value) {
+  const q = String(value || '').trim().toLowerCase();
+  if (!q || q.length < 2 || q.length > 40) return false;
+  if (/[?]/.test(q)) return false;
+  if (looksLikeConversationalChat(q)) return false;
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length > 4) return false;
+  return true;
+}
+
+function extractDirectoryFilters(text, { allowFreeTextQ = false } = {}) {
+  const q = String(text || '').toLowerCase();
+  const filters = {
+    dept: null,
+    q: null,
+    maxFee: null,
+    availability: [],
+    roleType: [],
+    sort: null,
+  };
+
+  filters.dept = matchDepartmentId(q);
+
+  const topMatch = q.match(/\btop\s+(\d{1,2})\b/);
+  if (topMatch) {
+    filters.sort = 'score-desc';
   }
 
   const skillMatch = q.match(/\b(?:with|who know|skilled in|experience in)\s+([a-z0-9.+#/\- ]{2,40})/i);
   if (skillMatch) {
-    filters.q = skillMatch[1].trim().replace(/\s+(and|or|please).*$/i, '').trim();
-  } else if (!filters.dept) {
+    const skill = skillMatch[1].trim().replace(/\s+(and|or|please).*$/i, '').trim();
+    if (isPlausibleSkillQuery(skill)) filters.q = skill;
+  } else if (allowFreeTextQ && !filters.dept) {
+    // Only for confirmed hiring intents — never dump full chat sentences into q.
     const free = q
-      .replace(/\b(i need|looking for|find me|show me|search for|hire|want)\b/gi, ' ')
-      .replace(/\b(talent|candidate|person|people|someone|a|an|the)\b/gi, ' ')
+      .replace(/\b(i need|looking for|find me|show me|search for|hire|want|top\s+\d+)\b/gi, ' ')
+      .replace(/\b(talent|candidate|candidates|person|people|someone|a|an|the)\b/gi, ' ')
       .replace(/\s+/g, ' ')
       .trim();
-    if (free.length >= 3 && free.length <= 60) filters.q = free;
+    if (isPlausibleSkillQuery(free)) filters.q = free;
   }
 
   const feeMatch = q.match(/\$?\s*(\d{3,4})\s*(?:\/?\s*mo|per month|monthly)?/);
@@ -251,16 +327,56 @@ function extractDirectoryFilters(text) {
   return filters;
 }
 
-function filtersToUiCommands(filters) {
-  if (!filters) return [];
+function hasMeaningfulFilters(filters) {
+  if (!filters) return false;
+  return Boolean(
+    filters.dept ||
+      filters.q ||
+      filters.maxFee ||
+      filters.sort ||
+      (filters.availability && filters.availability.length) ||
+      (filters.roleType && filters.roleType.length)
+  );
+}
+
+function filtersToPayload(filters) {
+  if (!filters) return {};
   const payload = {};
   if (filters.dept) payload.dept = filters.dept;
   if (filters.q) payload.q = filters.q;
   if (filters.maxFee) payload.maxFee = filters.maxFee;
   if (filters.availability?.length) payload.availability = filters.availability;
   if (filters.roleType?.length) payload.roleType = filters.roleType;
+  if (filters.sort) payload.sort = filters.sort;
+  return payload;
+}
+
+function filtersToDirectoryHref(filters) {
+  const payload = filtersToPayload(filters);
+  const params = new URLSearchParams();
+  if (payload.dept && payload.dept !== 'all') params.set('dept', String(payload.dept));
+  if (payload.q) params.set('q', String(payload.q));
+  if (payload.sort) params.set('sort', String(payload.sort));
+  const qs = params.toString();
+  return qs ? `/talent?${qs}` : '/talent';
+}
+
+function filtersToUiCommands(filters) {
+  const payload = filtersToPayload(filters);
   if (!Object.keys(payload).length) return [];
   return [{ type: 'APPLY_DIRECTORY_FILTERS', payload }];
+}
+
+function directoryActionFromFilters(filters, label = 'View filtered directory') {
+  const uiCommands = filtersToUiCommands(filters);
+  const href = filtersToDirectoryHref(filters);
+  return {
+    id: 'directory',
+    label,
+    href,
+    external: false,
+    uiCommands,
+  };
 }
 
 function matchClientIntent(text) {
@@ -277,19 +393,30 @@ function matchClientIntent(text) {
     };
   }
 
-  if (/\b(browse|show|find|search|looking for|need a|hire)\b/.test(q)) {
-    const filters = extractDirectoryFilters(q);
+  if (hasHiringSearchIntent(q)) {
+    const filters = extractDirectoryFilters(q, { allowFreeTextQ: true });
+    if (!hasMeaningfulFilters(filters)) {
+      return {
+        matched: true,
+        reply:
+          'Tell me the role, skill, budget, or department and I’ll filter the talent directory — for example “virtual assistants under $700”.',
+        actions: [{ id: 'directory', label: 'Browse talent directory', href: '/talent' }],
+        uiCommands: [],
+      };
+    }
     const uiCommands = filtersToUiCommands(filters);
+    const action = directoryActionFromFilters(filters);
     const bits = [];
     if (filters.dept) bits.push(`department filter`);
     if (filters.q) bits.push(`skills “${filters.q}”`);
     if (filters.maxFee) bits.push(`max fee $${filters.maxFee}`);
+    if (filters.sort) bits.push('top matches first');
     const summary = bits.length ? bits.join(', ') : 'the live directory';
     return {
       matched: true,
       reply: `Updating the talent directory for ${summary}. Pick a card to request an intro call.`,
-      actions: [{ id: 'directory', label: 'View filtered directory', href: '/talent' }],
-      uiCommands: uiCommands.length ? uiCommands : [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+      actions: [action],
+      uiCommands,
     };
   }
 
@@ -299,7 +426,23 @@ function matchClientIntent(text) {
       reply:
         'I help you hire on BYG Hires: describe the role or skills you need, I filter the talent directory live, then you can request an intro call from a shortlist.',
       actions: [{ id: 'directory', label: 'Open talent directory', href: '/talent' }],
-      uiCommands: [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+      uiCommands: [],
+    };
+  }
+
+  // Profile / onboarding questions while in client mode — do not touch directory filters.
+  if (
+    /\b(my profile|incomplete|improve|onboarding|assessment|score|portfolio|calendar|company)\b/.test(q)
+  ) {
+    return {
+      matched: true,
+      reply:
+        'This BGuides session is the hiring assistant (find talent / book intros). Profile completeness and scores are on the talent portal — open My Dashboard if you’re checking your own talent profile.',
+      actions: [
+        { id: 'portal', label: 'Open my dashboard', href: '/portal' },
+        { id: 'directory', label: 'Browse talent', href: '/talent' },
+      ],
+      uiCommands: [],
     };
   }
 
@@ -313,7 +456,9 @@ Help them find remote talent and book intro calls.
 
 Rules:
 - Stay on hiring / directory / intro booking. No unrelated tutorials.
-- When the user describes a role or skills, extract filters and return uiCommands.
+- ONLY emit APPLY_DIRECTORY_FILTERS when the user is clearly searching for talent (role, skill, budget, department).
+- NEVER put full chat sentences, questions, or profile talk into filters.q — use short skill/role keywords only (max 4 words).
+- If the user asks about their own profile, scores, or onboarding, answer briefly that this chat is for hiring, and do NOT emit APPLY_DIRECTORY_FILTERS.
 - Prefer short replies under 80 words.
 - Respond ONLY with JSON:
 {
@@ -326,7 +471,28 @@ Rules:
   ]
 }
 Department ids: ai-automation, admin-operations, account-coordinators, marketing-content, virtual-assistants, customer-support, sales, hr, it-technical, finance.
-Only include talentId in OPEN_BOOKING if the user named a specific talent id you were given — otherwise filter the directory.`;
+Only include talentId in OPEN_BOOKING if the user named a specific talent id you were given — otherwise filter the directory.
+Omit uiCommands entirely when you are not applying filters or navigation.`;
+}
+
+function sanitizeFilterPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const next = {};
+  if (payload.dept) next.dept = String(payload.dept);
+  if (payload.sort) next.sort = String(payload.sort);
+  if (Number.isFinite(Number(payload.maxFee)) && Number(payload.maxFee) > 0) {
+    next.maxFee = Number(payload.maxFee);
+  }
+  if (Array.isArray(payload.availability) && payload.availability.length) {
+    next.availability = payload.availability.map(String);
+  }
+  if (Array.isArray(payload.roleType) && payload.roleType.length) {
+    next.roleType = payload.roleType.map(String);
+  }
+  if (payload.q != null && isPlausibleSkillQuery(payload.q)) {
+    next.q = String(payload.q).trim();
+  }
+  return Object.keys(next).length ? next : null;
 }
 
 function sanitizeUiCommands(commands) {
@@ -334,16 +500,46 @@ function sanitizeUiCommands(commands) {
   const allowed = new Set(['APPLY_DIRECTORY_FILTERS', 'OPEN_TALENT_CARD', 'OPEN_BOOKING', 'NAVIGATE', 'HIGHLIGHT_SECTION']);
   return commands
     .filter((c) => c && allowed.has(String(c.type)))
-    .map((c) => ({
-      type: String(c.type),
-      payload: c.payload && typeof c.payload === 'object' ? c.payload : {},
-    }))
+    .map((c) => {
+      const type = String(c.type);
+      let payload = c.payload && typeof c.payload === 'object' ? c.payload : {};
+      if (type === 'APPLY_DIRECTORY_FILTERS') {
+        payload = sanitizeFilterPayload(payload);
+        if (!payload) return null;
+      }
+      return { type, payload };
+    })
+    .filter(Boolean)
     .slice(0, 5);
 }
 
-function normalizeClientPayload(parsed, fallbackText) {
+function enrichActionsWithFilterCommands(actions, uiCommands) {
+  const filterCmd = (uiCommands || []).find((c) => c.type === 'APPLY_DIRECTORY_FILTERS');
+  const filterHref = filterCmd ? filtersToDirectoryHref(filterCmd.payload || {}) : '/talent';
+  return (actions || []).map((a) => {
+    if (String(a.id) !== 'directory') return a;
+    const href = a.href && a.href !== '/talent' ? a.href : filterHref;
+    return {
+      ...a,
+      href,
+      uiCommands: filterCmd ? [filterCmd] : a.uiCommands || [],
+    };
+  });
+}
+
+function normalizeClientPayload(parsed, fallbackText, fallbackFilters = null, { applyFallbackFilters = false } = {}) {
   const reply = String(parsed?.reply || fallbackText || '').trim() || fallbackText;
-  const actions = Array.isArray(parsed?.actions)
+  let uiCommands = sanitizeUiCommands(parsed?.uiCommands);
+  // Never invent directory filters from random chat — only when caller confirms hiring intent.
+  if (
+    !uiCommands.length &&
+    applyFallbackFilters &&
+    fallbackFilters &&
+    hasMeaningfulFilters(fallbackFilters)
+  ) {
+    uiCommands = filtersToUiCommands(fallbackFilters);
+  }
+  let actions = Array.isArray(parsed?.actions)
     ? parsed.actions
         .map((a) => ({
           id: String(a?.id || 'directory'),
@@ -353,52 +549,162 @@ function normalizeClientPayload(parsed, fallbackText) {
         }))
         .slice(0, 3)
     : [];
-  const uiCommands = sanitizeUiCommands(parsed?.uiCommands);
+  if (!actions.length && uiCommands.some((c) => c.type === 'APPLY_DIRECTORY_FILTERS')) {
+    actions = [directoryActionFromFilters(fallbackFilters || uiCommands[0].payload)];
+  } else {
+    actions = enrichActionsWithFilterCommands(actions, uiCommands);
+  }
   return { reply, actions, uiCommands };
 }
 
-function publicClientContext(client) {
+function publicClientContext(hiringCtx) {
+  const notes = hiringCtx?.guideNotifications || {};
   return {
     role: 'client',
-    company: client?.company || null,
-    guideNotificationCount: 0,
-    guideNotificationLabel: 'Describe a role — I will filter talent live',
+    company: hiringCtx?.company || null,
+    nextSteps: hiringCtx?.nextSteps || [],
+    needsCompany: Boolean(hiringCtx?.needsCompany),
+    needsHiringCriteria: Boolean(hiringCtx?.needsHiringCriteria),
+    upcomingIntroCount: hiringCtx?.upcomingIntroCount || 0,
+    guideNotificationCount: Number(notes.notificationCount) || 0,
+    guideNotificationLabel: notes.primaryLabel || 'Describe a role — I will filter talent live',
+    completionLabel: notes.completionLabel || null,
+  };
+}
+
+async function maybeAppendClientHiringNudge(sessionId, hiringCtx) {
+  const notes = hiringCtx?.guideNotifications || {};
+  if (!notes.needsCompany && !notes.needsHiringCriteria && !(notes.upcomingIntroCount > 0)) {
+    return null;
+  }
+
+  const { data: recent } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .select('id, metadata')
+    .eq('session_id', sessionId)
+    .eq('role', 'assistant')
+    .order('created_at', { ascending: false })
+    .limit(16);
+
+  const triggers = new Set((recent || []).map((m) => m.metadata?.trigger).filter(Boolean));
+
+  if (notes.needsCompany && !triggers.has('company_missing')) {
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Add your company name on the client dashboard so intro invites look professional. I can highlight the field for you.',
+      actions: [{ id: 'company', label: 'Set company name', href: '/client#client-company' }],
+      metadata: {
+        kind: 'proactive',
+        trigger: 'company_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'client-company', pathname: '/client' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsHiringCriteria && !triggers.has('hiring_criteria_missing')) {
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Tell me the role, skills, or budget you need — I’ll filter the talent directory live so you can request intros.',
+      actions: [
+        {
+          id: 'directory',
+          label: 'Browse talent directory',
+          href: '/talent',
+          uiCommands: [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+        },
+      ],
+      metadata: {
+        kind: 'proactive',
+        trigger: 'hiring_criteria_missing',
+      },
+    });
+  }
+
+  if (notes.upcomingIntroCount > 0 && !triggers.has('intro_prep')) {
+    const n = notes.upcomingIntroCount;
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        n === 1
+          ? 'You have an upcoming intro call. Skim the talent’s portfolio and skills beforehand, and join a couple of minutes early.'
+          : `You have ${n} upcoming intro calls. Skim each talent’s portfolio and skills beforehand, and join a couple of minutes early.`,
+      actions: [{ id: 'dashboard', label: 'Open client dashboard', href: '/client' }],
+      metadata: { kind: 'proactive', trigger: 'intro_prep' },
+    });
+  }
+
+  return null;
+}
+
+async function getNotifications({ client }) {
+  const hiringCtx = await buildClientHiringContext({ client });
+  return {
+    guideNotificationCount: Number(hiringCtx.guideNotifications?.notificationCount) || 0,
+    guideNotificationLabel: hiringCtx.guideNotifications?.primaryLabel || null,
+    nextStep: hiringCtx.nextSteps?.[0] || null,
+    completionLabel: hiringCtx.guideNotifications?.completionLabel || null,
+    context: publicClientContext(hiringCtx),
   };
 }
 
 function mapMessages(messages) {
-  return messages.map((m) => ({
-    id: m.id,
-    role: m.role,
-    content: m.content,
-    actions: m.actions || [],
-    pricingTip: null,
-    uiCommands: m.metadata?.uiCommands || [],
-    createdAt: m.created_at,
-  }));
+  return messages.map((m) => {
+    const uiCommands = m.metadata?.uiCommands || [];
+    const actions = (m.actions || []).map((a) => {
+      if (a?.uiCommands?.length) return a;
+      if (String(a?.id) === 'directory' && uiCommands.length) {
+        return { ...a, uiCommands };
+      }
+      return a;
+    });
+    return {
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      actions,
+      pricingTip: null,
+      uiCommands,
+      createdAt: m.created_at,
+    };
+  });
 }
 
 async function loadChatSession({ user, client }) {
+  const hiringCtx = await buildClientHiringContext({ client });
   const session = await getOrCreateSession(user.id);
   let messages = await listMessages(session.id);
 
   if (messages.length === 0) {
-    const company = client?.company ? ` for ${client.company}` : '';
+    const company = hiringCtx.company ? ` for ${hiringCtx.company}` : '';
     const saved = await insertMessage(session.id, {
       role: 'assistant',
-      content: `Hi! I'm BGuides${company}. Tell me the role, skills, or budget you need — I'll filter the talent directory on this page so you can request intro calls.`,
-      actions: [{ id: 'directory', label: 'Browse talent directory', href: '/talent' }],
+      content: hiringCtx.needsCompany
+        ? `Hi! I'm BGuides${company}. First, add your company name on the dashboard, then tell me the role you need and I’ll filter talent live.`
+        : `Hi! I'm BGuides${company}. Tell me the role, skills, or budget you need — I'll filter the talent directory so you can request intro calls.`,
+      actions: hiringCtx.needsCompany
+        ? [{ id: 'company', label: 'Set company name', href: '/client#client-company' }]
+        : [{ id: 'directory', label: 'Browse talent directory', href: '/talent' }],
       metadata: {
         kind: 'welcome',
-        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+        // Intentionally no auto-NAVIGATE on welcome — avoids remounting the page on open.
       },
     });
     messages = [saved];
+  } else {
+    const nudge = await maybeAppendClientHiringNudge(session.id, hiringCtx);
+    if (nudge) messages = [...messages, nudge];
   }
 
   return {
     session: { id: session.id, updatedAt: session.updated_at },
-    context: publicClientContext(client),
+    context: publicClientContext(hiringCtx),
     messages: mapMessages(messages),
   };
 }
@@ -411,6 +717,7 @@ async function sendChatMessage({ user, client, message }) {
     throw err;
   }
 
+  const hiringCtx = await buildClientHiringContext({ client });
   const session = await getOrCreateSession(user.id);
   const history = await listMessages(session.id, 20);
   await insertMessage(session.id, { role: 'user', content: text });
@@ -433,7 +740,7 @@ async function sendChatMessage({ user, client, message }) {
         uiCommands: intent.uiCommands || [],
         createdAt: saved.created_at,
       },
-      context: publicClientContext(client),
+      context: publicClientContext(hiringCtx),
     };
   }
 
@@ -446,17 +753,25 @@ async function sendChatMessage({ user, client, message }) {
     );
   } catch (err) {
     console.error('[clientChat] LLM error:', err?.message || err);
-    const filters = extractDirectoryFilters(text);
-    const uiCommands = filtersToUiCommands(filters);
+    const wantsSearch = hasHiringSearchIntent(text);
+    const filters = wantsSearch
+      ? extractDirectoryFilters(text, { allowFreeTextQ: true })
+      : null;
+    const uiCommands =
+      wantsSearch && hasMeaningfulFilters(filters) ? filtersToUiCommands(filters) : [];
     const fallback = normalizeClientPayload(
       {
         reply: uiCommands.length
           ? 'I filtered the directory based on what you described. Browse the cards and request an intro when ready.'
           : 'I had trouble reaching the AI service. Try browsing the talent directory, or rephrase the role you need.',
-        actions: [{ id: 'directory', label: 'Browse talent', href: '/talent' }],
-        uiCommands: uiCommands.length ? uiCommands : [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+        actions: uiCommands.length
+          ? [directoryActionFromFilters(filters, 'Browse talent')]
+          : [{ id: 'directory', label: 'Browse talent', href: '/talent' }],
+        uiCommands,
       },
-      'Try the talent directory.'
+      'Try the talent directory.',
+      filters,
+      { applyFallbackFilters: false }
     );
     const saved = await insertMessage(session.id, {
       role: 'assistant',
@@ -474,18 +789,21 @@ async function sendChatMessage({ user, client, message }) {
         uiCommands: fallback.uiCommands,
         createdAt: saved.created_at,
       },
-      context: publicClientContext(client),
+      context: publicClientContext(hiringCtx),
     };
   }
 
   const parsed = parseAssistantJson(rawAssistant);
-  let normalized = normalizeClientPayload(parsed, String(rawAssistant).slice(0, 500));
-
-  // Always try to attach directory filter commands when user clearly searching.
-  if (!normalized.uiCommands.length) {
-    const filters = extractDirectoryFilters(text);
-    normalized.uiCommands = filtersToUiCommands(filters);
-  }
+  const wantsSearch = hasHiringSearchIntent(text);
+  const heuristicFilters = wantsSearch
+    ? extractDirectoryFilters(text, { allowFreeTextQ: true })
+    : null;
+  let normalized = normalizeClientPayload(
+    parsed,
+    String(rawAssistant).slice(0, 500),
+    heuristicFilters,
+    { applyFallbackFilters: wantsSearch }
+  );
 
   const saved = await insertMessage(session.id, {
     role: 'assistant',
@@ -504,12 +822,18 @@ async function sendChatMessage({ user, client, message }) {
       uiCommands: normalized.uiCommands,
       createdAt: saved.created_at,
     },
-    context: publicClientContext(client),
+    context: publicClientContext(hiringCtx),
   };
 }
 
 module.exports = {
   loadChatSession,
   sendChatMessage,
+  getNotifications,
   extractDirectoryFilters,
+  filtersToDirectoryHref,
+  hasHiringSearchIntent,
+  looksLikeConversationalChat,
+  keyMatchesText,
+  matchDepartmentId,
 };

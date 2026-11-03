@@ -52,6 +52,19 @@ export async function fetchTalentChatSession(currentPath = '') {
   return data;
 }
 
+export async function fetchTalentChatNotifications(currentPath = '') {
+  const headers = await getAuthHeaders();
+  const params = new URLSearchParams();
+  if (currentPath) params.set('path', currentPath);
+  const qs = params.toString();
+  const resp = await fetch(`${API_BASE}/api/talent/chat/notifications${qs ? `?${qs}` : ''}`, {
+    headers,
+  });
+  const data = await parseJson(resp);
+  if (!resp.ok) throw new Error(data.error || 'Could not load notifications.');
+  return data;
+}
+
 export async function sendTalentChatMessage(message, currentPath = '') {
   const headers = await getAuthHeaders();
   const resp = await fetchWithRetry(`${API_BASE}/api/talent/chat/message`, {

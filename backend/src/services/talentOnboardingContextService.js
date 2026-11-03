@@ -157,7 +157,11 @@ function buildOnboardingChecklist(ctx) {
 
   return items
     .filter((i) => !i.done)
-    .sort((a, b) => a.priority - b.priority);
+    .sort((a, b) => a.priority - b.priority)
+    .map((i) => ({
+      ...i,
+      prompt: i.prompt || i.label,
+    }));
 }
 
 function buildActionCatalog(ctx) {
@@ -198,7 +202,7 @@ function buildActionCatalog(ctx) {
 
   if (userId && backendBase) {
     actions.calendar = {
-      label: 'Connect calendar',
+      label: 'Connect calendar (Cal.com)',
       href: `${backendBase}/api/cal/connect/start?talentId=${encodeURIComponent(userId)}&email=${encodeURIComponent(email)}`,
       external: true,
     };
@@ -256,7 +260,8 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
       supabaseAdmin
         .from('talent_portfolio_projects')
         .select('id', { count: 'exact', head: true })
-        .eq('profile_id', talentId),
+        .eq('profile_id', talentId)
+        .eq('published', true),
       supabaseAdmin
         .from('voice_interview_requests')
         .select('id')
@@ -327,15 +332,44 @@ async function buildTalentOnboardingContext({ user, profile, currentPath, backen
   return ctx;
 }
 
+const SCORE_IMPROVEMENT_THRESHOLD = 70;
+
+function computeScoreSignals(assessmentScores = {}) {
+  const entries = Object.entries(assessmentScores || {}).filter(([, n]) => Number.isFinite(Number(n)));
+  if (!entries.length) {
+    return {
+      averageAssessmentScore: null,
+      needsScoreImprovement: false,
+      lowScoreSkills: [],
+    };
+  }
+  const values = entries.map(([, n]) => Number(n));
+  const averageAssessmentScore = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  const lowScoreSkills = entries
+    .filter(([, n]) => Number(n) < SCORE_IMPROVEMENT_THRESHOLD)
+    .map(([skill, n]) => ({ skill, score: Math.round(Number(n)) }));
+  const needsScoreImprovement =
+    averageAssessmentScore < SCORE_IMPROVEMENT_THRESHOLD || lowScoreSkills.length > 0;
+  return { averageAssessmentScore, needsScoreImprovement, lowScoreSkills };
+}
+
 /** Badge + proactive nudge flags for the BGuides launcher. */
 function buildGuideNotifications(ctx) {
   const hasProfile = Boolean(ctx.profile?.id);
   const status = String(ctx.profile?.directory_status || 'draft').toLowerCase();
   const showCalendarGaps = status === 'approved' || status === 'pending_review';
+  const isDraftish = status === 'draft' || status === 'changes_requested';
+  const scoreSignals = computeScoreSignals(ctx.assessmentScores);
+
+  const needsPhoto = hasProfile && isDraftish && !ctx.profile?.has_photo;
+  const needsCv = hasProfile && isDraftish && !ctx.profile?.has_cv;
+  const needsSubmit = hasProfile && isDraftish;
   const needsCalendar = hasProfile && showCalendarGaps && !ctx.calendarConnected;
   const needsIntroSlots =
     hasProfile && showCalendarGaps && Boolean(ctx.calendarConnected) && !(Number(ctx.introSlotsCount) > 0);
   const needsSkillsTest = hasProfile && !(Number(ctx.assessmentCount) > 0);
+  const needsScoreImprovement =
+    hasProfile && !needsSkillsTest && Boolean(scoreSignals.needsScoreImprovement);
   const needsPortfolio = hasProfile && !(Number(ctx.portfolioProjectCount) > 0);
   const pendingPortfolioRequests = Math.max(0, Number(ctx.pendingPortfolioRequestCount) || 0);
 
@@ -350,8 +384,19 @@ function buildGuideNotifications(ctx) {
           : `${pendingPortfolioRequests} portfolio requests waiting`,
     });
   }
+  if (needsPhoto) {
+    items.push({ id: 'photo', count: 1, label: 'Add a professional photo' });
+  }
+  if (needsCv) {
+    items.push({ id: 'cv', count: 1, label: 'Upload your CV' });
+  }
+  if (needsSubmit && status === 'changes_requested') {
+    items.push({ id: 'submit', count: 1, label: 'Fix feedback and resubmit' });
+  } else if (needsSubmit && status === 'draft') {
+    items.push({ id: 'submit', count: 1, label: 'Submit profile for review' });
+  }
   if (needsCalendar) {
-    items.push({ id: 'calendar', count: 1, label: 'Connect calendar to get intros' });
+    items.push({ id: 'calendar', count: 1, label: 'Connect calendar (Cal.com) to get intros' });
   }
   if (needsIntroSlots) {
     items.push({ id: 'intro_slots', count: 1, label: 'Publish intro slots' });
@@ -359,19 +404,31 @@ function buildGuideNotifications(ctx) {
   if (needsSkillsTest) {
     items.push({ id: 'skills_test', count: 1, label: 'Skills test not taken yet' });
   }
+  if (needsScoreImprovement) {
+    items.push({ id: 'skills_score', count: 1, label: 'Improve a low skills test score' });
+  }
   if (needsPortfolio) {
-    items.push({ id: 'portfolio', count: 1, label: 'Portfolio not built yet' });
+    items.push({ id: 'portfolio', count: 1, label: 'Publish a portfolio project' });
   }
 
   const notificationCount = items.reduce((sum, item) => sum + item.count, 0);
+  const totalSetupSteps = 7;
+  const doneSteps = Math.max(0, totalSetupSteps - Math.min(totalSetupSteps, items.filter((i) => i.id !== 'portfolio_requests').length));
 
   return {
     notificationCount,
+    needsPhoto,
+    needsCv,
+    needsSubmit,
     needsCalendar,
     needsIntroSlots,
     needsSkillsTest,
+    needsScoreImprovement,
     needsPortfolio,
     pendingPortfolioRequests,
+    averageAssessmentScore: scoreSignals.averageAssessmentScore,
+    lowScoreSkills: scoreSignals.lowScoreSkills,
+    completion: { done: doneSteps, total: totalSetupSteps },
     items,
     primaryLabel: items[0]?.label || null,
   };
@@ -383,6 +440,8 @@ module.exports = {
   buildOnboardingChecklist,
   buildActionCatalog,
   buildGuideNotifications,
+  computeScoreSignals,
   calculateDirectoryFeeUsd,
   isProfileOnWaitlist,
+  SCORE_IMPROVEMENT_THRESHOLD,
 };
