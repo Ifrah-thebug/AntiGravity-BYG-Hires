@@ -3,6 +3,7 @@ const groq = require('./groqClient');
 const openRouter = require('./openRouterClient');
 const { buildTalentOnboardingContext, isProfileOnWaitlist } = require('./talentOnboardingContextService');
 const { matchTalentChatIntent } = require('./talentChatIntentService');
+const { uiCommandsFromActions } = require('./bguidesStatusReplyService');
 
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -160,6 +161,9 @@ RULES:
 - SCOPE ONLY: BYG Hires talent onboarding — profile, directory approval, portfolio, pricing, skills tests, AI interview, calendar/intros, sharing, and how this platform works for talent.
 - OUT OF SCOPE — refuse politely and briefly: general programming/tech tutorials (e.g. "how C++ works", language syntax, algorithms), homework/school help, unrelated career advice outside BYG Hires, news, politics, personal life, medical/legal advice, writing code for them, or any topic not about using BYG Hires as talent.
 - When out of scope: do NOT give definitions, explanations, or tutorials. Say you're only here for their BYG Hires profile journey, then offer one relevant next step (actions from the catalog). Keep "reply" under ~60 words.
+- Answer the user’s specific question using TALENT CONTEXT facts. Do NOT dump the full profile checklist unless they asked if the profile is incomplete, what’s missing, what to improve, or overall status.
+- When they do ask completeness/status: summarize concrete facts from TALENT CONTEXT (done vs pending from nextSteps, photo/CV flags, calendar, scores, portfolio). Do NOT only say “open the portal” — state the audit first, then offer one action.
+- For skills test / score questions: report assessmentScores / averageAssessmentScore from context, or say no test is completed yet.
 - Never claim admin approved/rejected unless directory_status says so.
 - Never invent review feedback — only cite review_notes and review_issues from context.
 - Do not include phone, email, or LinkedIn in profile text suggestions.
@@ -194,6 +198,19 @@ ${JSON.stringify({
   currentPath: ctx.currentPath,
   profile: ctx.profile,
   nextSteps: ctx.nextSteps?.slice(0, 5),
+  guideNotifications: {
+    needsPhoto: ctx.guideNotifications?.needsPhoto,
+    needsCv: ctx.guideNotifications?.needsCv,
+    needsSubmit: ctx.guideNotifications?.needsSubmit,
+    needsCalendar: ctx.guideNotifications?.needsCalendar,
+    needsIntroSlots: ctx.guideNotifications?.needsIntroSlots,
+    needsSkillsTest: ctx.guideNotifications?.needsSkillsTest,
+    needsScoreImprovement: ctx.guideNotifications?.needsScoreImprovement,
+    needsPortfolio: ctx.guideNotifications?.needsPortfolio,
+    averageAssessmentScore: ctx.guideNotifications?.averageAssessmentScore,
+    lowScoreSkills: ctx.guideNotifications?.lowScoreSkills,
+    primaryLabel: ctx.guideNotifications?.primaryLabel,
+  },
   calendarConnected: ctx.calendarConnected,
   assessmentCount: ctx.assessmentCount,
   assessmentScores: ctx.assessmentScores,
@@ -832,6 +849,27 @@ function mapTalentMessages(messages) {
   }));
 }
 
+async function deleteAllSessionsForUser(userId) {
+  if (!supabaseAdmin || !userId) return;
+  const { data: sessions, error } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .select('id')
+    .eq('user_id', userId);
+  if (error) throw error;
+  const ids = (sessions || []).map((s) => s.id).filter(Boolean);
+  if (!ids.length) return;
+  const { error: msgErr } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .delete()
+    .in('session_id', ids);
+  if (msgErr) throw msgErr;
+  const { error: sessErr } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .delete()
+    .in('id', ids);
+  if (sessErr) throw sessErr;
+}
+
 async function loadChatSession({ user, currentPath, backendBaseUrl }) {
   const profile = await fetchFullProfile(user.id);
   const ctx = await buildTalentOnboardingContext({
@@ -865,6 +903,12 @@ async function loadChatSession({ user, currentPath, backendBaseUrl }) {
     context: publicChatContext(ctx),
     messages: mapTalentMessages(messages),
   };
+}
+
+/** Wipe history and reload so welcome / proactive nudges run again. */
+async function clearChatSession({ user, currentPath, backendBaseUrl }) {
+  await deleteAllSessionsForUser(user.id);
+  return loadChatSession({ user, currentPath, backendBaseUrl });
 }
 
 async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl }) {
@@ -928,11 +972,14 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
     if (id && ctx.actionCatalog[id]) {
       fallback.actions = [{ id, ...ctx.actionCatalog[id] }];
     }
+    const fallbackUi = uiCommandsFromActions(fallback.actions, {
+      currentPath: currentPath || null,
+    });
     const saved = await insertMessage(session.id, {
       role: 'assistant',
       content: fallback.reply,
       actions: fallback.actions,
-      metadata: { pricingTip: fallback.pricingTip, error: true },
+      metadata: { pricingTip: fallback.pricingTip, error: true, uiCommands: fallbackUi },
     });
     return {
       message: {
@@ -941,7 +988,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
         content: saved.content,
         actions: saved.actions,
         pricingTip: saved.metadata?.pricingTip || null,
-        uiCommands: [],
+        uiCommands: fallbackUi,
         createdAt: saved.created_at,
       },
       context: publicChatContext(ctx),
@@ -957,24 +1004,11 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
     }
   }
 
-  const uiCommands = [];
-  for (const action of normalized.actions || []) {
-    const href = String(action.href || '');
-    const hashIndex = href.indexOf('#');
-    if (hashIndex >= 0) {
-      const pathPart = href.slice(0, hashIndex);
-      const sectionId = href.slice(hashIndex + 1).split('?')[0];
-      const queryIndex = pathPart.indexOf('?');
-      const pathname = queryIndex >= 0 ? pathPart.slice(0, queryIndex) : pathPart || '/portal';
-      const search = queryIndex >= 0 ? pathPart.slice(queryIndex) : '';
-      if (sectionId) {
-        uiCommands.push({
-          type: 'HIGHLIGHT_SECTION',
-          payload: { sectionId, pathname, search },
-        });
-      }
-    }
-  }
+  // Sync background UI to whatever action the assistant is offering (assessment,
+  // calendar section, portfolio, etc.) — not only hash deep-links.
+  const uiCommands = uiCommandsFromActions(normalized.actions, {
+    currentPath: currentPath || null,
+  });
 
   const saved = await insertMessage(session.id, {
     role: 'assistant',
@@ -1009,6 +1043,7 @@ async function sendChatMessage(params) {
 
 module.exports = {
   loadChatSession,
+  clearChatSession,
   sendChatMessage,
   getNotifications,
   fetchFullProfile,

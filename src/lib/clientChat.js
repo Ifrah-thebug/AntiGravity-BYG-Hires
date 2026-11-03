@@ -69,6 +69,18 @@ export async function sendClientChatMessage(message) {
   return data;
 }
 
+export async function clearClientChatSession() {
+  const headers = await getAuthHeaders();
+  const resp = await fetch(`${API_BASE}/api/client/chat/clear`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  const data = await parseJson(resp);
+  if (!resp.ok) throw new Error(data.error || 'Could not clear chat.');
+  return data;
+}
+
 export const CLIENT_QUICK_PROMPTS = [
   'Find me a customer support specialist',
   'Show virtual assistants under $700',

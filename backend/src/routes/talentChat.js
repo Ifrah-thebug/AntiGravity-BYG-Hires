@@ -51,6 +51,21 @@ router.get('/session', async (req, res) => {
   }
 });
 
+/** POST /api/talent/chat/clear — wipe history; returns a fresh welcome session */
+router.post('/clear', async (req, res) => {
+  try {
+    const payload = await chat.clearChatSession({
+      user: req.authUser,
+      currentPath: String(req.body?.path || req.query.path || '').trim(),
+      backendBaseUrl: getBackendBaseUrl(req),
+    });
+    return res.json(payload);
+  } catch (err) {
+    console.error('[talent/chat/clear]', err?.message || err);
+    return res.status(500).json({ error: err.message || 'Could not clear chat.' });
+  }
+});
+
 /** POST /api/talent/chat/message */
 router.post('/message', async (req, res) => {
   try {

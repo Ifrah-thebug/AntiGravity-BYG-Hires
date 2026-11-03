@@ -77,6 +77,18 @@ export async function sendTalentChatMessage(message, currentPath = '') {
   return data;
 }
 
+export async function clearTalentChatSession(currentPath = '') {
+  const headers = await getAuthHeaders();
+  const resp = await fetch(`${API_BASE}/api/talent/chat/clear`, {
+    method: 'POST',
+    headers: { ...headers, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: currentPath }),
+  });
+  const data = await parseJson(resp);
+  if (!resp.ok) throw new Error(data.error || 'Could not clear chat.');
+  return data;
+}
+
 export const QUICK_PROMPTS = [
   'What should I do next?',
   'Suggest pricing for my profile',

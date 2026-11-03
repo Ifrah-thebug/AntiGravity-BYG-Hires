@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  MessageCircle, X, Send, Loader2, Sparkles, ArrowRight, DollarSign, ExternalLink,
+  MessageCircle, X, Send, Loader2, Sparkles, ArrowRight, DollarSign, ExternalLink, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccountType } from '../../hooks/useAccountType';
@@ -11,12 +11,14 @@ import {
   fetchTalentChatSession,
   fetchTalentChatNotifications,
   sendTalentChatMessage,
+  clearTalentChatSession,
   QUICK_PROMPTS,
 } from '../../lib/talentChat';
 import {
   fetchClientChatSession,
   fetchClientChatNotifications,
   sendClientChatMessage,
+  clearClientChatSession,
   CLIENT_QUICK_PROMPTS,
 } from '../../lib/clientChat';
 import {
@@ -167,6 +169,7 @@ export default function TalentOnboardingChat() {
   const [context, setContext] = useState(null);
   const [input, setInput] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [clearing, setClearing] = useState(false);
 
   const listRef = useRef(null);
   const inputRef = useRef(null);
@@ -396,6 +399,27 @@ export default function TalentOnboardingChat() {
     }
   };
 
+  const handleClearChat = async () => {
+    if (!chatRole || clearing || sending) return;
+    const ok = window.confirm('Clear this BGuides chat? You’ll get a fresh welcome and proactive tips.');
+    if (!ok) return;
+    setClearing(true);
+    setError('');
+    try {
+      const data =
+        chatRole === 'client'
+          ? await clearClientChatSession()
+          : await clearTalentChatSession(currentPath);
+      setMessages(data.messages || []);
+      setContext(data.context || null);
+      scrollToBottom();
+    } catch (err) {
+      setError(err.message || 'Could not clear chat.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   const handleAction = (action) => {
     if (!action || navigating) return;
 
@@ -492,14 +516,26 @@ export default function TalentOnboardingChat() {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0"
-                  aria-label="Close chat"
-                >
-                  <X size={15} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleClearChat}
+                    disabled={clearing || sending || loading}
+                    className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-40"
+                    aria-label="Clear chat"
+                    title="Clear chat"
+                  >
+                    {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center"
+                    aria-label="Close chat"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
             </div>
 

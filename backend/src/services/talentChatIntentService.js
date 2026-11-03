@@ -1,6 +1,13 @@
 /**
- * Deterministic BGuides intents for talent — LLM-independent core answers.
+ * Deterministic BGuides intents for talent — narrow rules first, then LLM.
+ * Order: specific fact intents → directory status → completeness audit → fall through.
  */
+
+const {
+  formatTalentStatusReply,
+  isTalentProfileStatusQuery,
+  talentUiCommandsForStep,
+} = require('./bguidesStatusReplyService');
 
 function normalize(text) {
   return String(text || '')
@@ -21,24 +28,15 @@ function catalogAction(ctx, id, labelOverride) {
   };
 }
 
-function uiForAction(action) {
-  if (!action?.href) return [];
-  const href = String(action.href);
-  const hashIndex = href.indexOf('#');
-  if (hashIndex < 0) {
-    return [{ type: 'NAVIGATE', payload: { href } }];
-  }
-  const pathPart = href.slice(0, hashIndex);
-  const sectionId = href.slice(hashIndex + 1).split('?')[0];
-  const queryIndex = pathPart.indexOf('?');
-  const pathname = queryIndex >= 0 ? pathPart.slice(0, queryIndex) : pathPart || '/portal';
-  const search = queryIndex >= 0 ? pathPart.slice(queryIndex) : '';
-  return [
-    {
-      type: 'HIGHLIGHT_SECTION',
-      payload: { sectionId, pathname, search },
-    },
-  ];
+function onPortalPath(ctx) {
+  const path = String(ctx?.currentPath || '');
+  return path.startsWith('/portal');
+}
+
+function isScoreQuery(q) {
+  return /\b(what is my score|what'?s my score|my (test )?scores?|my test results|assessment score|skills? (test )?score|skills test score|how did i score|test scores?)\b/.test(
+    q
+  );
 }
 
 /**
@@ -50,46 +48,10 @@ function matchTalentChatIntent(text, ctx) {
 
   const status = String(ctx?.profile?.directory_status || 'draft').toLowerCase();
   const next = ctx?.nextSteps?.[0];
+  const nextSteps = Array.isArray(ctx?.nextSteps) ? ctx.nextSteps : [];
 
-  if (
-    /\b(profile status|am i approved|directory status|waitlist|approved yet|my status)\b/.test(q) ||
-    q === 'status'
-  ) {
-    let reply = `Your directory status is **${status.replace(/_/g, ' ')}**.`;
-    if (status === 'pending_review') {
-      reply += ' You are on the waitlist — we will email you when review finishes.';
-    } else if (status === 'changes_requested') {
-      const issues = Array.isArray(ctx?.profile?.review_issues) ? ctx.profile.review_issues : [];
-      reply += issues.length
-        ? ` Please fix: ${issues.slice(0, 3).join('; ')}.`
-        : ' Please open your portal for the review notes, then resubmit.';
-    } else if (status === 'approved') {
-      reply += ' Your profile is live. Next: connect calendar and publish intro slots if you have not yet.';
-    } else if (status === 'draft') {
-      reply += ' Finish your profile and submit it for review from the portal.';
-    }
-
-    const actions = [];
-    const portal = catalogAction(ctx, 'portal', 'Open portal');
-    if (portal) actions.push(portal);
-    if (status === 'approved') {
-      const cal = catalogAction(ctx, 'calendar') || catalogAction(ctx, 'portal-calendar');
-      if (cal) actions.push(cal);
-    }
-
-    return {
-      matched: true,
-      reply,
-      actions,
-      uiCommands: actions.flatMap(uiForAction),
-    };
-  }
-
-  if (
-    /\b(what is my score|what'?s my score|my (test )?score|my test results|assessment score|skills score|how did i score)\b/.test(
-      q
-    )
-  ) {
+  // 1) Scores — before any completeness audit
+  if (isScoreQuery(q)) {
     const scores = ctx?.assessmentScores || {};
     const entries = Object.entries(scores).filter(([, n]) => Number.isFinite(Number(n)));
     const notes = ctx?.guideNotifications || {};
@@ -121,10 +83,13 @@ function matchTalentChatIntent(text, ctx) {
       matched: true,
       reply,
       actions,
-      uiCommands: [{ type: 'NAVIGATE', payload: { href: '/assessment' } }],
+      uiCommands: notes.needsScoreImprovement
+        ? [{ type: 'NAVIGATE', payload: { href: '/assessment' } }]
+        : [],
     };
   }
 
+  // 2) Calendar connect
   if (/\b(connect calendar|cal\.com|link calendar|calendar connect)\b/.test(q)) {
     const action =
       catalogAction(ctx, 'calendar', 'Connect calendar (Cal.com)') ||
@@ -137,16 +102,42 @@ function matchTalentChatIntent(text, ctx) {
         ? 'Your calendar is already connected. Publish open intro slots so clients can book you.'
         : 'Connect your calendar (Cal.com) from your portal so clients can book intro calls.',
       actions,
-      uiCommands: [
-        {
-          type: 'HIGHLIGHT_SECTION',
-          payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
-        },
-        ...actions.flatMap(uiForAction),
-      ],
+      uiCommands: onPortalPath(ctx)
+        ? [
+            {
+              type: 'HIGHLIGHT_SECTION',
+              payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+            },
+          ]
+        : talentUiCommandsForStep('calendar', { currentPath: ctx?.currentPath }),
     };
   }
 
+  // 3) Intro slots
+  if (/\b(publish slots|intro slots|availability slots|open slots)\b/.test(q)) {
+    return {
+      matched: true,
+      reply: ctx?.calendarConnected
+        ? 'Open Client intro scheduling on your portal and publish times clients can book.'
+        : 'Connect your calendar first, then publish intro slots from the portal.',
+      actions: [
+        catalogAction(ctx, 'portal-slots') ||
+          catalogAction(ctx, 'calendar') ||
+          catalogAction(ctx, 'intro-slots') ||
+          catalogAction(ctx, 'portal'),
+      ].filter(Boolean),
+      uiCommands: onPortalPath(ctx)
+        ? [
+            {
+              type: 'HIGHLIGHT_SECTION',
+              payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+            },
+          ]
+        : talentUiCommandsForStep('intro-slots', { currentPath: ctx?.currentPath }),
+    };
+  }
+
+  // 4) Next steps
   if (
     /\b(what should i do next|next step|what.?s next|help me finish|what now)\b/.test(q) ||
     q === 'next'
@@ -160,52 +151,60 @@ function matchTalentChatIntent(text, ctx) {
       };
     }
 
+    const bullets = nextSteps
+      .slice(0, 3)
+      .map((s) => `• ${s.label}`)
+      .join('\n');
+    let reply = `Here’s what to tackle next:\n${bullets}`;
+    if (nextSteps.length > 3) {
+      reply += `\n(+${nextSteps.length - 3} more)`;
+    }
+    reply += `\n\nStart with: **${next.label}**.`;
+
     const action = catalogAction(ctx, next.id) || catalogAction(ctx, 'portal');
     const actions = action ? [action] : [];
-    const sectionMap = {
-      assessment: { sectionId: null, pathname: '/assessment' },
-      calendar: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
-      'portal-slots': { sectionId: 'client-intro-scheduling', pathname: '/portal' },
-      portfolio: { sectionId: 'talent-portfolio', pathname: '/portal' },
-      'portal-portfolio': { sectionId: 'talent-portfolio', pathname: '/portal' },
-      'portal-portfolio-requests': { sectionId: 'talent-portfolio', pathname: '/portal' },
+    const uiCommands = talentUiCommandsForStep(next.id, { currentPath: ctx?.currentPath });
+
+    return {
+      matched: true,
+      reply,
+      actions,
+      uiCommands,
     };
-    const section = sectionMap[next.id];
-    const uiCommands = [];
-    if (section?.sectionId) {
-      uiCommands.push({
-        type: 'HIGHLIGHT_SECTION',
-        payload: { sectionId: section.sectionId, pathname: section.pathname },
-      });
-    } else if (section?.pathname) {
-      uiCommands.push({ type: 'NAVIGATE', payload: { href: section.pathname } });
+  }
+
+  // 5) Directory / approval status
+  if (
+    /\b(profile status|am i approved|directory status|waitlist|approved yet|my status)\b/.test(q) ||
+    q === 'status'
+  ) {
+    const formatted = formatTalentStatusReply(ctx);
+    let reply = formatted.reply;
+    if (status === 'pending_review') {
+      reply += '\n\nYou are on the review waitlist — we will email you when review finishes.';
+    } else if (status === 'changes_requested') {
+      const issues = Array.isArray(ctx?.profile?.review_issues) ? ctx.profile.review_issues : [];
+      reply += issues.length
+        ? `\n\nAdmin feedback to fix: ${issues.slice(0, 3).join('; ')}.`
+        : '\n\nCheck review notes in your portal, then resubmit.';
     }
 
     return {
       matched: true,
-      reply: `Next up: ${next.label}.`,
-      actions,
-      uiCommands: uiCommands.length ? uiCommands : actions.flatMap(uiForAction),
+      reply,
+      actions: formatted.actions,
+      uiCommands: formatted.uiCommands || [],
     };
   }
 
-  if (/\b(publish slots|intro slots|availability slots|open slots)\b/.test(q)) {
+  // 6) Completeness audit last (narrow matcher only)
+  if (isTalentProfileStatusQuery(q)) {
+    const formatted = formatTalentStatusReply(ctx);
     return {
       matched: true,
-      reply: ctx?.calendarConnected
-        ? 'Open Client intro scheduling on your portal and publish times clients can book.'
-        : 'Connect your calendar first, then publish intro slots from the portal.',
-      actions: [
-        catalogAction(ctx, 'portal-slots') ||
-          catalogAction(ctx, 'calendar') ||
-          catalogAction(ctx, 'portal'),
-      ].filter(Boolean),
-      uiCommands: [
-        {
-          type: 'HIGHLIGHT_SECTION',
-          payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
-        },
-      ],
+      reply: formatted.reply,
+      actions: formatted.actions,
+      uiCommands: formatted.uiCommands || [],
     };
   }
 
@@ -214,4 +213,5 @@ function matchTalentChatIntent(text, ctx) {
 
 module.exports = {
   matchTalentChatIntent,
+  isScoreQuery,
 };

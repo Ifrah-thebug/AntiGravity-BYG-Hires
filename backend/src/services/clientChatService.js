@@ -7,6 +7,13 @@ const { supabaseAdmin } = require('../middleware/requireAdmin');
 const groq = require('./groqClient');
 const openRouter = require('./openRouterClient');
 const { buildClientHiringContext } = require('./clientHiringContextService');
+const { buildTalentOnboardingContext } = require('./talentOnboardingContextService');
+const {
+  formatTalentStatusReply,
+  formatClientStatusReply,
+  isTalentProfileStatusQuery,
+  isClientHiringStatusQuery,
+} = require('./bguidesStatusReplyService');
 
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -379,7 +386,24 @@ function directoryActionFromFilters(filters, label = 'View filtered directory') 
   };
 }
 
-function matchClientIntent(text) {
+async function fetchTalentProfileForUser(userId) {
+  if (!supabaseAdmin || !userId) return null;
+  const { data, error } = await supabaseAdmin
+    .from('profiles')
+    .select(
+      'id, user_id, email, name, job_title, about, skills, best_skill, experience_years, department, monthly_fee_usd, directory_fee_usd, availability, role_type, photo_url, cv_url, directory_status, review_notes, review_issues, cal_username, created_at, updated_at'
+    )
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw error;
+  return data;
+}
+
+/**
+ * @param {string} text
+ * @param {{ user?: object, hiringCtx?: object, backendBaseUrl?: string }} opts
+ */
+async function matchClientIntent(text, { user, hiringCtx, backendBaseUrl } = {}) {
   const q = String(text || '').toLowerCase().trim();
   if (!q) return { matched: false };
 
@@ -389,7 +413,7 @@ function matchClientIntent(text) {
       reply:
         'Open a talent card on the directory, then use Request intro — or tell me a name/role and I will filter the list so you can book.',
       actions: [{ id: 'directory', label: 'Browse talent directory', href: '/talent' }],
-      uiCommands: [{ type: 'NAVIGATE', payload: { href: '/talent' } }],
+      uiCommands: [],
     };
   }
 
@@ -424,55 +448,114 @@ function matchClientIntent(text) {
     return {
       matched: true,
       reply:
-        'I help you hire on BYG Hires: describe the role or skills you need, I filter the talent directory live, then you can request an intro call from a shortlist.',
+        'I help you hire on BYG Hires: describe the role or skills you need, I filter the talent directory live, then you can request an intro call from a shortlist. Ask “what should I do next?” anytime for your hiring checklist.',
       actions: [{ id: 'directory', label: 'Open talent directory', href: '/talent' }],
       uiCommands: [],
     };
   }
 
-  // Profile / onboarding questions while in client mode — do not touch directory filters.
-  if (
-    /\b(my profile|incomplete|improve|onboarding|assessment|score|portfolio|calendar|company)\b/.test(q)
-  ) {
+  // Hiring status / what’s next — facts + open the place to act
+  if (isClientHiringStatusQuery(q) && !isTalentProfileStatusQuery(q)) {
+    const formatted = formatClientStatusReply(hiringCtx || {});
     return {
       matched: true,
-      reply:
-        'This BGuides session is the hiring assistant (find talent / book intros). Profile completeness and scores are on the talent portal — open My Dashboard if you’re checking your own talent profile.',
-      actions: [
-        { id: 'portal', label: 'Open my dashboard', href: '/portal' },
-        { id: 'directory', label: 'Browse talent', href: '/talent' },
-      ],
-      uiCommands: [],
+      reply: formatted.reply,
+      actions: formatted.actions,
+      uiCommands: formatted.uiCommands || [],
     };
   }
 
+  // Explicit talent profile completeness only — no bare score/portfolio/calendar catch-all
+  if (isTalentProfileStatusQuery(q)) {
+    let talentProfile = null;
+    try {
+      talentProfile = user?.id ? await fetchTalentProfileForUser(user.id) : null;
+    } catch (err) {
+      console.warn('[clientChat] talent profile lookup:', err?.message || err);
+    }
+
+    if (talentProfile) {
+      try {
+        const talentCtx = await buildTalentOnboardingContext({
+          user,
+          profile: talentProfile,
+          currentPath: null,
+          backendBaseUrl: backendBaseUrl || null,
+        });
+        const formatted = formatTalentStatusReply(talentCtx);
+        return {
+          matched: true,
+          reply:
+            `${formatted.reply}\n\n(You’re in the hiring chat shell — this audit is from your talent profile.)`,
+          actions: [
+            ...(formatted.actions || []),
+            { id: 'portal', label: 'Open talent portal', href: '/portal' },
+          ].slice(0, 2),
+          uiCommands: formatted.uiCommands || [],
+        };
+      } catch (err) {
+        console.warn('[clientChat] talent status build:', err?.message || err);
+      }
+    }
+
+    const formatted = formatClientStatusReply(hiringCtx || {});
+    return {
+      matched: true,
+      reply:
+        `${formatted.reply}\n\nThis BGuides session is hiring-focused (no talent profile on this account). Company and booking status above are what I can check here.`,
+      actions: formatted.actions,
+      uiCommands: formatted.uiCommands || [],
+    };
+  }
+
+  // Everything else → LLM with HIRING CONTEXT
   return { matched: false };
 }
 
-function buildClientSystemPrompt(client) {
-  const company = client?.company || 'your company';
+function buildClientSystemPrompt(client, hiringCtx) {
+  const company = client?.company || hiringCtx?.company || 'your company';
+  const hiringJson = JSON.stringify(
+    {
+      company: hiringCtx?.company || client?.company || null,
+      needsCompany: Boolean(hiringCtx?.needsCompany),
+      needsHiringCriteria: Boolean(hiringCtx?.needsHiringCriteria),
+      upcomingIntroCount: hiringCtx?.upcomingIntroCount || 0,
+      totalBookingCount: hiringCtx?.totalBookingCount || 0,
+      pendingPortfolioCount: hiringCtx?.pendingPortfolioCount || 0,
+      activeAiInterviewCount: hiringCtx?.activeAiInterviewCount || 0,
+      nextSteps: (hiringCtx?.nextSteps || []).slice(0, 5),
+    },
+    null,
+    2
+  );
+
   return `You are BGuides — the hiring assistant for BYG Hires clients (${company}).
 Help them find remote talent and book intro calls.
 
 Rules:
 - Stay on hiring / directory / intro booking. No unrelated tutorials.
+- Answer the user’s specific question using HIRING CONTEXT facts. Do NOT dump the full hiring checklist unless they asked what’s missing / what’s next / how they’re doing.
+- When they do ask status/completeness, answer with facts from HIRING CONTEXT first (company set?, bookings, pending requests). Do NOT only say “open the dashboard.”
 - ONLY emit APPLY_DIRECTORY_FILTERS when the user is clearly searching for talent (role, skill, budget, department).
 - NEVER put full chat sentences, questions, or profile talk into filters.q — use short skill/role keywords only (max 4 words).
-- If the user asks about their own profile, scores, or onboarding, answer briefly that this chat is for hiring, and do NOT emit APPLY_DIRECTORY_FILTERS.
-- Prefer short replies under 80 words.
+- Prefer short replies under 100 words; lead with concrete status when relevant.
 - Respond ONLY with JSON:
 {
   "reply": "string",
-  "actions": [{ "id": "directory"|"book", "label": "string", "href": "/talent" }],
+  "actions": [{ "id": "directory"|"book"|"company", "label": "string", "href": "/talent" }],
   "uiCommands": [
     { "type": "APPLY_DIRECTORY_FILTERS", "payload": { "dept": "customer-support", "q": "zendesk", "maxFee": 800, "availability": ["immediate"], "roleType": ["fulltime"] } },
     { "type": "OPEN_BOOKING", "payload": { "talentId": "uuid" } },
-    { "type": "NAVIGATE", "payload": { "href": "/talent" } }
+    { "type": "NAVIGATE", "payload": { "href": "/talent" } },
+    { "type": "HIGHLIGHT_SECTION", "payload": { "sectionId": "client-company", "pathname": "/client" } }
   ]
 }
 Department ids: ai-automation, admin-operations, account-coordinators, marketing-content, virtual-assistants, customer-support, sales, hr, it-technical, finance.
 Only include talentId in OPEN_BOOKING if the user named a specific talent id you were given — otherwise filter the directory.
-Omit uiCommands entirely when you are not applying filters or navigation.`;
+Omit uiCommands entirely when you are not applying filters or navigation.
+
+HIRING CONTEXT:
+${hiringJson}`;
 }
 
 function sanitizeFilterPayload(payload) {
@@ -676,6 +759,27 @@ function mapMessages(messages) {
   });
 }
 
+async function deleteAllSessionsForUser(userId) {
+  if (!supabaseAdmin || !userId) return;
+  const { data: sessions, error } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .select('id')
+    .eq('user_id', userId);
+  if (error) throw error;
+  const ids = (sessions || []).map((s) => s.id).filter(Boolean);
+  if (!ids.length) return;
+  const { error: msgErr } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .delete()
+    .in('session_id', ids);
+  if (msgErr) throw msgErr;
+  const { error: sessErr } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .delete()
+    .in('id', ids);
+  if (sessErr) throw sessErr;
+}
+
 async function loadChatSession({ user, client }) {
   const hiringCtx = await buildClientHiringContext({ client });
   const session = await getOrCreateSession(user.id);
@@ -709,6 +813,12 @@ async function loadChatSession({ user, client }) {
   };
 }
 
+/** Wipe history and reload so welcome / proactive nudges run again. */
+async function clearChatSession({ user, client }) {
+  await deleteAllSessionsForUser(user.id);
+  return loadChatSession({ user, client });
+}
+
 async function sendChatMessage({ user, client, message }) {
   const text = String(message || '').trim().slice(0, 2000);
   if (!text) {
@@ -722,7 +832,11 @@ async function sendChatMessage({ user, client, message }) {
   const history = await listMessages(session.id, 20);
   await insertMessage(session.id, { role: 'user', content: text });
 
-  const intent = matchClientIntent(text);
+  const intent = await matchClientIntent(text, {
+    user,
+    hiringCtx,
+    backendBaseUrl: process.env.BACKEND_PUBLIC_URL || null,
+  });
   if (intent.matched) {
     const saved = await insertMessage(session.id, {
       role: 'assistant',
@@ -747,7 +861,7 @@ async function sendChatMessage({ user, client, message }) {
   let rawAssistant;
   try {
     rawAssistant = await callLlm(
-      buildClientSystemPrompt(client),
+      buildClientSystemPrompt(client, hiringCtx),
       history.map((m) => ({ role: m.role, content: m.content })),
       text
     );
@@ -828,8 +942,10 @@ async function sendChatMessage({ user, client, message }) {
 
 module.exports = {
   loadChatSession,
+  clearChatSession,
   sendChatMessage,
   getNotifications,
+  matchClientIntent,
   extractDirectoryFilters,
   filtersToDirectoryHref,
   hasHiringSearchIntent,
