@@ -21,6 +21,12 @@ import DirectoryTalentModal from '../components/DirectoryTalentModal';
 import AmbassadorReferredBadge from '../components/AmbassadorReferredBadge';
 import { SHOW_ASSESSMENT_SCORE, sanitizeTalentList } from '../lib/talentVerification';
 import { useIsLoggedInTalent } from '../hooks/useIsLoggedInTalent';
+import {
+  BGuidesCommandType,
+  persistDirectoryFilterPayload,
+  readPersistedDirectoryFilters,
+  subscribeBGuidesUiCommands,
+} from '../lib/bguidesUiCommands';
 
 // ─── Role type badge ──────────────────────────────────────────────────────────
 const RoleTypeBadge = ({ type }) => {
@@ -355,7 +361,72 @@ const TalentDirectoryPage = () => {
     setActivedept(dept);
     setSearch(q);
     setRoleFilterLabel(roleLabel);
+
+    const sortParam = searchParams.get('sort');
+    if (sortParam && SORT_OPTIONS.some((o) => o.value === sortParam)) {
+      setSortBy(sortParam);
+    }
+
+    // Hydrate fee / availability / roleType from BGuides sessionStorage (URL holds dept+q).
+    const stored = readPersistedDirectoryFilters();
+    if (stored) {
+      setFilters((prev) => ({
+        availability: stored.availability.length ? stored.availability : prev.availability,
+        roleType: stored.roleType.length ? stored.roleType : prev.roleType,
+        maxFee: stored.maxFee != null ? stored.maxFee : prev.maxFee,
+      }));
+      if (stored.sort && SORT_OPTIONS.some((o) => o.value === stored.sort)) {
+        setSortBy(stored.sort);
+      }
+      if (
+        stored.availability.length ||
+        stored.roleType.length ||
+        (stored.maxFee != null && stored.maxFee < 2000)
+      ) {
+        setShowFilters(true);
+      }
+    }
   }, [searchParams]);
+
+  // BGuides client chat → live directory filter / card open
+  useEffect(() => {
+    return subscribeBGuidesUiCommands((detail) => {
+      const { type, payload } = detail || {};
+
+      if (type === BGuidesCommandType.APPLY_DIRECTORY_FILTERS) {
+        // Context owns URL navigation for dept/q; page applies local filter state + storage.
+        persistDirectoryFilterPayload(payload || {});
+        setFilters((prev) => ({
+          availability: Array.isArray(payload?.availability) && payload.availability.length
+            ? payload.availability.map(String)
+            : prev.availability,
+          roleType: Array.isArray(payload?.roleType) && payload.roleType.length
+            ? payload.roleType.map(String)
+            : prev.roleType,
+          maxFee:
+            Number.isFinite(Number(payload?.maxFee)) && Number(payload.maxFee) > 0
+              ? Number(payload.maxFee)
+              : prev.maxFee,
+        }));
+        if (payload?.sort && SORT_OPTIONS.some((o) => o.value === payload.sort)) {
+          setSortBy(String(payload.sort));
+        }
+        if (
+          (Array.isArray(payload?.availability) && payload.availability.length) ||
+          (Array.isArray(payload?.roleType) && payload.roleType.length) ||
+          (Number.isFinite(Number(payload?.maxFee)) && Number(payload.maxFee) < 2000)
+        ) {
+          setShowFilters(true);
+        }
+        return;
+      }
+
+      if (type === BGuidesCommandType.OPEN_TALENT_CARD && payload?.talentId) {
+        const match = talents.find((t) => String(t.id) === String(payload.talentId));
+        if (match) setSelectedTalent(match);
+      }
+    });
+  }, [talents]);
 
   const updateFilter = (key, value) => setFilters(f => ({ ...f, [key]: value }));
   const clearFilters = () => setFilters({ availability: [], roleType: [], maxFee: 2000 });

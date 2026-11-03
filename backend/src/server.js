@@ -95,6 +95,8 @@ app.use('/api/admin', adminRouter);
 app.use('/api/cal', calRouter);
 app.use('/api/intro', introRouter);
 app.use('/api/profile', profilePhotoRouter);
+// Mount chat before /api/client so activation limiter never wraps chat traffic.
+app.use('/api/client/chat', require('./routes/clientChat'));
 app.use('/api/client', clientRouter);
 app.use('/api/admin/talent-import', adminTalentImportRouter);
 app.use('/api/admin/profile-review', adminProfileReviewRouter);

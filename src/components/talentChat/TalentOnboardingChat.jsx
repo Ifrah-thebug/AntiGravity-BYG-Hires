@@ -1,17 +1,31 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  MessageCircle, X, Send, Loader2, Sparkles, ArrowRight, DollarSign, ExternalLink,
+  MessageCircle, X, Send, Loader2, Sparkles, ArrowRight, DollarSign, ExternalLink, Trash2,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccountType } from '../../hooks/useAccountType';
 import { ACCOUNT_PROFILE_UPDATED } from '../../lib/talentAuth';
 import {
   fetchTalentChatSession,
+  fetchTalentChatNotifications,
   sendTalentChatMessage,
+  clearTalentChatSession,
   QUICK_PROMPTS,
 } from '../../lib/talentChat';
+import {
+  fetchClientChatSession,
+  fetchClientChatNotifications,
+  sendClientChatMessage,
+  clearClientChatSession,
+  CLIENT_QUICK_PROMPTS,
+} from '../../lib/clientChat';
+import {
+  BGuidesCommandType,
+  dispatchBGuidesUiCommands,
+  highlightDomSection,
+} from '../../lib/bguidesUiCommands';
 
 function PricingTipCard({ tip }) {
   if (!tip?.suggestedMonthlyUsd) return null;
@@ -58,9 +72,18 @@ function ActionButtons({ actions, onAction }) {
 
 function ChatMessage({ message, onAction }) {
   const isUser = message.role === 'user';
+  const bubbleRef = useRef(null);
+
+  useEffect(() => {
+    if (!isUser && bubbleRef.current) {
+      bubbleRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [isUser, message.id]);
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
       <div
+        ref={bubbleRef}
         className={`max-w-[92%] rounded-2xl px-4 py-3 text-sm font-medium leading-relaxed ${
           isUser
             ? 'bg-black text-white rounded-br-md'
@@ -95,7 +118,7 @@ function scrollToSectionTarget({ pathname, hash, search }) {
 
     const el = document.getElementById(sectionId);
     if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      highlightDomSection(sectionId);
       return;
     }
     if (tries < 15) {
@@ -107,6 +130,30 @@ function scrollToSectionTarget({ pathname, hash, search }) {
   setTimeout(() => attemptScroll(), initialDelay);
 }
 
+function applyUiCommands(commands) {
+  if (!Array.isArray(commands) || !commands.length) return;
+  dispatchBGuidesUiCommands(commands);
+}
+
+function todayKey(prefix) {
+  const d = new Date();
+  return `${prefix}-${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function GuestBGuidesCta() {
+  return (
+    <Link
+      to="/login"
+      className="fixed z-[90] bottom-5 right-4 sm:right-6 flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-white border border-gray-200 text-gray-800 font-black text-[10px] uppercase tracking-widest shadow-lg hover:border-red hover:text-red transition-colors"
+    >
+      <Sparkles size={14} className="text-red" />
+      <span className="hidden sm:inline">Sign in for BGuides</span>
+      <span className="sm:hidden">Sign in</span>
+    </Link>
+  );
+}
+
+/** Single BGuides agent shell — talent onboarding OR client hiring (role-aware). */
 export default function TalentOnboardingChat() {
   const { user } = useAuth();
   const accountType = useAccountType(user);
@@ -116,43 +163,128 @@ export default function TalentOnboardingChat() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
+  const [navigating, setNavigating] = useState(false);
   const [error, setError] = useState('');
   const [messages, setMessages] = useState([]);
   const [context, setContext] = useState(null);
   const [input, setInput] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [clearing, setClearing] = useState(false);
 
   const listRef = useRef(null);
   const inputRef = useRef(null);
   const sendingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
+  const endRef = useRef(null);
 
   const currentPath = `${location.pathname}${location.search}${location.hash}`;
-  const visible = Boolean(user?.id) && accountType === 'talent' && !location.pathname.startsWith('/admin');
+  const chatRole = accountType === 'client' ? 'client' : accountType === 'talent' ? 'talent' : null;
+  const onGuestSurface =
+    location.pathname === '/talent' ||
+    location.pathname === '/portal' ||
+    location.pathname === '/client' ||
+    location.pathname.startsWith('/request-intro');
+  const showGuestCta = accountType === 'guest' && onGuestSurface && !location.pathname.startsWith('/admin');
+
+  const visible =
+    Boolean(user?.id) &&
+    Boolean(chatRole) &&
+    !location.pathname.startsWith('/admin') &&
+    !location.pathname.startsWith('/ambassador');
+
+  const quickPrompts = useMemo(() => {
+    const fromSteps = (context?.nextSteps || [])
+      .slice(0, 4)
+      .map((s) => s.prompt || s.label)
+      .filter(Boolean);
+    if (fromSteps.length) return fromSteps;
+    return chatRole === 'client' ? CLIENT_QUICK_PROMPTS : QUICK_PROMPTS;
+  }, [chatRole, context?.nextSteps]);
+
+  const subtitle = useMemo(() => {
+    if (chatRole === 'client') {
+      return context?.guideNotificationLabel || 'Describe a role — I filter talent live';
+    }
+    return (
+      context?.guideNotificationLabel ||
+      (context?.pendingPortfolioRequestCount > 0
+        ? `${context.pendingPortfolioRequestCount} portfolio request${context.pendingPortfolioRequestCount > 1 ? 's' : ''} waiting`
+        : context?.directoryStatus === 'approved'
+          ? 'Profile live — let\'s get you more intros'
+          : 'Finish your profile faster')
+    );
+  }, [chatRole, context]);
+
+  const completionText = useMemo(() => {
+    if (chatRole === 'client') return context?.completionLabel || null;
+    const c = context?.completion;
+    if (c && Number.isFinite(c.done) && Number.isFinite(c.total)) {
+      return `${c.done} of ${c.total} setup steps`;
+    }
+    return null;
+  }, [chatRole, context]);
 
   const scrollToBottom = useCallback(() => {
     requestAnimationFrame(() => {
+      endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       if (listRef.current) {
         listRef.current.scrollTop = listRef.current.scrollHeight;
       }
     });
   }, []);
 
+  const prefetchNotifications = useCallback(async () => {
+    if (!visible || !chatRole) return;
+    try {
+      const data =
+        chatRole === 'client'
+          ? await fetchClientChatNotifications()
+          : await fetchTalentChatNotifications(currentPath);
+      setContext((prev) => ({
+        ...(prev || {}),
+        ...(data.context || {}),
+        guideNotificationCount:
+          data.guideNotificationCount ?? data.context?.guideNotificationCount ?? 0,
+        guideNotificationLabel:
+          data.guideNotificationLabel ?? data.context?.guideNotificationLabel ?? null,
+        nextSteps: data.context?.nextSteps || prev?.nextSteps || [],
+        completion: data.completion || data.context?.completion || prev?.completion,
+        completionLabel:
+          data.completionLabel || data.context?.completionLabel || prev?.completionLabel,
+      }));
+    } catch {
+      // Badge prefetch is best-effort; full session load still works when opened.
+    }
+  }, [visible, chatRole, currentPath]);
+
   const loadSession = useCallback(async () => {
-    if (!visible) return;
+    if (!visible || !chatRole) return;
     setLoading(true);
     setError('');
     try {
-      const data = await fetchTalentChatSession(currentPath);
-      setMessages(data.messages || []);
+      const data =
+        chatRole === 'client'
+          ? await fetchClientChatSession()
+          : await fetchTalentChatSession(currentPath);
+      const nextMessages = data.messages || [];
+      setMessages(nextMessages);
       setContext(data.context || null);
+      // Do not auto-apply HIGHLIGHT/NAVIGATE on session load — that remounts the route
+      // mid-chat and surfaces as "Connection lost while BGuides was thinking."
     } catch (err) {
       setError(err.message || 'Could not load chat.');
     } finally {
       setLoading(false);
       scrollToBottom();
     }
-  }, [visible, currentPath, scrollToBottom]);
+  }, [visible, chatRole, currentPath, scrollToBottom]);
+
+  // Prefetch badge without opening the panel
+  useEffect(() => {
+    if (!visible) return undefined;
+    prefetchNotifications();
+    return undefined;
+  }, [visible, prefetchNotifications, refreshNonce, currentPath]);
 
   useEffect(() => {
     if (!visible || !open || sendingRef.current) return;
@@ -160,7 +292,7 @@ export default function TalentOnboardingChat() {
   }, [visible, open, refreshNonce, loadSession]);
 
   useEffect(() => {
-    if (!visible) return undefined;
+    if (!visible || chatRole !== 'talent') return undefined;
     const onProfileUpdated = () => {
       if (sendingRef.current) {
         pendingRefreshRef.current = true;
@@ -170,7 +302,7 @@ export default function TalentOnboardingChat() {
     };
     window.addEventListener(ACCOUNT_PROFILE_UPDATED, onProfileUpdated);
     return () => window.removeEventListener(ACCOUNT_PROFILE_UPDATED, onProfileUpdated);
-  }, [visible]);
+  }, [visible, chatRole]);
 
   useEffect(() => {
     if (!open || !visible || sendingRef.current) return;
@@ -184,9 +316,35 @@ export default function TalentOnboardingChat() {
     }
   }, [open, messages, scrollToBottom]);
 
+  // Auto-open once per session for clients landing on directory / client hub
+  useEffect(() => {
+    if (!visible || chatRole !== 'client') return;
+    const key = 'bguides-client-autopened';
+    if (sessionStorage.getItem(key)) return;
+    const onHiringSurface =
+      location.pathname === '/talent' ||
+      location.pathname === '/client' ||
+      location.pathname.startsWith('/request-intro');
+    if (!onHiringSurface) return;
+    sessionStorage.setItem(key, '1');
+    setOpen(true);
+  }, [visible, chatRole, location.pathname]);
+
+  // Soft once-per-day auto-open for talent on /portal when there are notifications
+  useEffect(() => {
+    if (!visible || chatRole !== 'talent') return;
+    if (location.pathname !== '/portal') return;
+    const count = Number(context?.guideNotificationCount) || 0;
+    if (count <= 0) return;
+    const key = todayKey('bguides-talent-portal-autopen');
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, '1');
+    setOpen(true);
+  }, [visible, chatRole, location.pathname, context?.guideNotificationCount]);
+
   const handleSend = async (text) => {
     const msg = String(text ?? input).trim();
-    if (!msg || sending) return;
+    if (!msg || sending || navigating || !chatRole) return;
 
     setInput('');
     sendingRef.current = true;
@@ -204,20 +362,27 @@ export default function TalentOnboardingChat() {
     scrollToBottom();
 
     try {
-      const data = await sendTalentChatMessage(msg, currentPath);
+      const data =
+        chatRole === 'client'
+          ? await sendClientChatMessage(msg)
+          : await sendTalentChatMessage(msg, currentPath);
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimistic.id),
         { ...optimistic, id: `user-${Date.now()}` },
         data.message,
       ]);
       setContext(data.context || null);
+      applyUiCommands(data.message?.uiCommands || data.uiCommands || []);
     } catch (err) {
       const friendly = /failed to fetch|networkerror|load failed/i.test(String(err?.message || ''))
         ? 'Connection lost while BGuides was thinking. Checking if your message was saved…'
         : (err.message || 'Could not send message.');
       setError(friendly);
       try {
-        const data = await fetchTalentChatSession(currentPath);
+        const data =
+          chatRole === 'client'
+            ? await fetchClientChatSession()
+            : await fetchTalentChatSession(currentPath);
         setMessages(data.messages || []);
         setContext(data.context || null);
       } catch {
@@ -234,29 +399,95 @@ export default function TalentOnboardingChat() {
     }
   };
 
-  const handleAction = (action) => {
-    if (!action?.href) return;
-    if (action.external || action.href.startsWith('http')) {
-      window.open(action.href, '_blank', 'noopener,noreferrer');
-    } else {
-      const rawHref = String(action.href).trim();
-      const hashIndex = rawHref.indexOf('#');
-      const pathPart = hashIndex >= 0 ? rawHref.slice(0, hashIndex) : rawHref;
-      const hash = hashIndex >= 0 ? rawHref.slice(hashIndex + 1) : '';
-      const queryIndex = pathPart.indexOf('?');
-      const pathname = queryIndex >= 0 ? pathPart.slice(0, queryIndex) : pathPart;
-      const search = queryIndex >= 0 ? pathPart.slice(queryIndex) : '';
-      const targetPath = pathname || location.pathname;
-      const targetSearch = search || '';
-      const targetHash = hash ? `#${hash}` : '';
-      navigate({ pathname: targetPath, search: targetSearch, hash: targetHash });
-      scrollToSectionTarget({ pathname: targetPath, hash: targetHash, search: targetSearch });
-      setOpen(false);
-      setTimeout(() => setRefreshNonce((n) => n + 1), 800);
+  const handleClearChat = async () => {
+    if (!chatRole || clearing || sending) return;
+    const ok = window.confirm('Clear this BGuides chat? You’ll get a fresh welcome and proactive tips.');
+    if (!ok) return;
+    setClearing(true);
+    setError('');
+    try {
+      const data =
+        chatRole === 'client'
+          ? await clearClientChatSession()
+          : await clearTalentChatSession(currentPath);
+      setMessages(data.messages || []);
+      setContext(data.context || null);
+      scrollToBottom();
+    } catch (err) {
+      setError(err.message || 'Could not clear chat.');
+    } finally {
+      setClearing(false);
     }
   };
 
+  const handleAction = (action) => {
+    if (!action || navigating) return;
+
+    const hasUiCommands = Array.isArray(action.uiCommands) && action.uiCommands.length > 0;
+    if (hasUiCommands) {
+      applyUiCommands(action.uiCommands);
+    }
+
+    if (action.id === 'book' && action.talentId) {
+      applyUiCommands([{ type: BGuidesCommandType.OPEN_BOOKING, payload: { talentId: action.talentId } }]);
+      setOpen(false);
+      return;
+    }
+
+    if (!action.href) {
+      if (hasUiCommands) setOpen(false);
+      return;
+    }
+    if (action.external || action.href.startsWith('http')) {
+      window.open(action.href, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    const rawHref = String(action.href).trim();
+    const hashIndex = rawHref.indexOf('#');
+    const pathPart = hashIndex >= 0 ? rawHref.slice(0, hashIndex) : rawHref;
+    const hash = hashIndex >= 0 ? rawHref.slice(hashIndex + 1) : '';
+    const queryIndex = pathPart.indexOf('?');
+    const pathname = queryIndex >= 0 ? pathPart.slice(0, queryIndex) : pathPart;
+    const search = queryIndex >= 0 ? pathPart.slice(queryIndex) : '';
+    const targetPath = pathname || location.pathname;
+    const targetSearch = search || '';
+    const targetHash = hash ? `#${hash}` : '';
+
+    const appliedDirectoryFilters = hasUiCommands
+      && action.uiCommands.some((c) => c?.type === BGuidesCommandType.APPLY_DIRECTORY_FILTERS);
+    const bareTalentNav = targetPath === '/talent' && !targetSearch && !targetHash;
+    if (appliedDirectoryFilters && bareTalentNav) {
+      setOpen(false);
+      setTimeout(() => setRefreshNonce((n) => n + 1), 800);
+      return;
+    }
+
+    setNavigating(true);
+    navigate({ pathname: targetPath, search: targetSearch, hash: targetHash });
+    scrollToSectionTarget({ pathname: targetPath, hash: targetHash, search: targetSearch });
+    if (hash) {
+      applyUiCommands([
+        {
+          type: BGuidesCommandType.HIGHLIGHT_SECTION,
+          payload: { sectionId: hash, pathname: targetPath, search: targetSearch },
+        },
+      ]);
+    }
+    setOpen(false);
+    setTimeout(() => {
+      setNavigating(false);
+      setRefreshNonce((n) => n + 1);
+    }, 800);
+  };
+
+  if (showGuestCta) {
+    return <GuestBGuidesCta />;
+  }
+
   if (!visible) return null;
+
+  const busy = sending || navigating;
 
   return (
     <>
@@ -267,33 +498,44 @@ export default function TalentOnboardingChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ type: 'spring', damping: 28, stiffness: 360 }}
-            className="fixed z-[90] bottom-24 right-4 sm:right-6 w-[min(100vw-2rem,24rem)] sm:w-[26rem] max-h-[min(78vh,640px)] bg-white border border-gray-200 rounded-[1.75rem] shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden"
+            className="fixed z-[90] bottom-24 right-4 sm:right-6 w-[min(100vw-2rem,24rem)] sm:w-[26rem] max-h-[min(72vh,640px)] sm:max-h-[min(78vh,640px)] bg-white border border-gray-200 rounded-[1.75rem] shadow-[0_24px_80px_-20px_rgba(0,0,0,0.35)] flex flex-col overflow-hidden mb-[env(safe-area-inset-bottom,0px)]"
           >
             <div className="bg-black text-white px-5 py-4 relative shrink-0">
               <div className="absolute top-0 right-0 w-32 h-32 bg-red rounded-full blur-[80px] opacity-25 -mr-10 -mt-10 pointer-events-none" />
               <div className="relative flex items-start justify-between gap-3">
                 <div>
                   <p className="text-[9px] font-black uppercase tracking-[0.2em] text-red flex items-center gap-1">
-                    <Sparkles size={10} /> Onboarding assistant
+                    <Sparkles size={10} />
+                    {chatRole === 'client' ? 'Hiring assistant' : 'Onboarding assistant'}
                   </p>
                   <h3 className="font-black text-base tracking-tight mt-0.5">BGuides</h3>
-                  <p className="text-[11px] text-gray-400 font-medium mt-1">
-                    {context?.guideNotificationLabel
-                      || (context?.pendingPortfolioRequestCount > 0
-                        ? `${context.pendingPortfolioRequestCount} portfolio request${context.pendingPortfolioRequestCount > 1 ? 's' : ''} waiting`
-                        : context?.directoryStatus === 'approved'
-                          ? 'Profile live — let\'s get you more intros'
-                          : 'Finish your profile faster')}
-                  </p>
+                  <p className="text-[11px] text-gray-400 font-medium mt-1">{subtitle}</p>
+                  {completionText && (
+                    <p className="text-[10px] text-gray-500 font-bold mt-1.5 tracking-wide">
+                      {completionText}
+                    </p>
+                  )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center shrink-0"
-                  aria-label="Close chat"
-                >
-                  <X size={15} />
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleClearChat}
+                    disabled={clearing || sending || loading}
+                    className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center disabled:opacity-40"
+                    aria-label="Clear chat"
+                    title="Clear chat"
+                  >
+                    {clearing ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOpen(false)}
+                    className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center"
+                    aria-label="Close chat"
+                  >
+                    <X size={15} />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -314,23 +556,32 @@ export default function TalentOnboardingChat() {
                   </div>
                 </div>
               )}
+              <div ref={endRef} />
             </div>
 
             {error && (
-              <div className="px-4 py-2 bg-red/5 border-t border-red/10 text-red text-[11px] font-semibold">
-                {error}
+              <div className="px-4 py-2 bg-red/5 border-t border-red/10 text-red text-[11px] font-semibold flex items-start justify-between gap-2">
+                <span className="min-w-0">{error}</span>
+                <button
+                  type="button"
+                  onClick={() => setError('')}
+                  className="shrink-0 text-red/70 hover:text-red"
+                  aria-label="Dismiss error"
+                >
+                  <X size={12} />
+                </button>
               </div>
             )}
 
-            {!loading && messages.length <= 2 && (
+            {!loading && messages.length <= 3 && (
               <div className="px-3 pt-2 pb-1 flex flex-wrap gap-1.5 bg-white border-t border-gray-100">
-                {QUICK_PROMPTS.map((prompt) => (
+                {quickPrompts.map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => handleSend(prompt)}
-                    disabled={sending}
-                    className="px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-red/5 hover:text-red border border-gray-200 text-[10px] font-bold text-gray-600 transition-colors"
+                    disabled={busy}
+                    className="px-2.5 py-1.5 rounded-lg bg-gray-50 hover:bg-red/5 hover:text-red border border-gray-200 text-[10px] font-bold text-gray-600 transition-colors disabled:opacity-50"
                   >
                     {prompt}
                   </button>
@@ -339,7 +590,7 @@ export default function TalentOnboardingChat() {
             )}
 
             <form
-              className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0"
+              className="p-3 bg-white border-t border-gray-100 flex gap-2 shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSend();
@@ -349,13 +600,17 @@ export default function TalentOnboardingChat() {
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask about your profile…"
-                disabled={sending}
+                placeholder={
+                  chatRole === 'client'
+                    ? 'Describe the talent you need…'
+                    : 'Ask about your profile…'
+                }
+                disabled={busy}
                 className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-red outline-none disabled:opacity-50"
               />
               <button
                 type="submit"
-                disabled={sending || !input.trim()}
+                disabled={busy || !input.trim()}
                 className="w-11 h-11 rounded-xl bg-red hover:bg-black text-white flex items-center justify-center disabled:opacity-40 transition-colors shrink-0"
                 aria-label="Send message"
               >
@@ -371,7 +626,7 @@ export default function TalentOnboardingChat() {
         onClick={() => setOpen((v) => !v)}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
-        className={`fixed z-[90] bottom-5 right-4 sm:right-6 flex items-center gap-2 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-colors ${
+        className={`fixed z-[90] bottom-5 right-4 sm:right-6 flex items-center gap-2 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-colors mb-[env(safe-area-inset-bottom,0px)] ${
           open ? 'bg-black text-white' : 'bg-red hover:bg-black text-white'
         }`}
         aria-label={open ? 'Close BGuides' : 'Open BGuides'}
@@ -379,7 +634,7 @@ export default function TalentOnboardingChat() {
         {open ? <X size={16} /> : <MessageCircle size={16} />}
         <span className="hidden sm:inline">{open ? 'Close' : 'BGuides'}</span>
         {!open && Number(context?.guideNotificationCount) > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-red text-[9px] font-black flex items-center justify-center border-2 border-red">
+          <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-white text-red text-[9px] font-black flex items-center justify-center border-2 border-red leading-none">
             {context.guideNotificationCount > 9 ? '9+' : context.guideNotificationCount}
           </span>
         )}

@@ -18,6 +18,22 @@ const chatLimiter = rateLimit({
 });
 
 router.use(requireTalentChat);
+
+/** GET /api/talent/chat/notifications — lightweight badge prefetch (no session open) */
+router.get('/notifications', async (req, res) => {
+  try {
+    const payload = await chat.getNotifications({
+      user: req.authUser,
+      currentPath: String(req.query.path || '').trim(),
+      backendBaseUrl: getBackendBaseUrl(req),
+    });
+    return res.json(payload);
+  } catch (err) {
+    console.error('[talent/chat/notifications]', err?.message || err);
+    return res.status(500).json({ error: err.message || 'Could not load notifications.' });
+  }
+});
+
 router.use(chatLimiter);
 
 /** GET /api/talent/chat/session?path=/portal */
@@ -32,6 +48,21 @@ router.get('/session', async (req, res) => {
   } catch (err) {
     console.error('[talent/chat/session]', err?.message || err);
     return res.status(500).json({ error: err.message || 'Could not load chat.' });
+  }
+});
+
+/** POST /api/talent/chat/clear — wipe history; returns a fresh welcome session */
+router.post('/clear', async (req, res) => {
+  try {
+    const payload = await chat.clearChatSession({
+      user: req.authUser,
+      currentPath: String(req.body?.path || req.query.path || '').trim(),
+      backendBaseUrl: getBackendBaseUrl(req),
+    });
+    return res.json(payload);
+  } catch (err) {
+    console.error('[talent/chat/clear]', err?.message || err);
+    return res.status(500).json({ error: err.message || 'Could not clear chat.' });
   }
 });
 

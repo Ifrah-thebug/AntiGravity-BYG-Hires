@@ -223,7 +223,10 @@ export default function ClientDashboardPage() {
 
         {!loading && !error && (
           <>
-            <div className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-6 md:p-8 mb-6">
+            <div
+              id="client-company"
+              className="bg-white border border-gray-200 rounded-[2rem] shadow-xl p-6 md:p-8 mb-6 scroll-mt-28"
+            >
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 rounded-2xl bg-red/5 border border-red/10 flex items-center justify-center text-red">
                   <Building2 size={18} />

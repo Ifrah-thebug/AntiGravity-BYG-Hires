@@ -2,6 +2,8 @@ const { supabaseAdmin } = require('../middleware/requireAdmin');
 const groq = require('./groqClient');
 const openRouter = require('./openRouterClient');
 const { buildTalentOnboardingContext, isProfileOnWaitlist } = require('./talentOnboardingContextService');
+const { matchTalentChatIntent } = require('./talentChatIntentService');
+const { uiCommandsFromActions } = require('./bguidesStatusReplyService');
 
 const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || '';
@@ -159,6 +161,9 @@ RULES:
 - SCOPE ONLY: BYG Hires talent onboarding — profile, directory approval, portfolio, pricing, skills tests, AI interview, calendar/intros, sharing, and how this platform works for talent.
 - OUT OF SCOPE — refuse politely and briefly: general programming/tech tutorials (e.g. "how C++ works", language syntax, algorithms), homework/school help, unrelated career advice outside BYG Hires, news, politics, personal life, medical/legal advice, writing code for them, or any topic not about using BYG Hires as talent.
 - When out of scope: do NOT give definitions, explanations, or tutorials. Say you're only here for their BYG Hires profile journey, then offer one relevant next step (actions from the catalog). Keep "reply" under ~60 words.
+- Answer the user’s specific question using TALENT CONTEXT facts. Do NOT dump the full profile checklist unless they asked if the profile is incomplete, what’s missing, what to improve, or overall status.
+- When they do ask completeness/status: summarize concrete facts from TALENT CONTEXT (done vs pending from nextSteps, photo/CV flags, calendar, scores, portfolio). Do NOT only say “open the portal” — state the audit first, then offer one action.
+- For skills test / score questions: report assessmentScores / averageAssessmentScore from context, or say no test is completed yet.
 - Never claim admin approved/rejected unless directory_status says so.
 - Never invent review feedback — only cite review_notes and review_issues from context.
 - Do not include phone, email, or LinkedIn in profile text suggestions.
@@ -193,6 +198,19 @@ ${JSON.stringify({
   currentPath: ctx.currentPath,
   profile: ctx.profile,
   nextSteps: ctx.nextSteps?.slice(0, 5),
+  guideNotifications: {
+    needsPhoto: ctx.guideNotifications?.needsPhoto,
+    needsCv: ctx.guideNotifications?.needsCv,
+    needsSubmit: ctx.guideNotifications?.needsSubmit,
+    needsCalendar: ctx.guideNotifications?.needsCalendar,
+    needsIntroSlots: ctx.guideNotifications?.needsIntroSlots,
+    needsSkillsTest: ctx.guideNotifications?.needsSkillsTest,
+    needsScoreImprovement: ctx.guideNotifications?.needsScoreImprovement,
+    needsPortfolio: ctx.guideNotifications?.needsPortfolio,
+    averageAssessmentScore: ctx.guideNotifications?.averageAssessmentScore,
+    lowScoreSkills: ctx.guideNotifications?.lowScoreSkills,
+    primaryLabel: ctx.guideNotifications?.primaryLabel,
+  },
   calendarConnected: ctx.calendarConnected,
   assessmentCount: ctx.assessmentCount,
   assessmentScores: ctx.assessmentScores,
@@ -438,6 +456,8 @@ function buildWelcomeMessage(ctx) {
   const name = ctx.profile?.name?.split(' ')?.[0] || 'there';
   const next = ctx.nextSteps?.[0];
   const status = ctx.profile?.directory_status || 'draft';
+  const notes = ctx.guideNotifications || {};
+  const avg = notes.averageAssessmentScore;
 
   let reply = `Hi ${name}! I'm BGuides — I'll help you finish your profile and get in front of clients faster.`;
 
@@ -450,9 +470,15 @@ function buildWelcomeMessage(ctx) {
     reply += '.';
   } else if (!ctx.profile) {
     reply += ' Start by completing your profile setup — I can walk you through every step.';
+  } else if (notes.needsScoreImprovement && notes.lowScoreSkills?.length) {
+    const first = notes.lowScoreSkills[0];
+    reply += ` Your ${first.skill} skills score is ${first.score}% — retake or add another skill test to strengthen your directory profile.`;
+  } else if (Number.isFinite(avg)) {
+    reply += ` Your average skills score is ${avg}%.`;
+    if (next) reply += ` Top priority: **${next.label}**.`;
   } else if (status === 'pending_review') {
     if (!ctx.calendarConnected) {
-      reply += ' Your profile is with our team for review — nice work getting it submitted. While you wait, I\'d connect your calendar if you haven\'t yet. That way, when you\'re approved, clients can book intro calls right away instead of you scrambling to set things up.';
+      reply += ' Your profile is with our team for review — nice work getting it submitted. While you wait, I\'d connect your calendar (Cal.com) if you haven\'t yet. That way, when you\'re approved, clients can book intro calls right away instead of you scrambling to set things up.';
     } else if (!ctx.assessmentCount) {
       reply += ' Your profile is on the review waitlist and your calendar is already linked — you\'re ahead of the game. A skills test is a great way to stand out while the team reviews your profile.';
     } else {
@@ -549,7 +575,18 @@ async function maybeAppendPortfolioRequestNudge(sessionId, ctx) {
 
 async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
   const notes = ctx.guideNotifications || {};
-  if (!notes.needsSkillsTest && !notes.needsPortfolio) return null;
+  if (
+    !notes.needsPhoto &&
+    !notes.needsCv &&
+    !notes.needsSubmit &&
+    !notes.needsCalendar &&
+    !notes.needsIntroSlots &&
+    !notes.needsSkillsTest &&
+    !notes.needsScoreImprovement &&
+    !notes.needsPortfolio
+  ) {
+    return null;
+  }
 
   const { data: recent } = await supabaseAdmin
     .from('talent_chat_messages')
@@ -557,11 +594,130 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
     .eq('session_id', sessionId)
     .eq('role', 'assistant')
     .order('created_at', { ascending: false })
-    .limit(12);
+    .limit(20);
 
   const triggers = new Set((recent || []).map((m) => m.metadata?.trigger).filter(Boolean));
 
-  // Prefer skills test first; then portfolio. Skip if already nudged for that gap.
+  // Priority: draft gaps → calendar → slots → skills test → portfolio → low scores
+  if (notes.needsPhoto && !triggers.has('photo_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog['portal-photo']) {
+      actions.push({ id: 'portal-photo', ...ctx.actionCatalog['portal-photo'] });
+    } else if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your profile still needs a professional photo before you submit for review. I can highlight the photo section on your portal.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'photo_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'profile-photo', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsCv && !triggers.has('cv_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', label: 'Open portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your CV is still missing. Re-upload it from talent setup or your portal so reviewers can see your background.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'cv_missing',
+        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/portal' } }],
+      },
+    });
+  }
+
+  if (notes.needsSubmit && !triggers.has('submit_pending')) {
+    const status = String(ctx.profile?.directory_status || 'draft').toLowerCase();
+    const actions = [];
+    if (ctx.actionCatalog['submit-review']) {
+      actions.push({ id: 'submit-review', ...ctx.actionCatalog['submit-review'] });
+    } else if (ctx.actionCatalog.portal) {
+      actions.push({ id: 'portal', ...ctx.actionCatalog.portal });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        status === 'changes_requested'
+          ? 'Admin left feedback on your profile. Fix those items and resubmit for review when you are ready.'
+          : 'When your photo, CV, and basics look good, submit your profile for review so you can join the directory.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'submit_pending',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'profile-submit', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsCalendar && !triggers.has('calendar_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog.calendar) {
+      actions.push({ id: 'calendar', ...ctx.actionCatalog.calendar });
+    } else if (ctx.actionCatalog['intro-slots']) {
+      actions.push({ id: 'intro-slots', ...ctx.actionCatalog['intro-slots'] });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Connect your calendar (Cal.com) so clients can book intro calls with you. I can take you to the scheduling section on your portal.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'calendar_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsIntroSlots && !triggers.has('intro_slots_missing')) {
+    const actions = [];
+    if (ctx.actionCatalog['intro-slots']) {
+      actions.push({ id: 'intro-slots', ...ctx.actionCatalog['intro-slots'] });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content:
+        'Your calendar is connected — next publish open intro slots so clients can actually book you.',
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'intro_slots_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'client-intro-scheduling', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
   if (notes.needsSkillsTest && !triggers.has('skills_test_missing')) {
     const actions = [];
     if (ctx.actionCatalog.assessment) {
@@ -588,7 +744,47 @@ async function maybeAppendOnboardingGapNudge(sessionId, ctx) {
       content:
         'Your portfolio storybook is still empty. Adding even one published project makes a big difference when clients open your profile or request portfolio access.',
       actions,
-      metadata: { kind: 'proactive', trigger: 'portfolio_missing' },
+      metadata: {
+        kind: 'proactive',
+        trigger: 'portfolio_missing',
+        uiCommands: [
+          {
+            type: 'HIGHLIGHT_SECTION',
+            payload: { sectionId: 'talent-portfolio', pathname: '/portal' },
+          },
+        ],
+      },
+    });
+  }
+
+  if (notes.needsScoreImprovement && !triggers.has('skills_score_low')) {
+    const low = notes.lowScoreSkills || [];
+    const scoreBits = low
+      .slice(0, 3)
+      .map((s) => `${s.skill} ${s.score}%`)
+      .join(', ');
+    const avg = notes.averageAssessmentScore;
+    let content = scoreBits
+      ? `Your skills test results need a boost: ${scoreBits}.`
+      : `Your average skills score is ${avg}% — below the 70% bar clients notice.`;
+    content += ' Retake a skill or add another test from the assessment page.';
+    const actions = [];
+    if (ctx.actionCatalog.assessment) {
+      actions.push({
+        id: 'assessment',
+        label: 'Retake / add skills test',
+        ...ctx.actionCatalog.assessment,
+      });
+    }
+    return insertMessage(sessionId, {
+      role: 'assistant',
+      content,
+      actions,
+      metadata: {
+        kind: 'proactive',
+        trigger: 'skills_score_low',
+        uiCommands: [{ type: 'NAVIGATE', payload: { href: '/assessment' } }],
+      },
     });
   }
 
@@ -604,12 +800,74 @@ function publicChatContext(ctx) {
     profileComplete: Boolean(ctx.profile?.name && ctx.profile?.job_title),
     pendingPortfolioRequestCount: ctx.pendingPortfolioRequestCount || 0,
     assessmentCount: ctx.assessmentCount || 0,
+    assessmentScores: ctx.assessmentScores || {},
+    averageAssessmentScore: notes.averageAssessmentScore ?? null,
+    needsScoreImprovement: Boolean(notes.needsScoreImprovement),
     portfolioProjectCount: ctx.portfolioProjectCount || 0,
+    calendarConnected: Boolean(ctx.calendarConnected),
+    introSlotsCount: ctx.introSlotsCount || 0,
+    needsPhoto: Boolean(notes.needsPhoto),
+    needsCv: Boolean(notes.needsCv),
+    needsSubmit: Boolean(notes.needsSubmit),
+    needsCalendar: Boolean(notes.needsCalendar),
+    needsIntroSlots: Boolean(notes.needsIntroSlots),
     needsSkillsTest: Boolean(notes.needsSkillsTest),
     needsPortfolio: Boolean(notes.needsPortfolio),
     guideNotificationCount: Number(notes.notificationCount) || 0,
     guideNotificationLabel: notes.primaryLabel || null,
+    completion: notes.completion || null,
   };
+}
+
+async function getNotifications({ user, currentPath, backendBaseUrl }) {
+  const profile = await fetchFullProfile(user.id);
+  const ctx = await buildTalentOnboardingContext({
+    user,
+    profile,
+    currentPath,
+    backendBaseUrl,
+  });
+  const notes = ctx.guideNotifications || {};
+  return {
+    guideNotificationCount: Number(notes.notificationCount) || 0,
+    guideNotificationLabel: notes.primaryLabel || null,
+    nextStep: ctx.nextSteps?.[0] || null,
+    completion: notes.completion || null,
+    context: publicChatContext(ctx),
+  };
+}
+
+function mapTalentMessages(messages) {
+  return messages.map((m) => ({
+    id: m.id,
+    role: m.role,
+    content: m.content,
+    actions: m.actions || [],
+    pricingTip: m.metadata?.pricingTip || null,
+    uiCommands: m.metadata?.uiCommands || [],
+    createdAt: m.created_at,
+  }));
+}
+
+async function deleteAllSessionsForUser(userId) {
+  if (!supabaseAdmin || !userId) return;
+  const { data: sessions, error } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .select('id')
+    .eq('user_id', userId);
+  if (error) throw error;
+  const ids = (sessions || []).map((s) => s.id).filter(Boolean);
+  if (!ids.length) return;
+  const { error: msgErr } = await supabaseAdmin
+    .from('talent_chat_messages')
+    .delete()
+    .in('session_id', ids);
+  if (msgErr) throw msgErr;
+  const { error: sessErr } = await supabaseAdmin
+    .from('talent_chat_sessions')
+    .delete()
+    .in('id', ids);
+  if (sessErr) throw sessErr;
 }
 
 async function loadChatSession({ user, currentPath, backendBaseUrl }) {
@@ -643,15 +901,14 @@ async function loadChatSession({ user, currentPath, backendBaseUrl }) {
   return {
     session: { id: session.id, updatedAt: session.updated_at },
     context: publicChatContext(ctx),
-    messages: messages.map((m) => ({
-      id: m.id,
-      role: m.role,
-      content: m.content,
-      actions: m.actions || [],
-      pricingTip: m.metadata?.pricingTip || null,
-      createdAt: m.created_at,
-    })),
+    messages: mapTalentMessages(messages),
   };
+}
+
+/** Wipe history and reload so welcome / proactive nudges run again. */
+async function clearChatSession({ user, currentPath, backendBaseUrl }) {
+  await deleteAllSessionsForUser(user.id);
+  return loadChatSession({ user, currentPath, backendBaseUrl });
 }
 
 async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl }) {
@@ -675,6 +932,28 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
 
   await insertMessage(session.id, { role: 'user', content: text });
 
+  const intent = matchTalentChatIntent(text, ctx);
+  if (intent.matched) {
+    const saved = await insertMessage(session.id, {
+      role: 'assistant',
+      content: intent.reply,
+      actions: intent.actions || [],
+      metadata: { kind: 'intent', uiCommands: intent.uiCommands || [] },
+    });
+    return {
+      message: {
+        id: saved.id,
+        role: 'assistant',
+        content: saved.content,
+        actions: saved.actions,
+        pricingTip: null,
+        uiCommands: intent.uiCommands || [],
+        createdAt: saved.created_at,
+      },
+      context: publicChatContext(ctx),
+    };
+  }
+
   const systemPrompt = buildSystemPrompt(ctx);
   const llmHistory = history.map((m) => ({ role: m.role, content: m.content }));
 
@@ -693,11 +972,14 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
     if (id && ctx.actionCatalog[id]) {
       fallback.actions = [{ id, ...ctx.actionCatalog[id] }];
     }
+    const fallbackUi = uiCommandsFromActions(fallback.actions, {
+      currentPath: currentPath || null,
+    });
     const saved = await insertMessage(session.id, {
       role: 'assistant',
       content: fallback.reply,
       actions: fallback.actions,
-      metadata: { pricingTip: fallback.pricingTip, error: true },
+      metadata: { pricingTip: fallback.pricingTip, error: true, uiCommands: fallbackUi },
     });
     return {
       message: {
@@ -706,6 +988,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
         content: saved.content,
         actions: saved.actions,
         pricingTip: saved.metadata?.pricingTip || null,
+        uiCommands: fallbackUi,
         createdAt: saved.created_at,
       },
       context: publicChatContext(ctx),
@@ -721,11 +1004,17 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
     }
   }
 
+  // Sync background UI to whatever action the assistant is offering (assessment,
+  // calendar section, portfolio, etc.) — not only hash deep-links.
+  const uiCommands = uiCommandsFromActions(normalized.actions, {
+    currentPath: currentPath || null,
+  });
+
   const saved = await insertMessage(session.id, {
     role: 'assistant',
     content: normalized.reply,
     actions: normalized.actions,
-    metadata: { pricingTip: normalized.pricingTip },
+    metadata: { pricingTip: normalized.pricingTip, uiCommands },
   });
 
   return {
@@ -735,6 +1024,7 @@ async function sendChatMessageImpl({ user, message, currentPath, backendBaseUrl 
       content: saved.content,
       actions: saved.actions,
       pricingTip: saved.metadata?.pricingTip || null,
+      uiCommands,
       createdAt: saved.created_at,
     },
     context: publicChatContext(ctx),
@@ -753,6 +1043,8 @@ async function sendChatMessage(params) {
 
 module.exports = {
   loadChatSession,
+  clearChatSession,
   sendChatMessage,
+  getNotifications,
   fetchFullProfile,
 };

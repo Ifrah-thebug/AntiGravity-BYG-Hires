@@ -3,6 +3,10 @@ const introSlots = require('../services/introSlotsService');
 const introCalSync = require('../services/introCalSync');
 const clientActivation = require('../services/clientActivationService');
 const calSchedule = require('../services/calScheduleHelpers');
+const {
+  notifyTalentIntroBookedViaChat,
+  notifyClientIntroBookedViaChat,
+} = require('../services/introBookingChatNudgeService');
 
 const router = express.Router();
 
@@ -484,6 +488,30 @@ router.post('/book', async (req, res) => {
         console.warn('client activation email failed:', mailErr?.message || mailErr);
         activation = { sent: false, reason: 'send_failed', error: mailErr?.message };
       }
+    }
+
+    try {
+      await notifyTalentIntroBookedViaChat({
+        talentProfileId: ctx.talentKey,
+        clientName: String(name).trim(),
+        company: company || null,
+        startIso: calSaved.start || startIso,
+        meetingUrl: calSaved.meetingUrl || null,
+      });
+    } catch (chatErr) {
+      console.warn('intro booking chat nudge:', chatErr?.message || chatErr);
+    }
+
+    try {
+      await notifyClientIntroBookedViaChat({
+        clientId,
+        clientEmail,
+        talentName: ctx.name || null,
+        startIso: calSaved.start || startIso,
+        meetingUrl: calSaved.meetingUrl || null,
+      });
+    } catch (clientChatErr) {
+      console.warn('intro booking client chat nudge:', clientChatErr?.message || clientChatErr);
     }
 
     return res.status(201).json({
