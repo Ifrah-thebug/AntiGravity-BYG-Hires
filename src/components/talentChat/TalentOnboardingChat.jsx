@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircle, X, Send, Loader2, Sparkles, ArrowRight, DollarSign, ExternalLink, Trash2,
+  Mic, MicOff,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useAccountType } from '../../hooks/useAccountType';
+import { useSpeechToText } from '../../hooks/useSpeechToText';
 import { ACCOUNT_PROFILE_UPDATED } from '../../lib/talentAuth';
 import {
   fetchTalentChatSession,
@@ -176,6 +178,23 @@ export default function TalentOnboardingChat() {
   const sendingRef = useRef(false);
   const pendingRefreshRef = useRef(false);
   const endRef = useRef(null);
+  const voiceBaseRef = useRef('');
+
+  const applyVoiceTranscript = useCallback(({ interim, finalsJoined }) => {
+    const base = voiceBaseRef.current.trim();
+    const spoken = [finalsJoined, interim].filter(Boolean).join(' ').trim();
+    const next = [base, spoken].filter(Boolean).join(base && spoken ? ' ' : '');
+    setInput(next);
+  }, []);
+
+  const {
+    supported: voiceSupported,
+    listening: voiceListening,
+    error: voiceError,
+    toggle: toggleVoice,
+    stop: stopVoice,
+    resetError: resetVoiceError,
+  } = useSpeechToText({ onTranscript: applyVoiceTranscript });
 
   const currentPath = `${location.pathname}${location.search}${location.hash}`;
   const chatRole = accountType === 'client' ? 'client' : accountType === 'talent' ? 'talent' : null;
@@ -346,10 +365,13 @@ export default function TalentOnboardingChat() {
     const msg = String(text ?? input).trim();
     if (!msg || sending || navigating || !chatRole) return;
 
+    stopVoice();
+    voiceBaseRef.current = '';
     setInput('');
     sendingRef.current = true;
     setSending(true);
     setError('');
+    resetVoiceError();
 
     const optimistic = {
       id: `tmp-${Date.now()}`,
@@ -399,8 +421,30 @@ export default function TalentOnboardingChat() {
     }
   };
 
+  const closePanel = () => {
+    stopVoice();
+    voiceBaseRef.current = '';
+    resetVoiceError();
+    setOpen(false);
+  };
+
+  const handleMicClick = () => {
+    if (sending || navigating || clearing) return;
+    if (voiceListening) {
+      stopVoice();
+      return;
+    }
+    resetVoiceError();
+    setError('');
+    voiceBaseRef.current = input.trim();
+    toggleVoice();
+  };
+
   const handleClearChat = async () => {
     if (!chatRole || clearing || sending) return;
+    stopVoice();
+    voiceBaseRef.current = '';
+    resetVoiceError();
     const ok = window.confirm('Clear this BGuides chat? You’ll get a fresh welcome and proactive tips.');
     if (!ok) return;
     setClearing(true);
@@ -430,12 +474,12 @@ export default function TalentOnboardingChat() {
 
     if (action.id === 'book' && action.talentId) {
       applyUiCommands([{ type: BGuidesCommandType.OPEN_BOOKING, payload: { talentId: action.talentId } }]);
-      setOpen(false);
+      closePanel();
       return;
     }
 
     if (!action.href) {
-      if (hasUiCommands) setOpen(false);
+      if (hasUiCommands) closePanel();
       return;
     }
     if (action.external || action.href.startsWith('http')) {
@@ -458,7 +502,7 @@ export default function TalentOnboardingChat() {
       && action.uiCommands.some((c) => c?.type === BGuidesCommandType.APPLY_DIRECTORY_FILTERS);
     const bareTalentNav = targetPath === '/talent' && !targetSearch && !targetHash;
     if (appliedDirectoryFilters && bareTalentNav) {
-      setOpen(false);
+      closePanel();
       setTimeout(() => setRefreshNonce((n) => n + 1), 800);
       return;
     }
@@ -474,7 +518,7 @@ export default function TalentOnboardingChat() {
         },
       ]);
     }
-    setOpen(false);
+    closePanel();
     setTimeout(() => {
       setNavigating(false);
       setRefreshNonce((n) => n + 1);
@@ -488,6 +532,7 @@ export default function TalentOnboardingChat() {
   if (!visible) return null;
 
   const busy = sending || navigating;
+  const bannerError = error || voiceError;
 
   return (
     <>
@@ -529,7 +574,7 @@ export default function TalentOnboardingChat() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setOpen(false)}
+                    onClick={closePanel}
                     className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center"
                     aria-label="Close chat"
                   >
@@ -559,12 +604,15 @@ export default function TalentOnboardingChat() {
               <div ref={endRef} />
             </div>
 
-            {error && (
+            {bannerError && (
               <div className="px-4 py-2 bg-red/5 border-t border-red/10 text-red text-[11px] font-semibold flex items-start justify-between gap-2">
-                <span className="min-w-0">{error}</span>
+                <span className="min-w-0">{bannerError}</span>
                 <button
                   type="button"
-                  onClick={() => setError('')}
+                  onClick={() => {
+                    setError('');
+                    resetVoiceError();
+                  }}
                   className="shrink-0 text-red/70 hover:text-red"
                   aria-label="Dismiss error"
                 >
@@ -599,15 +647,38 @@ export default function TalentOnboardingChat() {
               <input
                 ref={inputRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  if (voiceListening) stopVoice();
+                  voiceBaseRef.current = e.target.value;
+                  setInput(e.target.value);
+                }}
                 placeholder={
-                  chatRole === 'client'
-                    ? 'Describe the talent you need…'
-                    : 'Ask about your profile…'
+                  voiceListening
+                    ? 'Listening…'
+                    : chatRole === 'client'
+                      ? 'Describe the talent you need…'
+                      : 'Ask about your profile…'
                 }
                 disabled={busy}
                 className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:border-red outline-none disabled:opacity-50"
               />
+              {voiceSupported && (
+                <button
+                  type="button"
+                  onClick={handleMicClick}
+                  disabled={busy || clearing}
+                  title={voiceListening ? 'Stop listening' : 'Speak instead of typing'}
+                  className={`w-11 h-11 rounded-xl flex items-center justify-center disabled:opacity-40 transition-colors shrink-0 ${
+                    voiceListening
+                      ? 'bg-red text-white animate-pulse'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                  aria-label={voiceListening ? 'Stop voice input' : 'Start voice input'}
+                  aria-pressed={voiceListening}
+                >
+                  {voiceListening ? <MicOff size={16} /> : <Mic size={16} />}
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={busy || !input.trim()}
@@ -623,7 +694,10 @@ export default function TalentOnboardingChat() {
 
       <motion.button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (open) closePanel();
+          else setOpen(true);
+        }}
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
         className={`fixed z-[90] bottom-5 right-4 sm:right-6 flex items-center gap-2 px-4 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl transition-colors mb-[env(safe-area-inset-bottom,0px)] ${
